@@ -2,7 +2,7 @@
 
 Eine private Sammel-App im Stil von SCNDX: Pokémon-Karten scannen, Sammlung verwalten, belegte Marktpreise sehen. Sie ist für den Freundeskreis gedacht und wird nicht veröffentlicht.
 
-Stand: 17.10.2026 · Status: **Phase 1 – fast fertig, kurzer Nachtest auf dem VPS offen**
+Stand: 17.10.2026 · Status: **Phase 1 abgeschlossen, Phase 2 wartet auf Freigabe**
 
 ---
 
@@ -11,7 +11,7 @@ Stand: 17.10.2026 · Status: **Phase 1 – fast fertig, kurzer Nachtest auf dem 
 | Phase | Status | Notiz |
 |---|---|---|
 | 0 – Spikes und Fundament | ✅ erledigt | Alle Spikes ausgewertet, alle Entscheidungen getroffen (Ergebnis unten) |
-| 1 – Backend-Kern | 🟡 fast fertig | VPS-Lauf ausgewertet, Abnahme-Suchen ✅. **Wartet auf:** kurzer Nachtest des Imports der „+“-Sets (Fix) |
+| 1 – Backend-Kern | ✅ erledigt | 65.561 Karten importiert, Abnahme-Suchen ✅, Nachtest 0 Fehler, 111 Tests (96 % Coverage) |
 | 2 – Preise | ⚪ offen | |
 | 3 – Sammlung, Merkliste, Dashboard | ⚪ offen | |
 | 4 – Scanner | ⚪ offen | |
@@ -98,8 +98,9 @@ Entscheidungen (17.10.2026): Passwort-Reset **durch den Admin** (Einmal-Code, ke
   - **9 Fehler:** Sets mit „+“ in der ID (`SM1+` … `SM5+`, JA/KO) → 404, weil die ID nicht URL-kodiert war. **Behoben** (Set-ID wird kodiert), Test mit simuliertem Server ergänzt; Nachtest auf dem VPS offen
   - **Protokoll:** jede HTTP-Anfrage wurde mitgeloggt und Farbcodes landeten in der Datei → httpx-Logs auf WARNING, Farben nur im Terminal. **Behoben**
   - **Erkenntnis für den Scanner:** KO/ZH-CN haben keine Katalogbilder, JA/ZH-TW nur ~30 % → die beschlossenen eigenen Referenzbilder sind für asiatische Karten zentral
-- [ ] ⏳ **Nachtest durch den Nutzer:** Container neu bauen und Import für JA/KO wiederholen (Befehle in der Antwort) – Erwartung: 0 Fehler
-- [ ] Abnahme Phase 1
+- [x] Nachtest auf dem VPS: Import JA/KO mit **0 Fehlern**, die „+“-Sets sind da (JA 47, KO 49 Karten)
+- [x] Dabei gefunden und behoben: Viele JA/KO-Sets wurden bei jedem Lauf neu geladen (TCGdex meldet mehr Karten, als es liefert). Neu geladen wird jetzt nur, wenn sich die gemeldete Kartenzahl seit dem letzten Import ändert. Test ergänzt (111 Tests)
+- [x] **Abnahme Phase 1** ✅
 
 **Nicht prüfbar in der Cloud-Umgebung:** echter TCGdex-Import (Host gesperrt) und Docker-Build (GHCR gesperrt) – beides übernimmt der VPS-Lauf.
 
@@ -119,6 +120,7 @@ Entscheidungen (17.10.2026): Passwort-Reset **durch den Admin** (Einmal-Code, ke
 | 17.10.2026 | Entscheidungen: pokemontcg.io als Reserve, Referenzbilder pro Nutzer, Karten anlegen für alle. **Phase 0 abgeschlossen** |
 | 17.10.2026 | Phase 1 gestartet. Entscheidungen: Passwort-Reset durch Admin, Katalog in allen 6 Sprachen. Code, Tests, CLI, Docker-Start mit Migrationen und VPS-Skript fertig |
 | 17.10.2026 | VPS-Lauf Phase 1: 65.561 Karten, Abnahme-Suchen ✅. Fix für Set-IDs mit „+“ und leiseres Import-Protokoll; Nachtest offen |
+| 17.10.2026 | Nachtest 0 Fehler; inkrementeller Import vergleicht gemeldete Kartenzahl. **Phase 1 abgeschlossen** |
 
 ---
 

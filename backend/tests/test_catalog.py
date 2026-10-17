@@ -255,3 +255,18 @@ async def test_set_ids_with_special_characters_are_url_encoded(
 ) -> None:
     assert "ja/SM1+" in synced.set_requests
     assert await _search(session_factory, "モクロー 1") == [("ja", "モクロー", "001")]
+
+
+async def test_sets_with_fewer_delivered_than_announced_cards_are_not_refetched(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Wie bei vielen JP/KO-Sets: TCGdex meldet 100 Karten, liefert aber nur 2."""
+    fake = FakeTcgdex()
+    fake.catalog["ja"]["S12"]["cardCount"]["total"] = 100
+    await _sync(fake, session_factory, languages=["ja"])
+
+    fake.set_requests.clear()
+    reports = await _sync(fake, session_factory, languages=["ja"])
+
+    assert fake.set_requests == []
+    assert reports[0].sets_skipped == reports[0].sets_total

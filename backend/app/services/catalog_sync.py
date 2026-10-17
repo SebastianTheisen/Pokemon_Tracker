@@ -1,7 +1,7 @@
 """Katalog-Import aus TCGdex (Sets und Karten, alle konfigurierten Sprachen).
 
 * Erster Lauf: alle Sets aller Sprachen. Danach inkrementell: Ein Set wird nur neu geladen,
-  wenn TCGdex mehr Karten meldet, als lokal gespeichert sind (oder bei ``full=True``).
+  wenn TCGdex eine andere Kartenzahl meldet als beim letzten Import (oder bei ``full=True``).
 * Abrufe laufen parallel (begrenzt), Schreiben seriell; Commit nach jedem Set, damit ein
   Abbruch den bisherigen Fortschritt nicht verliert.
 * Selbst angelegte Karten (``source = user``) werden nie angefasst.
@@ -37,27 +37,33 @@ class LanguageReport:
     errors: list[str] = field(default_factory=list)
 
 
-async def _local_card_counts(session: AsyncSession, language: str) -> dict[str, int]:
-    """Anzahl gespeicherter TCGdex-Karten je Set (externe ID) für eine Sprache."""
+async def _stored_set_totals(session: AsyncSession, language: str) -> dict[str, int | None]:
+    """Beim letzten Import von TCGdex gemeldete Kartenzahl je Set (externe ID)."""
     rows = await session.execute(
-        select(CardSet.external_id, func.count(Card.id))
-        .join(Card, Card.set_id == CardSet.id)
-        .where(CardSet.language == language, Card.source == CardSource.TCGDEX)
-        .group_by(CardSet.external_id)
+        select(CardSet.external_id, CardSet.card_count_total).where(CardSet.language == language)
     )
-    return {str(row[0]): int(row[1]) for row in rows}
+    return {str(row[0]): row[1] for row in rows}
 
 
 def _sets_to_fetch(
-    briefs: Iterable[SetBrief], local_counts: dict[str, int], *, full: bool
+    briefs: Iterable[SetBrief], stored_totals: dict[str, int | None], *, full: bool
 ) -> tuple[list[SetBrief], int]:
-    """Welche Sets müssen geladen werden? Gibt (zu laden, übersprungen) zurück."""
+    """Welche Sets müssen geladen werden? Gibt (zu laden, übersprungen) zurück.
+
+    Maßstab ist die von TCGdex gemeldete Kartenzahl, nicht die Zahl gespeicherter Karten:
+    Bei vielen asiatischen Sets meldet TCGdex mehr Karten, als es tatsächlich liefert –
+    ein Vergleich mit den gespeicherten Karten würde diese Sets bei jedem Lauf neu laden.
+    """
     to_fetch: list[SetBrief] = []
     skipped = 0
     for brief in briefs:
         remote_total = brief.card_count.total
-        local = local_counts.get(brief.id)
-        if not full and local is not None and remote_total is not None and local >= remote_total:
+        unchanged = (
+            brief.id in stored_totals
+            and remote_total is not None
+            and stored_totals[brief.id] == remote_total
+        )
+        if unchanged and not full:
             skipped += 1
         else:
             to_fetch.append(brief)
@@ -140,8 +146,8 @@ async def sync_language(
     report.sets_total = len(briefs)
 
     async with session_factory() as session:
-        local_counts = await _local_card_counts(session, language)
-    to_fetch, report.sets_skipped = _sets_to_fetch(briefs, local_counts, full=full)
+        stored_totals = await _stored_set_totals(session, language)
+    to_fetch, report.sets_skipped = _sets_to_fetch(briefs, stored_totals, full=full)
 
     semaphore = asyncio.Semaphore(concurrency)
 
