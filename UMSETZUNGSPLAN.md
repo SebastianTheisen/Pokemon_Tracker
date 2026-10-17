@@ -2,7 +2,7 @@
 
 Eine private Sammel-App im Stil von SCNDX: Pokémon-Karten scannen, Sammlung verwalten, belegte Marktpreise sehen. Sie ist für den Freundeskreis gedacht und wird nicht veröffentlicht.
 
-Stand: 17.10.2026 · Status: **Phase 2 – fast fertig, kurzer Nachtest offen**
+Stand: 17.10.2026 · Status: **Phase 2 abgeschlossen, Phase 3 wartet auf Freigabe**
 
 ---
 
@@ -12,7 +12,7 @@ Stand: 17.10.2026 · Status: **Phase 2 – fast fertig, kurzer Nachtest offen**
 |---|---|---|
 | 0 – Spikes und Fundament | ✅ erledigt | Alle Spikes ausgewertet, alle Entscheidungen getroffen (Ergebnis unten) |
 | 1 – Backend-Kern | ✅ erledigt | 65.561 Karten importiert, Abnahme-Suchen ✅, Nachtest 0 Fehler, 111 Tests (96 % Coverage) |
-| 2 – Preise | 🟡 fast fertig | VPS-Lauf ✅ (echte Preise für 7 Karten, Worker läuft). NM-Basis auf Median umgestellt. **Wartet auf:** kurzer Nachtest |
+| 2 – Preise | ✅ erledigt | Echte Preise mit Beleg (DE/EN/JA/ZH), Worker läuft, NM-Basis = Median, 163 Tests (95 % Coverage) |
 | 3 – Sammlung, Merkliste, Dashboard | ⚪ offen | |
 | 4 – Scanner | ⚪ offen | |
 | 5 – Flutter-App | ⚪ offen | |
@@ -127,8 +127,8 @@ Entscheidungen/Annahmen (17.10.2026):
 - [x] VPS-Lauf ausgewertet ([`docs/phase2/ergebnis.md`](docs/phase2/ergebnis.md)): Health ok, Migration `0002_pricing`, Worker läuft (nächste Runde 18.10. 10:30 UTC = 12:30 Uhr). Echte Preise für alle 7 Karten inkl. **JA und ZH-TW** (Cardmarket), Beleglinks per Produkt-ID, TCGplayer für DE/EN-Karten. 65 Preiswerte gespeichert
 - [x] Abnahmekriterien erfüllt: jeder Preis mit Datum und Link, kein erfundener Preis, Schätzungen markiert
 - [x] **Gefunden:** Trend als NM-Basis ist anfällig (Glurak Grundset: Trend 58,10 € < günstigstes Angebot 95 €). **Entscheidung Nutzer:** Median aus Trend, Ø 7, Ø 30 → umgesetzt, mit den echten Glurak-Werten getestet (NM 423,40 € statt 58,10 €), Basis + Wert werden angezeigt. 163 Tests grün
-- [ ] ⏳ Kurzer Nachtest auf dem VPS (Befehle in der Antwort)
-- [ ] Abnahme Phase 2
+- [x] Nachtest auf dem VPS: Glurak Grundset NM = 423,40 € (median(trend, avg7, avg30)) statt 58,10 €
+- [x] **Abnahme Phase 2** ✅
 
 ### Änderungsprotokoll
 
@@ -149,6 +149,7 @@ Entscheidungen/Annahmen (17.10.2026):
 | 17.10.2026 | Nachtest 0 Fehler; inkrementeller Import vergleicht gemeldete Kartenzahl. **Phase 1 abgeschlossen** |
 | 17.10.2026 | Phase 2 gestartet: Beleglink per Produkt-ID (vom Nutzer geprüft), tägliche Runde 12:30 Uhr. Code, Tests, Worker, CLI und VPS-Skript fertig |
 | 17.10.2026 | VPS-Lauf Phase 2 ✅. NM-Basis auf Median aus Trend/Ø7/Ø30 umgestellt (Ausreißer beim Glurak Grundset) |
+| 17.10.2026 | Nachtest Median ✅. **Phase 2 abgeschlossen** |
 
 ---
 
