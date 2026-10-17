@@ -10,7 +10,7 @@ Stand: 17.10.2026 · Status: **Phase 0 läuft**
 
 | Phase | Status | Notiz |
 |---|---|---|
-| 0 – Spikes und Fundament | 🟡 in Arbeit | VPS-Lauf 1 ausgewertet. **Wartet auf:** VPS-Lauf 2 (asiatische Preise, Bildabgleich, Docker) + Entscheidung Cardmarket |
+| 0 – Spikes und Fundament | 🟡 fast fertig | Alle Spikes ausgewertet. **Wartet auf:** 3 Entscheidungen (siehe Phase-0-Aufgaben), dann Abschluss |
 | 1 – Backend-Kern | ⚪ offen | |
 | 2 – Preise | ⚪ offen | |
 | 3 – Sammlung, Merkliste, Dashboard | ⚪ offen | |
@@ -42,10 +42,17 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
   - **Docker:** fehlgeschlagen. Ursache gefunden und lokal nachgestellt (`README.md` fehlte im Image), korrigiert
   - **KO-Modell:** Der Test in Lauf 1 war wegen eines Testfehlers nicht aussagekräftig (Modell wird erst bei erkanntem Text geladen). Korrigiert, wird in Lauf 2 wiederholt
 - [x] Bildabgleich (SIFT + RANSAC) offline geprüft: gleiche Karte auf verschiedenen Fotos 184–192 Übereinstimmungen, andere Karten ≤ 20, ca. 60 ms pro Vergleich. Spike-Skript gegen TCGdex-Katalog geschrieben (`backend/scripts/spike_image_match.py`), offline mit simuliertem TCGdex getestet
-- [ ] ⏳ **VPS-Lauf 2 durch den Nutzer:** `git pull && bash deploy/phase0_vps.sh`, danach `git add docs/spikes && git commit -m "Phase 0: Ergebnisse Lauf 2" && git push`. Liefert: Preise und Bilder asiatischer Karten, Bildabgleich gegen den echten Katalog, KO-Modell, Docker
+- [x] VPS-Lauf 2 ausgewertet → [`datenquellen_auswertung.md`](docs/spikes/datenquellen_auswertung.md) (Abschnitt Lauf 2), [`bildabgleich_auswertung.md`](docs/spikes/bildabgleich_auswertung.md)
+  - **Docker:** ✅ Build und Health-Check ok
+  - **KO-OCR-Modell:** ✅ Download und Start ok
+  - **Bildabgleich:** Top-1 4/7. Alle Treffer mit klarem Abstand (Score 214–370 vs. ≤ 219). Alle Fehlschläge liegen an **Katalog-Lücken** (fehlende Bilder oder Karten), nicht am Verfahren
+  - **Asiatische Karten:** JP-Preise vorhanden, ZH teilweise. Katalogbilder fehlen oft
+  - **pokemontcg.io:** diesmal erreichbar, aber Preise vom 18.11.2025 (veraltet)
 - [x] Entscheidung Nutzer (17.10.2026): Preise aus TCGdex + markierte Schätzung **und** Plug-in-Schnittstelle für weitere Quellen. Kein eigener Cardmarket-Abruf → Abschnitt 5.3 angepasst, Einstellung `PT_EXTRA_PRICE_PROVIDERS` statt `PT_CARDMARKET_LISTING_ENABLED`
-- [ ] ❓ Entscheidung Nutzer: pokemontcg.io streichen (HTTP 500, Daten auch in TCGdex)?
-- [ ] Abschluss Phase 0: Ergebnisse Lauf 2 auswerten, Go/No-Go je Spike
+- [ ] ❓ Entscheidung Nutzer: pokemontcg.io streichen (Preise veraltet, Daten in TCGdex aktuell)?
+- [ ] ❓ Entscheidung Nutzer: eigene Referenzbilder aus bestätigten Scans (schließt Bildlücken im Katalog)?
+- [ ] ❓ Entscheidung Nutzer: fehlende Karten selbst anlegen können?
+- [ ] Abschluss Phase 0: Go/No-Go je Spike festhalten, Plan anpassen, Phase 1 freigeben
 - [ ] Spike Tailscale: laut Absprache verschoben, wird beim Deployment (Phase 6) getestet
 
 **Regel:** Phase 1 beginnt erst, wenn alle Spike-Ergebnisse vorliegen und ausgewertet sind.
@@ -62,6 +69,7 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 | 17.10.2026 | Strategie inkl. JP/KO-OCR freigegeben, Abschnitt 5.6 angepasst. Umstieg auf RapidOCR 3 (PP-OCRv6) |
 | 17.10.2026 | VPS-Lauf 1 ausgewertet (TCGdex Go, Cardmarket gesperrt, pokemontcg.io 500). Docker-Fehler behoben, Spike Bildabgleich + asiatische Preise ergänzt |
 | 17.10.2026 | Preisstrategie entschieden: TCGdex + Schätzung + Plug-in-Schnittstelle. `CardmarketListingProvider` entfällt |
+| 17.10.2026 | VPS-Lauf 2 ausgewertet: Docker ok, KO-Modell ok, Bildabgleich Top-1 4/7 (Fehlschläge nur durch Katalog-Lücken) |
 
 ---
 

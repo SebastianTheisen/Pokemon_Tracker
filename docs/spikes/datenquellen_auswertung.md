@@ -55,3 +55,37 @@ Rohbericht: [`datenquellen.md`](datenquellen.md) · Zusammenfassung: [`zusammenf
 - **Ursache:** `pyproject.toml` verweist auf `README.md`. Die Datei wurde nicht ins Image kopiert, deshalb schlug der Projekt-Build fehl. Lokal nachgestellt mit der Meldung „Readme file does not exist: README.md“.
 - **Korrektur:** `README.md` wird jetzt ins Image kopiert. Ins Image kommen nur Laufzeit-Abhängigkeiten (`--no-default-groups`).
 - Verifikation im VPS-Lauf 2.
+
+---
+
+# Lauf 2 (VPS, 17.10.2026, Stand `5a2cb1e`)
+
+## Asiatische Karten in TCGdex (Stichprobe: je 2 neueste Sets, je 2 Karten)
+
+| Sprache | Cardmarket-Preis | Katalogbild |
+|---|---|---|
+| ja | 4/4 (z. B. Lapras ex Promo: Trend 2,22 €) | **0/4** |
+| zh-tw | 0/4 | 2/4 |
+| zh-cn | 3/4 | **0/4** |
+
+- **Preise:** Für JP-Karten gibt es Cardmarket-Preise, für ZH teilweise. TCGplayer-Preise fehlen bei asiatischen Karten vollständig.
+- **Bilder:** Bei asiatischen Karten fehlen sie oft. Das deckt sich mit dem Bildabgleich-Spike, wo bei JP-Kandidaten 50–80 % ohne Bild waren.
+- **Katalogbilder (DE):** `low.webp` 27 KB, `high.webp` 112 KB, `high.png` 326 KB, alle abrufbar. Für den Abgleich reicht `high.webp`.
+
+## pokemontcg.io
+
+- Diesmal erreichbar, aber der Cardmarket-Preisstand ist **vom 18.11.2025**, also etwa 11 Monate alt.
+- TCGdex liefert aktuelle Preise (Stand 16.10.2026).
+- **Empfehlung bleibt: streichen.**
+
+## Cardmarket direkt
+
+Unverändert 403 von Cloudflare. Entscheidung siehe Plan 5.3.
+
+## Docker
+
+✅ Build ok, Health-Check `{"status":"ok","version":"0.1.0"}`. Die Korrektur aus Lauf 1 wirkt.
+
+## OCR-Modell Koreanisch
+
+✅ Download und Start ok (diesmal mit echtem Foto getestet, also aussagekräftig).
