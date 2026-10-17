@@ -1,10 +1,18 @@
-# Phase 5 – Tailscale auf dem VPS
+# Phase 5 – Tailscale (eigenes Gerät „kartenkiste“ im Container)
 
-- Datum: 2026-10-17 16:15 UTC
-- Tailscale: `1.102.4`
-- Adresse: `https://kartenkiste.<tailnet>.ts.net` (vollständiger Name bewusst nicht im Repo)
+- Datum: 2026-10-17 17:34 UTC
+- Tailscale im Container: `1.104.1`
+- Adresse: `https://kartenkiste.<tailnet>.ts.net`
 - Health über HTTPS im Tailnet: `{"status":"ok","version":"0.1.0","database":"ok"}`
-- API von außen über die öffentliche IP, Port 8000 (Erwartung: keine Verbindung = 000): `000`
+
+## Weiterleitung des Containers
+
+```
+https://kartenkiste.<tailnet>.ts.net (tailnet only)
+|-- / proxy http://api:8000
+```
+
+## Tailscale direkt auf dem VPS (andere Apps, unverändert)
 
 ```
 https://gtcha.<tailnet>.ts.net (tailnet only)
@@ -13,5 +21,4 @@ https://gtcha.<tailnet>.ts.net (tailnet only)
 
 https://kartenkiste.<tailnet>.ts.net (tailnet only)
 |-- / proxy http://127.0.0.1:8000
-
 ```
