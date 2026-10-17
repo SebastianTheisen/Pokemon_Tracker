@@ -2,7 +2,7 @@
 
 Eine private Sammel-App im Stil von SCNDX: Pokémon-Karten scannen, Sammlung verwalten, belegte Marktpreise sehen. Sie ist für den Freundeskreis gedacht und wird nicht veröffentlicht.
 
-Stand: 17.10.2026 · Status: **Phase 4 (Scanner) in Arbeit – Code fertig, VPS-Lauf offen**
+Stand: 17.10.2026 · Status: **Phase 4 (Scanner) in Arbeit – VPS-Lauf ausgewertet, Entscheidung zur Latenz offen**
 
 ---
 
@@ -14,7 +14,7 @@ Stand: 17.10.2026 · Status: **Phase 4 (Scanner) in Arbeit – Code fertig, VPS-
 | 1 – Backend-Kern | ✅ erledigt | 65.561 Karten importiert, Abnahme-Suchen ✅, Nachtest 0 Fehler, 111 Tests (96 % Coverage) |
 | 2 – Preise | ✅ erledigt | Echte Preise mit Beleg (DE/EN/JA/ZH), Worker läuft, NM-Basis = Median, 163 Tests (95 % Coverage) |
 | 3 – Sammlung, Merkliste, Dashboard | ✅ erledigt | VPS-Probe mit echten Preisen = Handrechnung (4.894,67 €), Zugriffsschutz ✅, 204 Tests (95 % Coverage) |
-| 4 – Scanner | 🟡 in Arbeit | Code fertig (314 Tests, 96 % Coverage), VPS-Lauf offen. Binder-Scan als Beta; Abnahme Top-1 ≥ 85 % wartet auf weitere Testfotos |
+| 4 – Scanner | 🟡 in Arbeit | VPS-Lauf ✅: Top-1 5/6, 0× sicher-aber-falsch, Ø 2,7 s (max 4,6 s). Binder-Scan als Beta; Abnahme Top-1 ≥ 85 % wartet auf weitere Testfotos |
 | 5 – Flutter-App | ⚪ offen | |
 | 6 – Deployment und Härtung | ⚪ offen | |
 | 7 – Nachbesserung | ⚪ offen | |
@@ -170,7 +170,11 @@ Umsetzungsdetails (im Rahmen von 5.6, keine Änderung am Konzept):
 - [x] Evaluation: `cli scan-eval` (Top-1, Top-5, „sicher, aber falsch“, Latenz, Abnahme-Status), `soll.csv` um erwartete TCGdex-ID ergänzt (`-` = nicht im Katalog, richtig ist dann „unsicher“). Außerdem `cli scan` und `cli scanner-warmup`
 - [x] Docker: Scanner-Bibliotheken im Image, OCR-Modelle inkl. Koreanisch beim Bauen geladen, Volume `scanner-data`
 - [x] Qualität: ruff, mypy strict, **314 Tests grün, 96 % Coverage**. Tests mit den echten Testfotos (Bildabgleich echt, OCR als Attrappe mit den Spike-Texten) und ein Ende-zu-Ende-Test mit echter OCR (Slab-Foto 04 → S12-110, PSA 10)
-- [ ] VPS-Lauf: Build mit KO-Modell, Evaluation mit echtem Katalog (kalt/warm), Latenz, Speicherbedarf
+- [x] VPS-Lauf ([`docs/phase4/ergebnis.md`](docs/phase4/ergebnis.md)): Migration `0004_scanner`, beide OCR-Modelle (inkl. Koreanisch) im Image, Volume beschreibbar, Evaluation speichert nichts (0 Einträge), alle Scan-Endpunkte ohne Anmeldung 401, 40-MB-Upload → 413, Speicher API ≈ 90 MB
+  - **Evaluation mit echtem Katalog (warm):** Top-1 **5/6** (83 %), **0× „sicher, aber falsch“**, Schiggy (nicht im Katalog) korrekt als unsicher. 02 Mewtu ex (DE), 03/04 Lugia V, 05 Nachtara ex (nur über Bildabgleich, Score 131) und 06 Lugia (`M6a-142`, nur Text, kein Katalogbild) richtig und sicher
+  - **07 Karpador (ZH):** falsch, aber als *unsicher* gemeldet. Die Karte fehlt in TCGdex zh-cn (bekannte Lücke aus Phase 1) → Fall für „Karte selbst anlegen“ + eigenes Referenzbild
+  - **Latenz:** Ø 2,71 s (warm), max 4,57 s (01, Website-Screenshot mit viel Text) → Ziel ≤ 3 s pro Karte noch nicht bei allen Fotos erfüllt; kalt (erste Bild-Downloads) Ø 3,92 s
+  - Kleiner Fehler im VPS-Skript: Testfotos im Container konnten nicht gelöscht werden (gehörten root) → behoben, harmlos
 - [ ] Abnahme Top-1 ≥ 85 % (DE/EN) – **wartet auf weitere Testfotos** (Entscheidung Nutzer)
 
 ### Änderungsprotokoll
@@ -197,6 +201,7 @@ Umsetzungsdetails (im Rahmen von 5.6, keine Änderung am Konzept):
 | 17.10.2026 | VPS-Lauf Phase 3 ✅ (echte Werte = Handrechnung). **Phase 3 abgeschlossen** |
 | 17.10.2026 | Phase 4 gestartet: Binder-Scan als Beta, weitere Testfotos später (Abnahme 85 % wird nachgeholt) |
 | 17.10.2026 | Phase 4: Scanner-Modul, Identifikation, API (Einzel/Stapel/Binder, Bestätigen, Referenzbilder), Evaluation, Docker und VPS-Skript fertig. VPS-Lauf offen |
+| 17.10.2026 | VPS-Lauf Phase 4: Top-1 5/6, 0× sicher-aber-falsch, Latenz Ø 2,7 s / max 4,6 s. Aufräum-Fehler im Skript behoben |
 
 ---
 

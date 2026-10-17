@@ -58,7 +58,7 @@ echo "${tables}"
 step "4/6 Scanner mit dem Testsatz messen (zweimal: kalt mit Bild-Downloads, dann warm)"
 admin_email="$(psql_db "SELECT email FROM users WHERE role = 'admin' AND is_active ORDER BY created_at LIMIT 1")"
 [[ -n "${admin_email}" ]] || fail "Kein aktiver Admin gefunden."
-docker compose exec -T api rm -rf /tmp/scanner_testset
+docker compose exec -T -u root api rm -rf /tmp/scanner_testset
 docker compose cp scanner_testset api:/tmp/scanner_testset
 for run in kalt warm; do
   docker compose exec -T api python -m app.cli scan-eval \
@@ -130,7 +130,7 @@ step "6/6 Ergebnis schreiben"
   echo "|---|---|---|"
   printf '%s' "${endpoint_results}"
 } > "${RESULT}"
-docker compose exec -T api rm -rf /tmp/scanner_testset /tmp/scan_eval_kalt.md /tmp/scan_eval_warm.md
+docker compose exec -T -u root api rm -rf /tmp/scanner_testset /tmp/scan_eval_kalt.md /tmp/scan_eval_warm.md
 
 step "Fertig"
 echo "Ergebnis: ${RESULT}"
