@@ -9,6 +9,7 @@ Beispiele (im Container: ``docker compose exec api python -m app.cli ...``)::
     python -m app.cli search "nachtara 215"
     python -m app.cli refresh-prices               # Preis-Runde sofort ausführen
     python -m app.cli prices "nachtara 215" --language de
+    python -m app.cli collection-check --email ich@example.com   # Probe, speichert nichts
 """
 
 from __future__ import annotations
@@ -20,18 +21,21 @@ import os
 import sys
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
+from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import create_engine, create_session_factory
-from app.models import Role, User
+from app.models import GradingCompany, Product, ProductKind, Role, User
 from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
 from app.services.admin import AdminService
 from app.services.catalog_search import search_cards
 from app.services.catalog_sync import sync_catalog
+from app.services.collection import CollectionService, ItemFilter, ItemInput
 from app.services.errors import ServiceError
 from app.services.price_health import SourceHealth
 from app.services.pricing import PriceService
@@ -137,7 +141,7 @@ async def _refresh_prices(
         )
     print(
         f"Karten: {summary.cards} · neue Preiswerte: {summary.quotes_stored} · "
-        f"mit Fehlern: {summary.failed_cards}"
+        f"mit Fehlern: {summary.failed_cards} · Tageswerte: {summary.snapshots}"
     )
 
 
@@ -185,6 +189,77 @@ async def _prices(
         print(f"  {price.condition}: {price.value} {price.currency} ({detail})")
 
 
+CHECK_CARDS = (
+    ("nachtara 215", "de", {"condition": "NM", "quantity": 2}),
+    ("glurak 4", "de", {"condition": "LP"}),
+    ("Team Rockets Mewtu ex 231", "de", {"grading_company": GradingCompany.PSA, "grade": "10",
+                                          "custom_price": Decimal("900")}),
+)  # fmt: skip
+
+
+async def _collection_check(
+    factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
+) -> None:
+    """Probe-Sammlung mit echten Karten und Preisen – alles in einer Transaktion, die am Ende
+    zurückgerollt wird. Es bleibt nichts in der Datenbank zurück."""
+    health = SourceHealth(
+        threshold=settings.price_breaker_threshold,
+        pause=timedelta(minutes=settings.price_breaker_pause_minutes),
+    )
+    async with (
+        TcgdexClient(
+            base_url=settings.tcgdex_base_url, user_agent=settings.http_user_agent
+        ) as client,
+        factory() as session,
+    ):
+        owner = await session.scalar(select(User).where(User.email == args.email.strip().lower()))
+        if owner is None:
+            raise SystemExit(f"Kein Nutzer mit E-Mail {args.email}.")
+        prices = PriceService(session, settings, build_price_providers(settings, client), health)
+        collection = CollectionService(session, owner, prices)
+        folder = await collection.create_folder("Phase-3-Probe")
+        try:
+            for query, language, fields in CHECK_CARDS:
+                hits = await search_cards(session, query, language=language, limit=1)
+                if not hits:
+                    print(f"! Keine Karte für „{query}“")
+                    continue
+                await collection.add_item(
+                    ItemInput(folder_id=folder.id, card_id=hits[0].card.id, **fields)
+                )
+            product = Product(kind=ProductKind.DISPLAY, language="de", name="Probe-Display")
+            session.add(product)
+            await session.flush()
+            await collection.add_item(
+                ItemInput(folder_id=folder.id, product_id=product.id, custom_price=Decimal("150"))
+            )
+
+            items, _ = await collection.list_items(
+                ItemFilter(folder_id=folder.id), sort="value_desc"
+            )
+            for entry in items:
+                item, value = entry.item, entry.value
+                name = item.card.name if item.card else item.product.name if item.product else "?"
+                label = item.condition or item.grade or "-"
+                basis = f", {value.basis}" if value.basis else ""
+                print(
+                    f"{entry.kind:<6} {item.quantity}× {name} [{label}]: "
+                    f"{value.total_value} € ({value.kind}{basis})"
+                )
+            summary = await collection.summary()
+            raw, graded, sealed = (summary.by_kind[k] for k in ("raw", "graded", "sealed"))
+            print(
+                f"Gesamt: {summary.total_value} € · davon geschätzt {summary.estimated_value} € · "
+                f"roh {raw.value} € · gegradet {graded.value} € · versiegelt {sealed.value} € · "
+                f"{summary.positions} Positionen / {summary.items} Stück / {summary.sets} Sets"
+            )
+            csv_text = await collection.export_csv()
+            print(f"CSV-Export: {len(csv_text.splitlines()) - 1} Zeilen")
+        finally:
+            await session.rollback()
+            print("Probe zurückgerollt – keine Daten gespeichert.")
+
+
 Command = Callable[
     [async_sessionmaker[AsyncSession], Settings, argparse.Namespace], Awaitable[None]
 ]
@@ -219,6 +294,12 @@ def build_parser() -> argparse.ArgumentParser:
     card_prices.add_argument("query")
     card_prices.add_argument("--language")
     card_prices.set_defaults(handler=_prices)
+
+    check = commands.add_parser(
+        "collection-check", help="Probe-Sammlung mit echten Preisen (wird nicht gespeichert)"
+    )
+    check.add_argument("--email", required=True, help="E-Mail des Nutzers für die Probe")
+    check.set_defaults(handler=_collection_check)
 
     search = commands.add_parser("search", help="Katalog durchsuchen")
     search.add_argument("query")

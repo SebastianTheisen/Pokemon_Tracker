@@ -10,12 +10,13 @@ from collections.abc import Iterator
 from functools import partial
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 
 from app import cli
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import create_engine
+from app.models import CollectionItem, Folder, Product
 from app.providers.tcgdex import TcgdexClient
 from tests.fake_tcgdex import FakeTcgdex
 from tests.pricing_helpers import FakeProvider, cardmarket
@@ -108,7 +109,9 @@ def test_refresh_prices_command(
 
     cli.main(["refresh-prices"])
 
-    assert "Karten: 0 · neue Preiswerte: 0 · mit Fehlern: 0" in capsys.readouterr().out
+    assert "Karten: 0 · neue Preiswerte: 0 · mit Fehlern: 0 · Tageswerte: 0" in (
+        capsys.readouterr().out
+    )
 
 
 def test_prices_command_shows_proof_and_estimates(
@@ -129,3 +132,35 @@ def test_prices_command_shows_proof_and_estimates(
     assert "Beleg: https://www.cardmarket.com/de/Pokemon/Products?idProduct=574273" in output
     assert "EX: 1535.02 EUR (Schätzung, trend = 1805.90 × 0.85)" in output
     assert "Keine Karte gefunden." in output
+
+
+def test_collection_check_leaves_no_data(
+    cli_env: None, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake = FakeTcgdex()
+    monkeypatch.setattr(cli, "TcgdexClient", partial(TcgdexClient, transport=fake.transport()))
+    cli.main(["sync-catalog", "--languages", "de"])
+    monkeypatch.setenv("PT_ADMIN_PASSWORD", "admin-passwort-123")
+    cli.main(["create-admin", "--email", "chef@example.com", "--name", "Chef"])
+    provider = FakeProvider(quotes=[cardmarket("trend", "100")])
+    monkeypatch.setattr(cli, "build_price_providers", lambda _settings, _client: [provider])
+
+    cli.main(["collection-check", "--email", "Chef@example.com"])
+
+    output = capsys.readouterr().out
+    assert "raw    2× Nachtara VMAX [NM]: 200.00 € (estimated" in output
+    assert "sealed 1× Probe-Display [-]: 150.00 € (manual)" in output
+    assert "Gesamt: 350.00 €" in output  # Glurak/Mewtu fehlen im Test-Katalog
+    assert "Probe zurückgerollt" in output
+
+    async def count_rows() -> list[int]:
+        engine = create_engine(get_settings().database_url)
+        async with engine.connect() as connection:
+            counts = [
+                int(await connection.scalar(select(func.count()).select_from(model)) or 0)
+                for model in (CollectionItem, Product, Folder)
+            ]
+        await engine.dispose()
+        return counts
+
+    assert asyncio.run(count_rows()) == [0, 0, 0]

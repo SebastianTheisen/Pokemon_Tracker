@@ -5,8 +5,9 @@ Start (im Container eigener Dienst ``worker``)::
     python -m app.worker
 
 Zur eingestellten Uhrzeit (``PT_PRICE_REFRESH_TIME``, Ortszeit ``PT_TIMEZONE``) werden die
-Preise aller vorgemerkten Karten neu geholt. Jeder Abruf landet in der Preis-Historie –
-daraus entstehen die Kurven. Fehler einzelner Karten oder Quellen brechen die Runde nicht ab.
+Preise aller vorgemerkten Karten neu geholt (Sammlungen, Merklisten, angesehene Karten) und
+danach der Tageswert jeder Sammlung gespeichert. Daraus entstehen die Kurven.
+Fehler einzelner Karten oder Quellen brechen die Runde nicht ab.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from app.models import Card
 from app.providers.pricing import PriceProvider
 from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
+from app.services.collection import CollectionService, users_with_items
 from app.services.price_health import SourceHealth
 from app.services.pricing import PriceService, tracked_card_ids
 
@@ -39,6 +41,7 @@ class RefreshSummary:
     cards: int = 0
     quotes_stored: int = 0
     failed_cards: int = 0
+    snapshots: int = 0
 
 
 def next_run_after(now: datetime, at: str, timezone: str) -> datetime:
@@ -83,11 +86,21 @@ async def refresh_tracked_prices(
                 summary.failed_cards += 1
 
     await asyncio.gather(*(refresh_one(card_id) for card_id in card_ids))
+
+    # Danach Tageswert jeder Sammlung speichern (Grundlage der Wertkurve).
+    async with session_factory() as session:
+        prices = PriceService(session, settings, providers, health)
+        for owner in await users_with_items(session):
+            await CollectionService(session, owner, prices).take_snapshot()
+            summary.snapshots += 1
+        await session.commit()
+
     log.info(
         "pricing.refresh_done",
         cards=summary.cards,
         stored=summary.quotes_stored,
         failed=summary.failed_cards,
+        snapshots=summary.snapshots,
     )
     return summary
 

@@ -24,12 +24,12 @@ from decimal import Decimal
 from typing import Literal
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import func, select, union
 from sqlalchemy.dialects.postgresql import distinct_on, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.models import Card, PriceCheck, PricePoint, User
+from app.models import Card, CollectionItem, PriceCheck, PricePoint, User, WishlistItem
 from app.providers.pricing import (
     CONDITIONS,
     CardRef,
@@ -301,12 +301,25 @@ class PriceService:
     async def get_prices(self, card: Card, user: User | None) -> CardPrices:
         """Aktuelle Preise je Quelle/Variante und Zustandspreise (Faktoren des Nutzers,
         ohne Nutzer die Standardfaktoren)."""
+        return (await self.prices_for_cards([card.id], user))[card.id]
+
+    async def prices_for_cards(
+        self, card_ids: Sequence[uuid.UUID], user: User | None
+    ) -> dict[uuid.UUID, CardPrices]:
+        """Wie ``get_prices``, aber für viele Karten mit wenigen Abfragen (Sammlungswert).
+
+        Liest nur gespeicherte Preise – ruft keine Quelle ab.
+        """
+        ids = list(dict.fromkeys(card_ids))
+        if not ids:
+            return {}
         latest = (
             await self._session.scalars(
                 select(PricePoint)
-                .where(PricePoint.card_id == card.id)
+                .where(PricePoint.card_id.in_(ids))
                 .ext(
                     distinct_on(
+                        PricePoint.card_id,
                         PricePoint.source,
                         PricePoint.variant,
                         PricePoint.metric,
@@ -314,6 +327,7 @@ class PriceService:
                     )
                 )
                 .order_by(
+                    PricePoint.card_id,
                     PricePoint.source,
                     PricePoint.variant,
                     PricePoint.metric,
@@ -322,20 +336,28 @@ class PriceService:
                 )
             )
         ).all()
-        offers = _group_offers(latest)
+        per_card: dict[uuid.UUID, list[PricePoint]] = {card_id: [] for card_id in ids}
+        for point in latest:
+            per_card[point.card_id].append(point)
+
         user_settings = await get_user_settings(self._session, user) if user else None
         factors = effective_factors(user_settings)
-        last_checked = await self._session.scalar(
-            select(func.max(PriceCheck.checked_at)).where(
-                PriceCheck.card_id == card.id, PriceCheck.ok.is_(True)
+        checked_rows = await self._session.execute(
+            select(PriceCheck.card_id, func.max(PriceCheck.checked_at))
+            .where(PriceCheck.card_id.in_(ids), PriceCheck.ok.is_(True))
+            .group_by(PriceCheck.card_id)
+        )
+        checked: dict[uuid.UUID, datetime] = {row[0]: row[1] for row in checked_rows}
+        result: dict[uuid.UUID, CardPrices] = {}
+        for card_id, points in per_card.items():
+            offers = _group_offers(points)
+            result[card_id] = CardPrices(
+                card_id=card_id,
+                last_checked_at=checked.get(card_id),
+                offers=offers,
+                conditions=_condition_prices(offers, factors),
             )
-        )
-        return CardPrices(
-            card_id=card.id,
-            last_checked_at=last_checked,
-            offers=offers,
-            conditions=_condition_prices(offers, factors),
-        )
+        return result
 
     async def get_history(
         self,
@@ -494,13 +516,13 @@ def _condition_prices(offers: Sequence[Offer], factors: dict[str, Decimal]) -> l
 async def tracked_card_ids(
     session: AsyncSession, settings: Settings, now: datetime
 ) -> list[uuid.UUID]:
-    """Karten für die tägliche Aktualisierung.
-
-    Bis Phase 3: in den letzten ``price_tracking_view_days`` Tagen angesehene Karten.
-    Ab Phase 3 kommen Karten aus Sammlungen und Merklisten hinzu.
-    """
+    """Karten für die tägliche Aktualisierung: Rohkarten aus Sammlungen, Karten auf
+    Merklisten und in den letzten ``price_tracking_view_days`` Tagen angesehene Karten."""
     since = now - timedelta(days=settings.price_tracking_view_days)
-    result = await session.scalars(
-        select(PriceCheck.card_id).where(PriceCheck.last_viewed_at >= since).distinct()
+    viewed = select(PriceCheck.card_id).where(PriceCheck.last_viewed_at >= since)
+    collected = select(CollectionItem.card_id).where(
+        CollectionItem.card_id.is_not(None), CollectionItem.grading_company.is_(None)
     )
-    return list(result.all())
+    wished = select(WishlistItem.card_id).where(WishlistItem.card_id.is_not(None))
+    result = await session.scalars(union(viewed, collected, wished))
+    return sorted(card_id for card_id in result.all() if card_id is not None)

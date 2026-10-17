@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Annotated
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, Depends, Request, status
 
-from app.api.deps import AdminServiceDep, AdminUser, client_ip
+from app.api.deps import AdminServiceDep, AdminUser, PriceServiceDep, SessionDep, client_ip
 from app.schemas.admin import (
     AdminUserUpdate,
     InviteCreate,
@@ -16,6 +17,9 @@ from app.schemas.admin import (
     PasswordResetCreated,
 )
 from app.schemas.auth import UserOut
+from app.schemas.collection import ItemOut, ItemPage, SummaryOut
+from app.services.audit import record_audit
+from app.services.collection import CollectionService, ItemFilter
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -70,3 +74,42 @@ async def revoke_invite(
 ) -> InviteOut:
     invite = await admin_service.revoke_invite(admin, invite_id)
     return InviteOut.from_invite(invite, datetime.now(UTC))
+
+
+# ------------------------------------------------ Sammlungen anderer (nur lesend)
+
+
+async def get_foreign_collection(
+    user_id: uuid.UUID,
+    *,
+    request: Request,
+    admin: AdminUser,
+    admin_service: AdminServiceDep,
+    session: SessionDep,
+    prices: PriceServiceDep,
+) -> CollectionService:
+    """Lesender Zugriff auf eine fremde Sammlung – jeder Zugriff landet im Audit-Log."""
+    owner = await admin_service.get_user(user_id)
+    record_audit(
+        session,
+        action="admin.collection_viewed",
+        actor_id=admin.id,
+        target_user_id=owner.id,
+        ip=client_ip(request),
+        details={"view": request.url.path.rsplit("/", 1)[-1]},
+    )
+    return CollectionService(session, owner, prices)
+
+
+ForeignCollection = Annotated[CollectionService, Depends(get_foreign_collection)]
+
+
+@router.get("/users/{user_id}/collection/summary")
+async def user_collection_summary(collection: ForeignCollection) -> SummaryOut:
+    return SummaryOut.build(await collection.summary())
+
+
+@router.get("/users/{user_id}/collection/items")
+async def user_collection_items(collection: ForeignCollection) -> ItemPage:
+    items, total = await collection.list_items(ItemFilter(), limit=500)
+    return ItemPage(items=[ItemOut.build(i) for i in items], total=total)

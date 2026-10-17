@@ -2,7 +2,7 @@
 
 Eine private Sammel-App im Stil von SCNDX: Pokémon-Karten scannen, Sammlung verwalten, belegte Marktpreise sehen. Sie ist für den Freundeskreis gedacht und wird nicht veröffentlicht.
 
-Stand: 17.10.2026 · Status: **Phase 2 abgeschlossen, Phase 3 wartet auf Freigabe**
+Stand: 17.10.2026 · Status: **Phase 3 – Code fertig, wartet auf VPS-Lauf**
 
 ---
 
@@ -13,7 +13,7 @@ Stand: 17.10.2026 · Status: **Phase 2 abgeschlossen, Phase 3 wartet auf Freigab
 | 0 – Spikes und Fundament | ✅ erledigt | Alle Spikes ausgewertet, alle Entscheidungen getroffen (Ergebnis unten) |
 | 1 – Backend-Kern | ✅ erledigt | 65.561 Karten importiert, Abnahme-Suchen ✅, Nachtest 0 Fehler, 111 Tests (96 % Coverage) |
 | 2 – Preise | ✅ erledigt | Echte Preise mit Beleg (DE/EN/JA/ZH), Worker läuft, NM-Basis = Median, 163 Tests (95 % Coverage) |
-| 3 – Sammlung, Merkliste, Dashboard | ⚪ offen | |
+| 3 – Sammlung, Merkliste, Dashboard | 🟡 in Arbeit | Code + 204 Tests fertig (95 % Coverage), Abnahme mit Handrechnung ✅. **Wartet auf:** VPS-Lauf (`deploy/phase3_vps.sh`) |
 | 4 – Scanner | ⚪ offen | |
 | 5 – Flutter-App | ⚪ offen | |
 | 6 – Deployment und Härtung | ⚪ offen | |
@@ -130,6 +130,27 @@ Entscheidungen/Annahmen (17.10.2026):
 - [x] Nachtest auf dem VPS: Glurak Grundset NM = 423,40 € (median(trend, avg7, avg30)) statt 58,10 €
 - [x] **Abnahme Phase 2** ✅
 
+### Phase 3 – Aufgaben
+
+Entscheidungen (17.10.2026):
+- **Sammlungswert = Zustandspreis:** Eigenpreis → belegter Zustandspreis (Plug-in) → Schätzung (NM-Basis × Faktor). Gegradet und versiegelt nur mit Eigenpreis (sonst „kein Wert“, gezählt als „ohne Wert“). Geschätzter Anteil wird ausgewiesen
+- **Eine Merkliste** pro Nutzer
+- **Gleiche Karte erneut hinzufügen = neue Position** (eigener Kaufpreis/Datum/Notiz)
+
+- [x] Migration `0003_collection`: `folders`, `collection_items` (Karte *oder* Produkt per Check-Constraint, Menge ≥ 1, Grading nur bei Karten), `collection_events`, `portfolio_snapshots`, `wishlist_items`, `products`
+- [x] Ordner: Standardordner „Sammlung“ automatisch, anlegen/umbenennen/sortieren, löschen nur mit Zielordner für enthaltene Karten, letzter Ordner bleibt
+- [x] Positionen: Karte oder Produkt, Variante (normal/reverse), Zustand (Standard NM), Menge, Kauf- und Eigenpreis, Kaufdatum, Notiz, Grading (Firma + Note). Beim Hinzufügen werden Preise geholt und der Startwert gemerkt
+- [x] Bewertung (`app/services/valuation.py`) und Kennzahlen: Gesamtwert, geschätzter Anteil, Aufteilung roh/gegradet/versiegelt, Karten, Sets, Positionen ohne Wert, Top-Karte, größter Gewinner/Verlierer, **Veränderung seit Hinzufügen (Zukäufe zählen nicht)**
+- [x] Liste mit Filtern (Ordner, Art, Set, Sprache, Suche) und Sortierung (auch nach Wert); Set-Übersicht mit Fortschritt; Wertverlauf (Tageswerte + Live-Wert + Markierungen bei Bestandsänderungen); CSV-Export (Excel-tauglich, **gegen Formel-Injection geschützt**)
+- [x] Merkliste mit NM-Wert; eigene Karten (für alle sichtbar) und Produkte; Bearbeiten/Löschen nur Admin, nicht löschbar solange in Sammlungen
+- [x] Admin: Sammlung eines Nutzers **nur lesend** (Kennzahlen, Positionen) – jeder Zugriff im Audit-Log
+- [x] Worker: tägliche Runde umfasst Sammlungs- (roh) und Merklisten-Karten, danach Tageswert je Nutzer
+- [x] CLI `collection-check` (Probe mit echten Preisen, wird zurückgerollt)
+- [x] **Abnahmetest mit Handrechnung:** gemischte Sammlung = 1.055,00 € (geschätzt 255,00 €; roh 255 / gegradet 500 / versiegelt 300); nach Preisanstieg 1.106,00 €, Veränderung +51,00 €, Tageswert gespeichert
+- [x] Selbst-Review: `PATCH {"quantity": null}` hätte 500 ergeben, Note bei Rohkarten war setzbar, CSV-Formel-Injection über fremde Produktnamen möglich → alle behoben und getestet. **204 Tests, 95 % Coverage**
+- [ ] ⏳ **VPS-Lauf durch den Nutzer:** `bash deploy/phase3_vps.sh`
+- [ ] Abnahme Phase 3
+
 ### Änderungsprotokoll
 
 | Datum | Änderung |
@@ -150,6 +171,7 @@ Entscheidungen/Annahmen (17.10.2026):
 | 17.10.2026 | Phase 2 gestartet: Beleglink per Produkt-ID (vom Nutzer geprüft), tägliche Runde 12:30 Uhr. Code, Tests, Worker, CLI und VPS-Skript fertig |
 | 17.10.2026 | VPS-Lauf Phase 2 ✅. NM-Basis auf Median aus Trend/Ø7/Ø30 umgestellt (Ausreißer beim Glurak Grundset) |
 | 17.10.2026 | Nachtest Median ✅. **Phase 2 abgeschlossen** |
+| 17.10.2026 | Phase 3 gestartet (Zustandspreis als Wert, eine Merkliste, neue Position je Hinzufügen). Code, Tests, Worker-Erweiterung, VPS-Skript fertig |
 
 ---
 
@@ -329,14 +351,14 @@ Pokemon_Tracker/
 | `sets` | id, external_id, name_de/en/…, series, release_date, total_cards, logo_url |
 | `cards` | id, external_id, set_id, number, language, name, name_de/en, rarity, image_url, search_vector (tsvector), source (`tcgdex`/`user`), created_by, updated_by |
 | `card_reference_images` | id, card_id, user_id (Eigentümer, Referenz wirkt nur für ihn), image_path, features (vorberechnete Merkmale), source_scan_id, created_at |
-| `products` | id, set_id, kind (`booster`, `bundle`, `etb`, `display`, `case` …), language, name, image_url, is_custom, created_by (für eigene Produkte) |
+| `products` | id, kind (`booster`, `booster_bundle`, `elite_trainer_box`, `display`, `tin`, `collection_box`, `blister`, `case`, `other`), language, name, set_id, image_url, created_by – von Nutzern angelegt, für alle sichtbar |
 | `price_points` | id, card_id, source (`cardmarket`/`tcgplayer`/Plug-in), variant, metric (`trend`, `low`, …), condition (nur bei zustandsgenauen Quellen), value, currency, source_updated_at, source_url, fetched_at. Schätzungen werden nicht gespeichert, sondern berechnet. Preise für versiegelte Produkte folgen mit den Produkten |
 | `price_checks` | card_id + source, checked_at, ok, message, last_viewed_at |
-| `folders` | id, user_id, name, sort_order |
-| `collection_items` | id, user_id, folder_id, item_type, card_id/product_id, language, condition, quantity, purchase_price, note, custom_price, grading_company, grade, added_at |
-| `collection_events` | id, user_id, item_id, delta_quantity, value_at_event, created_at (Basis für die markierten Punkte) |
-| `portfolio_snapshots` | id, user_id, date, total_value, raw_value, graded_value, sealed_value, item_count |
-| `wishlist_items` | id, user_id, card_id/product_id, created_at |
+| `folders` | id, user_id, name (je Nutzer eindeutig), sort_order |
+| `collection_items` | id, user_id, folder_id, card_id **oder** product_id, variant, condition, quantity, purchase_price, purchase_date, custom_price, note, grading_company, grade, value_at_add (Startwert für „Veränderung seit Hinzufügen“) |
+| `collection_events` | id, user_id, item_id, event_type (added/quantity_changed/removed), delta_quantity, unit_value, created_at (Basis für die markierten Punkte) |
+| `portfolio_snapshots` | user_id + day, total_value, raw_value, graded_value, sealed_value, estimated_value, item_count, position_count |
+| `wishlist_items` | id, user_id, card_id **oder** product_id (je Nutzer eindeutig), created_at |
 | `user_settings` | user_id, default_language, condition_factors (JSONB) |
 | `audit_log` | id, actor_id, action, target_user_id, created_at, ip |
 | `scan_log` | id, user_id, created_at, matched_card_id, confidence, duration_ms (für Rate-Limit und Qualitätsmessung) |
@@ -458,12 +480,13 @@ Katalog-Bildindex: Das Herunterladen von über 100.000 Kartenbildern ist teuer. 
 | Auth | `POST /auth/register` (mit Einladungscode), `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/reset-password` (Code vom Admin) |
 | Katalog | `GET /cards/search?q=&lang=`, `GET /cards/{id}`, `GET /cards/{id}/prices`, `GET /cards/{id}/price-history?source=&variant=&metric=&days=`, `GET /sets`, `GET /products/search` |
 | Scan | `POST /scan` (Bild), `POST /scan/batch`, `POST /scan/binder` |
-| Sammlung | `GET /collection` (Filter, Sortierung, Gruppierung), `POST /collection/items`, `PATCH /collection/items/{id}`, `DELETE /collection/items/{id}`, `GET /collection/summary`, `GET /collection/history`, `GET /collection/export.csv` |
-| Ordner | `GET/POST/PATCH/DELETE /folders` |
-| Merkliste | `GET/POST/DELETE /wishlist` |
+| Sammlung | `GET/POST /collection/items` (Filter, Sortierung), `GET/PATCH/DELETE /collection/items/{id}`, `GET /collection/summary`, `GET /collection/sets`, `GET /collection/history`, `GET /collection/export.csv` |
+| Eigene Karten/Produkte | `POST /cards`, `GET/POST /products`, Admin: `PATCH/DELETE /admin/cards/{id}`, `PATCH/DELETE /admin/products/{id}` |
+| Ordner | `GET/POST /folders`, `PATCH/DELETE /folders/{id}` (`?move_to=`) |
+| Merkliste | `GET/POST /wishlist`, `DELETE /wishlist/{id}` |
 | Dashboard | `GET /dashboard` (Wert, Veränderung, Kennzahlen, Highlights) |
 | Eigenes Konto | `GET/PATCH /me`, `POST /me/password`, `GET /me/sessions`, `DELETE /me/sessions/{id}`, später `GET/PATCH /me/settings` |
-| Admin | `GET /admin/users`, `PATCH /admin/users/{id}` (sperren, Rolle), `POST /admin/users/{id}/password-reset`, `GET/POST /admin/invites`, `DELETE /admin/invites/{id}`, später `GET /admin/users/{id}/collection` (nur lesend) |
+| Admin | `GET /admin/users`, `PATCH /admin/users/{id}` (sperren, Rolle), `POST /admin/users/{id}/password-reset`, `GET/POST /admin/invites`, `DELETE /admin/invites/{id}`, `GET /admin/users/{id}/collection/summary|items` (nur lesend, auditiert), `GET /admin/price-sources` |
 
 Konventionen: OpenAPI-Schema aus FastAPI, Pagination per Cursor, einheitliches Fehlerformat, Geldbeträge als `Decimal`/Integer-Cent, Zeitstempel in UTC.
 

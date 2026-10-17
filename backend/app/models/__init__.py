@@ -3,6 +3,17 @@
 from app.models.audit import AuditLog
 from app.models.auth import InviteCode, PasswordResetToken, RefreshToken
 from app.models.catalog import Card, CardSet, CardSource
+from app.models.collection import (
+    CollectionEvent,
+    CollectionEventType,
+    CollectionItem,
+    Folder,
+    GradingCompany,
+    PortfolioSnapshot,
+    Product,
+    ProductKind,
+    WishlistItem,
+)
 from app.models.pricing import PriceCheck, PricePoint
 from app.models.settings import UserSettings
 from app.models.user import Role, User
@@ -12,12 +23,21 @@ __all__ = [
     "Card",
     "CardSet",
     "CardSource",
+    "CollectionEvent",
+    "CollectionEventType",
+    "CollectionItem",
+    "Folder",
+    "GradingCompany",
     "InviteCode",
     "PasswordResetToken",
+    "PortfolioSnapshot",
     "PriceCheck",
     "PricePoint",
+    "Product",
+    "ProductKind",
     "RefreshToken",
     "Role",
     "User",
     "UserSettings",
+    "WishlistItem",
 ]

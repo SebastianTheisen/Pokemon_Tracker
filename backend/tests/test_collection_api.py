@@ -1,0 +1,467 @@
+"""Sammlung über die API – inkl. Abnahmetest mit von Hand berechneten Werten.
+
+Abnahme Phase 3 (Plan): „Werte, Aufteilung und Kurve stimmen mit manuell berechneten
+Testdaten überein.“
+"""
+
+from __future__ import annotations
+
+import csv
+import io
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from typing import Any
+
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.core.config import Settings
+from app.models import AuditLog, Card, PortfolioSnapshot
+from app.services.price_health import SourceHealth
+from app.services.pricing import tracked_card_ids
+from app.worker import refresh_tracked_prices
+from tests.conftest import Account, RegisterUser
+from tests.pricing_helpers import UPDATED, FakeProvider, cardmarket, make_card
+
+API = "/api/v1"
+
+
+async def _product(client: AsyncClient, user: Account, kind: str, name: str) -> str:
+    response = await client.post(
+        f"{API}/products",
+        json={"kind": kind, "language": "de", "name": name},
+        headers=user.headers,
+    )
+    assert response.status_code == 201, response.text
+    product_id: str = response.json()["id"]
+    return product_id
+
+
+async def _add(client: AsyncClient, user: Account, **body: Any) -> dict[str, Any]:
+    response = await client.post(f"{API}/collection/items", json=body, headers=user.headers)
+    assert response.status_code == 201, response.text
+    data: dict[str, Any] = response.json()
+    return data
+
+
+@pytest.fixture
+async def cards(session_factory: async_sessionmaker[AsyncSession]) -> tuple[Card, Card]:
+    card_a = await make_card(session_factory)  # Nachtara VMAX, eigenes Set
+    card_b = await make_card(session_factory, external_id="S12-110", name="ルギアV", number="110")
+    return card_a, card_b
+
+
+# ----------------------------------------------------------- Abnahmetest
+
+
+async def test_values_split_and_curve_match_hand_calculation(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    cards: tuple[Card, Card],
+    price_provider: FakeProvider,
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+) -> None:
+    alice = await register_user("alice@example.com")
+    card_a, card_b = cards
+    price_provider.quotes = [cardmarket("trend", "100")]  # NM-Basis 100 € (für jede Karte)
+    display = await _product(client, alice, "display", "Drachenwandel Display")
+    booster = await _product(client, alice, "booster", "Drachenwandel Booster")
+
+    await _add(client, alice, card_id=str(card_a.id), condition="NM", quantity=2)  # 2 × 100
+    await _add(client, alice, card_id=str(card_a.id), condition="LP")  # 100 × 0,55 = 55
+    await _add(
+        client, alice, card_id=str(card_b.id), grading_company="PSA", grade="10", custom_price="500"
+    )
+    await _add(
+        client, alice, card_id=str(card_b.id), grading_company="CGC", grade="9.5"
+    )  # ohne Wert
+    await _add(client, alice, product_id=display, quantity=2, custom_price="150")  # 2 × 150
+    await _add(client, alice, product_id=booster)  # ohne Wert
+
+    summary = (await client.get(f"{API}/collection/summary", headers=alice.headers)).json()
+
+    # Von Hand: 200 + 55 + 500 + 300 = 1055; geschätzt: 200 + 55 = 255
+    assert summary["total_value"] == "1055.00"
+    assert summary["estimated_value"] == "255.00"
+    assert summary["raw"] == {"value": "255.00", "positions": 2, "items": 3}
+    assert summary["graded"] == {"value": "500.00", "positions": 2, "items": 2}
+    assert summary["sealed"] == {"value": "300.00", "positions": 2, "items": 3}
+    assert (summary["positions"], summary["items"], summary["cards"], summary["sets"]) == (
+        6,
+        8,
+        5,
+        2,
+    )
+    assert summary["unvalued_positions"] == 2
+    assert summary["change_since_added"] == "0.00"
+    assert summary["top_item"]["value"]["unit_value"] == "500.00"
+    assert summary["biggest_gain"] is None
+
+    # Preis steigt auf 120 €: tägliche Runde holt neue Preise und speichert den Tageswert.
+    price_provider.quotes = [cardmarket("trend", "120", updated=UPDATED + timedelta(days=1))]
+    health = SourceHealth(threshold=3, pause=timedelta(minutes=60))
+    round_summary = await refresh_tracked_prices(
+        session_factory, settings, [price_provider], health
+    )
+    assert round_summary.snapshots == 1
+
+    summary = (await client.get(f"{API}/collection/summary", headers=alice.headers)).json()
+    # Von Hand: NM 2 × 120 = 240, LP 120 × 0,55 = 66 → roh 306; gesamt 306 + 500 + 300 = 1106
+    assert summary["total_value"] == "1106.00"
+    assert summary["raw"]["value"] == "306.00"
+    # Veränderung seit Hinzufügen: 2 × (120 − 100) + (66 − 55) = 51 – Zukäufe zählen nicht
+    assert summary["change_since_added"] == "51.00"
+    assert summary["biggest_gain"]["value"]["change"] == "40.00"
+
+    history = (await client.get(f"{API}/collection/history", headers=alice.headers)).json()
+    assert history["points"][-1]["total_value"] == "1106.00"
+    assert history["points"][-1]["is_live"] is True
+    assert sum(m["delta_quantity"] for m in history["markers"]) == 8  # 2+1+1+1+2+1 Stück
+
+    async with session_factory() as session:
+        snapshot = await session.scalar(select(PortfolioSnapshot))
+    assert snapshot is not None
+    assert (snapshot.total_value, snapshot.raw_value) == (Decimal("1106.00"), Decimal("306.00"))
+    assert (snapshot.graded_value, snapshot.sealed_value) == (Decimal("500.00"), Decimal("300.00"))
+
+
+async def test_buying_more_does_not_count_as_gain(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    cards: tuple[Card, Card],
+    price_provider: FakeProvider,
+) -> None:
+    alice = await register_user("alice@example.com")
+    price_provider.quotes = [cardmarket("trend", "100")]
+    item = await _add(client, alice, card_id=str(cards[0].id))
+
+    await client.patch(
+        f"{API}/collection/items/{item['id']}", json={"quantity": 5}, headers=alice.headers
+    )
+
+    summary = (await client.get(f"{API}/collection/summary", headers=alice.headers)).json()
+    assert summary["total_value"] == "500.00"
+    assert summary["change_since_added"] == "0.00"
+
+
+# --------------------------------------------------------- Positionen & Ordner
+
+
+async def test_item_crud_and_custom_price(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    cards: tuple[Card, Card],
+    price_provider: FakeProvider,
+) -> None:
+    alice = await register_user("alice@example.com")
+    price_provider.quotes = [cardmarket("trend", "100")]
+    item = await _add(
+        client, alice, card_id=str(cards[0].id), purchase_price="80", note="  Tausch mit Max  "
+    )
+    assert item["condition"] == "NM"
+    assert item["note"] == "Tausch mit Max"
+    assert item["value_at_add"] == "100.00"
+    assert item["value"]["kind"] == "estimated"
+
+    changed = await client.patch(
+        f"{API}/collection/items/{item['id']}",
+        json={"custom_price": "250", "condition": "EX"},
+        headers=alice.headers,
+    )
+    assert changed.json()["value"] == {
+        "kind": "manual", "unit_value": "250.00", "total_value": "250.00",
+        "source": "manual", "basis": None, "change": "150.00",
+    }  # fmt: skip
+
+    cleared = await client.patch(
+        f"{API}/collection/items/{item['id']}", json={"custom_price": None}, headers=alice.headers
+    )
+    assert cleared.json()["value"]["unit_value"] == "85.00"  # EX = 100 × 0,85
+
+    assert (
+        await client.delete(f"{API}/collection/items/{item['id']}", headers=alice.headers)
+    ).status_code == 204
+    assert (
+        await client.get(f"{API}/collection/items/{item['id']}", headers=alice.headers)
+    ).status_code == 404
+
+
+async def test_item_validation(
+    client: AsyncClient, register_user: RegisterUser, cards: tuple[Card, Card]
+) -> None:
+    alice = await register_user("alice@example.com")
+    product = await _product(client, alice, "booster", "Booster")
+    card_id = str(cards[0].id)
+    cases: list[tuple[dict[str, Any], int]] = [
+        ({"card_id": card_id, "product_id": product}, 400),
+        ({}, 400),
+        ({"product_id": product, "grading_company": "PSA", "grade": "10"}, 400),
+        ({"card_id": card_id, "grading_company": "PSA"}, 400),
+        ({"card_id": card_id, "condition": "XX"}, 422),
+        ({"card_id": card_id, "quantity": 0}, 422),
+        ({"card_id": card_id, "variant": "gold"}, 422),
+        ({"card_id": card_id, "purchase_price": "-1"}, 422),
+        ({"card_id": card_id, "grading_company": "PSA", "grade": "elf"}, 422),
+    ]
+    for body, expected in cases:
+        response = await client.post(f"{API}/collection/items", json=body, headers=alice.headers)
+        assert response.status_code == expected, (body, response.text)
+
+
+async def test_folders_lifecycle(
+    client: AsyncClient, register_user: RegisterUser, cards: tuple[Card, Card]
+) -> None:
+    alice = await register_user("alice@example.com")
+    folders = (await client.get(f"{API}/folders", headers=alice.headers)).json()
+    assert [f["name"] for f in folders] == ["Sammlung"]
+    default_id = folders[0]["id"]
+
+    second = (
+        await client.post(f"{API}/folders", json={"name": "Sammlung 2"}, headers=alice.headers)
+    ).json()
+    duplicate = await client.post(
+        f"{API}/folders", json={"name": "sammlung 2"}, headers=alice.headers
+    )
+    assert duplicate.status_code == 409
+    item = await _add(client, alice, card_id=str(cards[0].id), folder_id=second["id"])
+
+    not_empty = await client.delete(f"{API}/folders/{second['id']}", headers=alice.headers)
+    assert not_empty.json()["error"]["code"] == "folder_not_empty"
+    moved = await client.delete(
+        f"{API}/folders/{second['id']}", params={"move_to": default_id}, headers=alice.headers
+    )
+    assert moved.status_code == 204
+    item_now = (
+        await client.get(f"{API}/collection/items/{item['id']}", headers=alice.headers)
+    ).json()
+    assert item_now["folder_id"] == default_id
+
+    last = await client.delete(f"{API}/folders/{default_id}", headers=alice.headers)
+    assert last.status_code == 400
+
+    renamed = await client.patch(
+        f"{API}/folders/{default_id}", json={"name": "Binder"}, headers=alice.headers
+    )
+    assert renamed.json()["name"] == "Binder"
+
+
+async def test_list_filter_sort_sets_and_export(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    cards: tuple[Card, Card],
+    price_provider: FakeProvider,
+) -> None:
+    alice = await register_user("alice@example.com")
+    price_provider.quotes = [cardmarket("trend", "10.50")]
+    await _add(client, alice, card_id=str(cards[0].id), quantity=3)
+    await _add(client, alice, card_id=str(cards[1].id), custom_price="99.90")
+    await _add(client, alice, product_id=await _product(client, alice, "tin", "Tin"))
+
+    by_value = (
+        await client.get(
+            f"{API}/collection/items", params={"sort": "value_desc"}, headers=alice.headers
+        )
+    ).json()
+    assert [i["value"]["total_value"] for i in by_value["items"]] == ["99.90", "31.50", None]
+    sealed = (
+        await client.get(
+            f"{API}/collection/items", params={"kind": "sealed"}, headers=alice.headers
+        )
+    ).json()
+    assert sealed["total"] == 1
+    found = (
+        await client.get(f"{API}/collection/items", params={"q": "nachtara"}, headers=alice.headers)
+    ).json()
+    assert [i["card"]["name"] for i in found["items"]] == ["Nachtara VMAX"]
+
+    sets = (await client.get(f"{API}/collection/sets", headers=alice.headers)).json()
+    assert [(s["card_set"]["name"], s["owned_cards"], s["value"]) for s in sets] == [
+        ("Drachenwandel", 1, "99.90"),
+        ("Drachenwandel", 1, "31.50"),
+    ]
+
+    export = await client.get(f"{API}/collection/export.csv", headers=alice.headers)
+    assert export.headers["content-type"] == "text/csv; charset=utf-8"
+    assert export.text.startswith("﻿Ordner;Art;Name;")
+    assert (
+        "Sammlung;Karte;Nachtara VMAX;Drachenwandel;215;de;normal;NM;;;3;;;10,50;31,50;Schätzung;"
+        in export.text
+    )
+    assert ";Versiegelt;Tin;" in export.text
+
+
+# ----------------------------------------------------------------- Merkliste
+
+
+async def test_wishlist(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    cards: tuple[Card, Card],
+    price_provider: FakeProvider,
+) -> None:
+    alice = await register_user("alice@example.com")
+    price_provider.quotes = [cardmarket("trend", "100")]
+    await client.get(f"{API}/cards/{cards[0].id}/prices", headers=alice.headers)  # Preis vorhanden
+
+    first = await client.post(
+        f"{API}/wishlist", json={"card_id": str(cards[0].id)}, headers=alice.headers
+    )
+    again = await client.post(
+        f"{API}/wishlist", json={"card_id": str(cards[0].id)}, headers=alice.headers
+    )
+    assert first.json()["id"] == again.json()["id"]  # doppelt merken → derselbe Eintrag
+
+    entries = (await client.get(f"{API}/wishlist", headers=alice.headers)).json()
+    assert [(e["card"]["name"], e["nm_value"], e["nm_value_kind"]) for e in entries] == [
+        ("Nachtara VMAX", "100.00", "estimated")
+    ]
+    removed = await client.delete(f"{API}/wishlist/{entries[0]['id']}", headers=alice.headers)
+    assert removed.status_code == 204
+    assert (await client.get(f"{API}/wishlist", headers=alice.headers)).json() == []
+
+
+# ------------------------------------------------- Mandantentrennung & Admin
+
+
+async def test_users_cannot_touch_each_others_collections(
+    client: AsyncClient, register_user: RegisterUser, cards: tuple[Card, Card]
+) -> None:
+    alice = await register_user("alice@example.com")
+    bob = await register_user("bob@example.com")
+    item = await _add(client, alice, card_id=str(cards[0].id))
+    alice_folder = (await client.get(f"{API}/folders", headers=alice.headers)).json()[0]["id"]
+    wish = (
+        await client.post(
+            f"{API}/wishlist", json={"card_id": str(cards[0].id)}, headers=alice.headers
+        )
+    ).json()
+
+    attacks = [
+        ("GET", f"/collection/items/{item['id']}", None),
+        ("PATCH", f"/collection/items/{item['id']}", {"quantity": 99}),
+        ("DELETE", f"/collection/items/{item['id']}", None),
+        ("PATCH", f"/folders/{alice_folder}", {"name": "gehackt"}),
+        ("DELETE", f"/folders/{alice_folder}", None),
+        ("POST", "/collection/items", {"card_id": str(cards[0].id), "folder_id": alice_folder}),
+        ("DELETE", f"/wishlist/{wish['id']}", None),
+    ]
+    for method, path, body in attacks:
+        response = await client.request(method, API + path, json=body, headers=bob.headers)
+        assert response.status_code == 404, (method, path, response.status_code)
+
+    assert (await client.get(f"{API}/collection/items", headers=bob.headers)).json()["total"] == 0
+    assert (await client.get(f"{API}/wishlist", headers=bob.headers)).json() == []
+    still = (await client.get(f"{API}/collection/items/{item['id']}", headers=alice.headers)).json()
+    assert still["quantity"] == 1
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/folders", "/collection/items", "/collection/summary", "/collection/sets",
+     "/collection/history", "/collection/export.csv", "/wishlist", "/dashboard", "/products"],
+)  # fmt: skip
+async def test_collection_endpoints_require_login(client: AsyncClient, path: str) -> None:
+    assert (await client.get(API + path)).status_code == 401
+
+
+async def test_admin_can_read_but_users_cannot(
+    client: AsyncClient,
+    admin: Account,
+    register_user: RegisterUser,
+    cards: tuple[Card, Card],
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    alice = await register_user("alice@example.com")
+    bob = await register_user("bob@example.com")
+    await _add(client, alice, card_id=str(cards[0].id), custom_price="42")
+
+    summary = await client.get(
+        f"{API}/admin/users/{alice.user_id}/collection/summary", headers=admin.headers
+    )
+    items = await client.get(
+        f"{API}/admin/users/{alice.user_id}/collection/items", headers=admin.headers
+    )
+    assert summary.json()["total_value"] == "42.00"
+    assert items.json()["total"] == 1
+
+    forbidden = await client.get(
+        f"{API}/admin/users/{alice.user_id}/collection/items", headers=bob.headers
+    )
+    assert forbidden.status_code == 403
+    async with session_factory() as session:
+        views = (
+            await session.scalars(
+                select(AuditLog).where(AuditLog.action == "admin.collection_viewed")
+            )
+        ).all()
+    assert {(v.actor_id, v.target_user_id, v.details["view"]) for v in views} == {
+        (admin.user_id, alice.user_id, "summary"),
+        (admin.user_id, alice.user_id, "items"),
+    }
+
+
+async def test_daily_refresh_tracks_collection_and_wishlist_cards(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+) -> None:
+    alice = await register_user("alice@example.com")
+    raw = await make_card(session_factory, external_id="raw-1", number="1")
+    graded = await make_card(session_factory, external_id="graded-2", number="2")
+    wished = await make_card(session_factory, external_id="wish-3", number="3")
+    await _add(client, alice, card_id=str(raw.id))
+    await _add(client, alice, card_id=str(graded.id), grading_company="PSA", grade="9")
+    await client.post(f"{API}/wishlist", json={"card_id": str(wished.id)}, headers=alice.headers)
+
+    async with session_factory() as session:
+        tracked = set(await tracked_card_ids(session, settings, datetime.now(UTC)))
+
+    # Rohkarte wurde beim Hinzufügen angesehen/abgerufen; gegradete Karte nicht.
+    assert {raw.id, wished.id} <= tracked
+    assert graded.id not in tracked
+
+
+async def test_patch_rejects_nulls_and_grade_on_raw_cards(
+    client: AsyncClient, register_user: RegisterUser, cards: tuple[Card, Card]
+) -> None:
+    alice = await register_user("alice@example.com")
+    raw = await _add(client, alice, card_id=str(cards[0].id))
+    graded = await _add(client, alice, card_id=str(cards[1].id), grading_company="PSA", grade="9")
+
+    for body in ({"quantity": None}, {"variant": None}, {"condition": None}, {"grade": "10"}):
+        response = await client.patch(
+            f"{API}/collection/items/{raw['id']}", json=body, headers=alice.headers
+        )
+        assert response.status_code == 400, body
+    no_grade = await client.patch(
+        f"{API}/collection/items/{graded['id']}", json={"grade": None}, headers=alice.headers
+    )
+    assert no_grade.status_code == 400
+    regraded = await client.patch(
+        f"{API}/collection/items/{graded['id']}", json={"grade": "9.5"}, headers=alice.headers
+    )
+    assert regraded.json()["grade"] == "9.5"
+
+
+async def test_csv_export_neutralizes_formulas(
+    client: AsyncClient, register_user: RegisterUser
+) -> None:
+    alice = await register_user("alice@example.com")
+    evil = (
+        await client.post(
+            f"{API}/products",
+            json={"kind": "other", "language": "de", "name": '=HYPERLINK("http://x","klick")'},
+            headers=alice.headers,
+        )
+    ).json()
+    await _add(client, alice, product_id=evil["id"], note="+49 Notiz")
+
+    export = (await client.get(f"{API}/collection/export.csv", headers=alice.headers)).text
+    header, row = list(csv.reader(io.StringIO(export.lstrip("\ufeff")), delimiter=";"))
+
+    assert row[header.index("Name")] == '\'=HYPERLINK("http://x","klick")'
+    assert row[header.index("Notiz")] == "'+49 Notiz"

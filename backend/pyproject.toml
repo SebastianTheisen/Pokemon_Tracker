@@ -59,7 +59,7 @@ select = [
 ]
 ignore = ["PLR0913"]
 # Deutsche Texte nutzen bewusst Gedankenstriche.
-allowed-confusables = ["–", "×"]
+allowed-confusables = ["–", "×", "−"]
 
 [tool.ruff.lint.isort]
 # Der Ordner alembic/ (Migrationen) ist nicht das Paket „alembic“.
