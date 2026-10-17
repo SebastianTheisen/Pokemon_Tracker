@@ -33,8 +33,8 @@ tailscale version | head -1
 step "2/4 Anmelden (Link am Handy öffnen, mit deinem Tailscale-Konto bestätigen)"
 state="$(tailscale status --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("BackendState",""))' || true)"
 if [[ "${state}" == "Running" ]]; then
-  echo "Schon angemeldet – setze nur den Gerätenamen."
-  tailscale set --hostname="${HOSTNAME_TS}"
+  # Nie umbenennen: Der VPS kann schon für andere Apps im Tailnet hängen (Name = deren URL).
+  fail "Tailscale läuft hier schon (anderer Gerätename). Skript bricht ab, um nichts zu überschreiben."
 else
   tailscale up --hostname="${HOSTNAME_TS}"
 fi

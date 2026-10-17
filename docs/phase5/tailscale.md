@@ -7,7 +7,7 @@
 - API von außen über die öffentliche IP, Port 8000 (Erwartung: keine Verbindung = 000): `000`
 
 ```
-https://gtcha.tail6f0d61.ts.net (tailnet only)
+https://gtcha.<tailnet>.ts.net (tailnet only)
 |-- /     proxy http://127.0.0.1:8080
 |-- /beta proxy http://127.0.0.1:8081
 
