@@ -49,7 +49,7 @@ async def test_sync_imports_sets_and_cards_per_language(
     assert [(r.language, r.sets_synced, r.cards_upserted, r.errors) for r in reports] == [
         ("de", 1, 4, []),
         ("en", 1, 4, []),
-        ("ja", 1, 2, []),
+        ("ja", 2, 3, []),  # inkl. Set „SM1+“ (Sonderzeichen in der ID)
     ]
     async with session_factory() as session:
         card = await session.scalar(
@@ -68,7 +68,7 @@ async def test_second_sync_skips_complete_sets_and_updates_changed_ones(
     synced.set_requests.clear()
     reports = await _sync(synced, session_factory)
     assert synced.set_requests == []
-    assert all(r.sets_skipped == 1 for r in reports)
+    assert all(r.sets_skipped == r.sets_total for r in reports)
 
     # Neues Set-Mitglied in DE → nur dieses Set wird neu geladen.
     synced.catalog["de"]["swsh7"]["cards"].append(
@@ -80,7 +80,7 @@ async def test_second_sync_skips_complete_sets_and_updates_changed_ones(
 
     async with session_factory() as session:
         count = await session.scalar(select(func.count()).select_from(Card))
-    assert count == 11
+    assert count == 12
 
 
 async def test_full_sync_updates_names_without_duplicates(
@@ -97,7 +97,7 @@ async def test_full_sync_updates_names_without_duplicates(
             )
         ).all()
         assert names == ["Nachtara-VMAX (korrigiert)"]
-        assert await session.scalar(select(func.count()).select_from(CardSet)) == 3
+        assert await session.scalar(select(func.count()).select_from(CardSet)) == 4
 
 
 async def test_failing_set_is_reported_and_others_continue(
@@ -109,7 +109,7 @@ async def test_failing_set_is_reported_and_others_continue(
     reports = await _sync(fake, session_factory)
 
     ja = next(r for r in reports if r.language == "ja")
-    assert ja.sets_synced == 0
+    assert ja.sets_synced == 1  # SM1+ klappt, S12 schlägt fehl
     assert len(ja.errors) == 1
     assert all(not r.errors for r in reports if r.language != "ja")
 
@@ -235,7 +235,7 @@ async def test_search_and_detail_api(
     assert detail.json()["external_id"] == "swsh7-215"
 
     sets = await client.get(f"{API}/sets", params={"language": "ja"}, headers=user.headers)
-    assert [s["external_id"] for s in sets.json()] == ["S12"]
+    assert [s["external_id"] for s in sets.json()] == ["S12", "SM1+"]
 
 
 async def test_search_api_validates_language(
@@ -248,3 +248,10 @@ async def test_search_api_validates_language(
     )
 
     assert response.status_code == 422
+
+
+async def test_set_ids_with_special_characters_are_url_encoded(
+    session_factory: async_sessionmaker[AsyncSession], synced: FakeTcgdex
+) -> None:
+    assert "ja/SM1+" in synced.set_requests
+    assert await _search(session_factory, "モクロー 1") == [("ja", "モクロー", "001")]

@@ -17,9 +17,14 @@ def configure_logging(*, level: str = "INFO", json_output: bool = False) -> None
     """
     log_level = logging.getLevelNamesMapping()[level]
     logging.basicConfig(format="%(message)s", stream=sys.stdout, level=log_level, force=True)
+    # httpx/httpcore loggen sonst jede einzelne Anfrage auf INFO.
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(max(log_level, logging.WARNING))
 
     renderer: structlog.types.Processor = (
-        structlog.processors.JSONRenderer() if json_output else structlog.dev.ConsoleRenderer()
+        structlog.processors.JSONRenderer()
+        if json_output
+        else structlog.dev.ConsoleRenderer(colors=sys.stdout.isatty())
     )
     structlog.configure(
         processors=[

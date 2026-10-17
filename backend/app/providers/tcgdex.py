@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import date
 from types import TracebackType
 from typing import Self
+from urllib.parse import quote
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -94,8 +95,10 @@ class TcgdexClient:
             response = await self._client.get(path)
             response.raise_for_status()
             return response.json()
+        except httpx.HTTPStatusError as exc:
+            raise TcgdexError(f"GET {path}: HTTP {exc.response.status_code}") from exc
         except (httpx.HTTPError, ValueError) as exc:
-            raise TcgdexError(f"GET {path}: {exc}") from exc
+            raise TcgdexError(f"GET {path}: {type(exc).__name__}: {exc}") from exc
 
     async def list_sets(self, language: str) -> list[SetBrief]:
         data = await self._get_json(f"/{language}/sets")
@@ -110,7 +113,8 @@ class TcgdexClient:
         return sets
 
     async def get_set(self, language: str, set_id: str) -> SetDetail:
-        data = await self._get_json(f"/{language}/sets/{set_id}")
+        # Set-IDs können Sonderzeichen enthalten (z. B. „SM1+“) → als Pfadsegment kodieren.
+        data = await self._get_json(f"/{language}/sets/{quote(set_id, safe='')}")
         try:
             return SetDetail.model_validate(data)
         except ValidationError as exc:

@@ -2,7 +2,7 @@
 
 Eine private Sammel-App im Stil von SCNDX: Pokémon-Karten scannen, Sammlung verwalten, belegte Marktpreise sehen. Sie ist für den Freundeskreis gedacht und wird nicht veröffentlicht.
 
-Stand: 17.10.2026 · Status: **Phase 1 – Code fertig, wartet auf VPS-Lauf**
+Stand: 17.10.2026 · Status: **Phase 1 – fast fertig, kurzer Nachtest auf dem VPS offen**
 
 ---
 
@@ -11,7 +11,7 @@ Stand: 17.10.2026 · Status: **Phase 1 – Code fertig, wartet auf VPS-Lauf**
 | Phase | Status | Notiz |
 |---|---|---|
 | 0 – Spikes und Fundament | ✅ erledigt | Alle Spikes ausgewertet, alle Entscheidungen getroffen (Ergebnis unten) |
-| 1 – Backend-Kern | 🟡 in Arbeit | Code + 109 Tests fertig (96 % Coverage). **Wartet auf:** VPS-Lauf (echter Katalog-Import, `deploy/phase1_vps.sh`) |
+| 1 – Backend-Kern | 🟡 fast fertig | VPS-Lauf ausgewertet, Abnahme-Suchen ✅. **Wartet auf:** kurzer Nachtest des Imports der „+“-Sets (Fix) |
 | 2 – Preise | ⚪ offen | |
 | 3 – Sammlung, Merkliste, Dashboard | ⚪ offen | |
 | 4 – Scanner | ⚪ offen | |
@@ -82,8 +82,24 @@ Entscheidungen (17.10.2026): Passwort-Reset **durch den Admin** (Einmal-Code, ke
 - [x] Docker: Migrationen beim Start; CI mit PostgreSQL-Service
 - [x] Härtung nach Selbst-Review: App startet in Produktion nicht mit Platzhalter- oder zu kurzem JWT-Schlüssel; Login-Limiter räumt alte Einträge auf (kein Speicherleck)
 - [x] Qualität: ruff, mypy strict, **109 Tests grün, 96 % Coverage** (lokal gegen PostgreSQL 16)
-- [ ] ⏳ **VPS-Lauf durch den Nutzer:** `bash deploy/phase1_vps.sh` – startet das Backend, legt den ersten Admin an, importiert den echten Katalog, prüft Suchen. Ergebnis `docs/phase1/ergebnis.md` zurückschicken
-- [ ] Abnahme Phase 1: echter Import ohne Fehler, „nachtara 215“ findet „Nachtara VMAX · Drachenwandel · 215“
+- [x] VPS-Lauf ausgewertet ([`docs/phase1/ergebnis.md`](docs/phase1/ergebnis.md)): Backend gesund, Admin angelegt, **65.561 Karten in ~1 Minute importiert**
+
+  | Sprache | Sets | Karten | mit Bild |
+  |---|---|---|---|
+  | de | 155 | 20.233 | 14.860 (73 %) |
+  | en | 220 | 23.770 | 21.990 (93 %) |
+  | ja | 181 von 186 | 13.006 | 3.882 (30 %) |
+  | zh-tw | 98 | 7.436 | 2.146 (29 %) |
+  | zh-cn | 57 | 877 | 0 |
+  | ko | 91 von 95 | 239 | 0 |
+
+  - **Suche ✅:** „nachtara 215“ → Nachtara VMAX · Drachenwandel · 215 (Abnahme erfüllt); „umbreon 215“ und Tippfehler „NACHTRA 215“ ebenso; „Team Rockets Mewtu ex 231“ ✅; „ルギアV 110“ und „ブラッキーex 217“ finden die Karte zusätzlich auf Chinesisch (gemeinsame Set-IDs)
+  - **„鲤鱼王“ (Karpador, ZH):** keine Treffer – die Karte fehlt in TCGdex zh-cn (bekannte Katalog-Lücke → „Karten selbst anlegen“)
+  - **9 Fehler:** Sets mit „+“ in der ID (`SM1+` … `SM5+`, JA/KO) → 404, weil die ID nicht URL-kodiert war. **Behoben** (Set-ID wird kodiert), Test mit simuliertem Server ergänzt; Nachtest auf dem VPS offen
+  - **Protokoll:** jede HTTP-Anfrage wurde mitgeloggt und Farbcodes landeten in der Datei → httpx-Logs auf WARNING, Farben nur im Terminal. **Behoben**
+  - **Erkenntnis für den Scanner:** KO/ZH-CN haben keine Katalogbilder, JA/ZH-TW nur ~30 % → die beschlossenen eigenen Referenzbilder sind für asiatische Karten zentral
+- [ ] ⏳ **Nachtest durch den Nutzer:** Container neu bauen und Import für JA/KO wiederholen (Befehle in der Antwort) – Erwartung: 0 Fehler
+- [ ] Abnahme Phase 1
 
 **Nicht prüfbar in der Cloud-Umgebung:** echter TCGdex-Import (Host gesperrt) und Docker-Build (GHCR gesperrt) – beides übernimmt der VPS-Lauf.
 
@@ -102,6 +118,7 @@ Entscheidungen (17.10.2026): Passwort-Reset **durch den Admin** (Einmal-Code, ke
 | 17.10.2026 | VPS-Lauf 2 ausgewertet: Docker ok, KO-Modell ok, Bildabgleich Top-1 4/7 (Fehlschläge nur durch Katalog-Lücken) |
 | 17.10.2026 | Entscheidungen: pokemontcg.io als Reserve, Referenzbilder pro Nutzer, Karten anlegen für alle. **Phase 0 abgeschlossen** |
 | 17.10.2026 | Phase 1 gestartet. Entscheidungen: Passwort-Reset durch Admin, Katalog in allen 6 Sprachen. Code, Tests, CLI, Docker-Start mit Migrationen und VPS-Skript fertig |
+| 17.10.2026 | VPS-Lauf Phase 1: 65.561 Karten, Abnahme-Suchen ✅. Fix für Set-IDs mit „+“ und leiseres Import-Protokoll; Nachtest offen |
 
 ---
 

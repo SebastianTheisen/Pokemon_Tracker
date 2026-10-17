@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import unquote
 
 import httpx
 
@@ -80,6 +81,14 @@ def default_catalog() -> dict[str, dict[str, dict[str, Any]]]:
                     _card("ja", "S/S12", "S12-079", "079", "ルギアV"),
                 ],
             ),
+            # Set-ID mit Sonderzeichen wie im echten Katalog (Sun & Moon „+“-Sets).
+            "SM1+": _set(
+                "SM1+",
+                "サン&ムーン 強化拡張パック",
+                "サン&ムーン",
+                "2017-02-03",
+                [_card("ja", "SM/SM1+", "SM1+-001", "001", "モクロー")],
+            ),
         },
     }
 
@@ -93,7 +102,11 @@ class FakeTcgdex:
         self.failing_sets: set[str] = set()
 
     def handler(self, request: httpx.Request) -> httpx.Response:
-        parts = request.url.path.strip("/").split("/")  # v2/{lang}/sets[/{id}]
+        raw_path = request.url.raw_path.decode("ascii")
+        if "+" in raw_path:
+            # Wie der echte Server (VPS-Lauf Phase 1): unkodiertes „+“ → 404.
+            return httpx.Response(404)
+        parts = [unquote(part) for part in raw_path.strip("/").split("/")]  # v2/{lang}/sets[/{id}]
         if len(parts) < 3 or parts[0] != "v2" or parts[2] != "sets":
             return httpx.Response(404)
         language = parts[1]
