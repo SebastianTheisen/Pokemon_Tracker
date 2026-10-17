@@ -195,7 +195,7 @@ Entscheidungen (17.10.2026):
 - [x] Web-Build wird von der API unter `/` ausgeliefert (Rückfall auf `index.html` für App-Seiten, API-Fehler bleiben JSON, kein Cache für `index.html`/Service-Worker); PWA-Manifest und eigenes Icon (Kartenkiste)
 - [x] APK-Build-Container (`deploy/app-builder`, Flutter + Android-SDK + JDK 21, Caches und Signaturschlüssel in Volumes) und Skript `deploy/phase5_app.sh`; APK-Download unter `/kartenkiste.apk` (nur im Tailnet)
 - [x] Qualität: `flutter analyze` ohne Befund, **12 Flutter-Tests** (Login, Suche → Detail, kein erfundener Preis, Scan → Sammlung mit Slab, unsicherer Scan, Admin-Einladung, Rechte, Token-Erneuerung, Formatierung); Tests fanden 3 echte Fehler (Navigationsleiste belegte den ganzen Bildschirm, zu breite Auswahlfelder, zu früh freigegebene Eingabedialoge) → behoben. Backend: 316 Tests. CI-Workflow für die App
-- [ ] VPS: App bauen (`deploy/phase5_app.sh`)
+- [ ] VPS: App bauen (`deploy/phase5_app.sh`) – 1. Lauf: Web + APK gebaut (11 min), aber das Backend-Image war alt (Skript baute es nicht neu) → Startseite 404. Skript korrigiert
 - [ ] Abnahme: Kern-Flows auf iPhone (PWA) und Android
 
 ### Änderungsprotokoll

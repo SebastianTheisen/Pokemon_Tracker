@@ -57,8 +57,9 @@ apk_size="$(du -h app/build/web/kartenkiste.apk | cut -f1)"
 web_size="$(du -sh --exclude=kartenkiste.apk app/build/web | cut -f1)"
 echo "Fertig in ${duration} s – APK ${apk_size}, Web ${web_size}"
 
-step "4/5 API neu starten (liefert die Web-App aus)"
-docker compose up -d --force-recreate api
+step "4/5 Backend neu bauen und starten (liefert die Web-App aus)"
+# --build: Das Backend-Image muss den aktuellen Code enthalten (Auslieferung der Web-App).
+docker compose up -d --build --force-recreate api worker
 health="keine Antwort"
 for _ in $(seq 1 60); do
   if health="$(curl -fsS http://127.0.0.1:8000/api/v1/health 2>/dev/null)"; then break; fi
@@ -72,6 +73,10 @@ deep_link="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/card/i
 manifest="$(curl -fsS http://127.0.0.1:8000/manifest.json | python3 -c 'import json,sys; m=json.load(sys.stdin); print(m["name"], m["display"])' || echo 'fehlt')"
 apk_check="$(curl -s -o /dev/null -w '%{http_code} %{size_download}' http://127.0.0.1:8000/kartenkiste.apk)"
 echo "Startseite: ${index_check} · Deep-Link: ${deep_link} · Manifest: ${manifest} · APK: ${apk_check}"
+if [[ "${index_check}" == "fehlt" ]]; then
+  docker compose logs --tail 40 api | grep -iE "web|error" || true
+  fail "Die API liefert die Web-App nicht aus (siehe Protokoll oben)."
+fi
 
 {
   echo "# Phase 5 – App gebaut und ausgeliefert"
