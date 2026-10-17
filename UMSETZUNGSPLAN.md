@@ -2,7 +2,7 @@
 
 Eine private Sammel-App im Stil von SCNDX: Pokémon-Karten scannen, Sammlung verwalten, belegte Marktpreise sehen. Sie ist für den Freundeskreis gedacht und wird nicht veröffentlicht.
 
-Stand: 17.10.2026 · Status: **Phase 4 abgeschlossen, Phase 5 (Flutter-App) startet**
+Stand: 17.10.2026 · Status: **Phase 5 (Flutter-App „Kartenkiste“) in Arbeit – Schritt 1: Tailscale auf dem VPS**
 
 ---
 
@@ -15,7 +15,7 @@ Stand: 17.10.2026 · Status: **Phase 4 abgeschlossen, Phase 5 (Flutter-App) star
 | 2 – Preise | ✅ erledigt | Echte Preise mit Beleg (DE/EN/JA/ZH), Worker läuft, NM-Basis = Median, 163 Tests (95 % Coverage) |
 | 3 – Sammlung, Merkliste, Dashboard | ✅ erledigt | VPS-Probe mit echten Preisen = Handrechnung (4.894,67 €), Zugriffsschutz ✅, 204 Tests (95 % Coverage) |
 | 4 – Scanner | ✅ erledigt | VPS-Lauf ✅: Top-1 5/6, 0× sicher-aber-falsch, Ø 2,7 s (max 4,6 s). Latenz-Tuning und Abnahme 85 % → Phase 7. Binder-Scan als Beta; Abnahme Top-1 ≥ 85 % wartet auf weitere Testfotos |
-| 5 – Flutter-App | ⚪ offen | |
+| 5 – Flutter-App | 🟡 in Arbeit | App „Kartenkiste“; Tailscale vorgezogen (direkt auf dem VPS); APK-Build per Docker auf dem VPS |
 | 6 – Deployment und Härtung | ⚪ offen | |
 | 7 – Nachbesserung | ⚪ offen | |
 
@@ -178,6 +178,24 @@ Umsetzungsdetails (im Rahmen von 5.6, keine Änderung am Konzept):
 - [x] **Entscheidung Nutzer (17.10.2026):** Latenz bleibt vorerst so (Ø 2,7 s, max 4,6 s), weiter mit Phase 5. Verbesserung in Phase 7
 - [x] **Abschluss Phase 4** ✅ – nach Phase 7 verschoben: Latenz ≤ 3 s bei textreichen Fotos (weniger Bildabgleich-Kandidaten, kein KO-Durchlauf bei chinesischen Karten) und Abnahme Top-1 ≥ 85 % (DE/EN) mit weiteren Testfotos
 
+### Phase 5 – Aufgaben
+
+Entscheidungen (17.10.2026):
+- **App-Name: „Kartenkiste“** (eigener Name, keine SCNDX-Marke)
+- **Tailscale wird vorgezogen** (aus Phase 6), damit die App von Anfang an auf iPhone (PWA, Kamera braucht HTTPS) und Android getestet werden kann
+- **Tailscale direkt auf dem VPS** statt als Docker-Container: `tailscale serve` leitet HTTPS (`*.ts.net`) auf die API (`127.0.0.1:8000`) weiter. Kein Auth-Key in der `.env` → Abschnitt 8.1 angepasst
+- **Android-APK wird auf dem VPS per Docker gebaut** (Build-Container mit Android-SDK)
+
+- [ ] Schritt 1: Tailscale auf dem VPS (Installation, Login, HTTPS über `tailscale serve`), Erreichbarkeit vom Handy prüfen
+- [ ] Flutter-Grundgerüst `app/` (Theme, Navigation mit zentralem Scan-Button, API-Client mit Token-Refresh)
+- [ ] Auth-Screens (Login, Registrierung mit Einladungscode, Passwort-Reset mit Admin-Code)
+- [ ] Dashboard, Suche, Karten-Detail (Preise, Verlauf, eBay-Link), Sammlung, Merkliste, Mehr-Menü
+- [ ] Scan-Screen (Kamera/Galerie, Ergebnis bestätigen/korrigieren, Stapel, Binder-Beta)
+- [ ] Admin-Screens (Nutzer, Einladungen, Sammlung einsehen)
+- [ ] Web-Build wird von der API unter `/` ausgeliefert (gleiche Adresse, kein CORS), PWA-Manifest und Icons
+- [ ] APK-Build-Container auf dem VPS
+- [ ] Abnahme: Kern-Flows auf iPhone (PWA) und Android
+
 ### Änderungsprotokoll
 
 | Datum | Änderung |
@@ -204,6 +222,7 @@ Umsetzungsdetails (im Rahmen von 5.6, keine Änderung am Konzept):
 | 17.10.2026 | Phase 4: Scanner-Modul, Identifikation, API (Einzel/Stapel/Binder, Bestätigen, Referenzbilder), Evaluation, Docker und VPS-Skript fertig. VPS-Lauf offen |
 | 17.10.2026 | VPS-Lauf Phase 4: Top-1 5/6, 0× sicher-aber-falsch, Latenz Ø 2,7 s / max 4,6 s. Aufräum-Fehler im Skript behoben |
 | 17.10.2026 | Entscheidung: Latenz-Tuning nach Phase 7. **Phase 4 abgeschlossen** |
+| 17.10.2026 | Phase 5 gestartet: App „Kartenkiste“, Tailscale vorgezogen und direkt auf dem VPS, APK-Build per Docker auf dem VPS |
 
 ---
 
@@ -542,8 +561,8 @@ Konventionen: OpenAPI-Schema aus FastAPI, Pagination per Cursor, einheitliches F
 ## 8. Deployment und Verteilung (kostenlos, vorhandener Ubuntu-VPS)
 
 ### 8.1 Server
-- Docker Compose mit den Diensten `db` (Postgres), `api`, `worker` und `tailscale` (Sidecar).
-- `tailscale serve` terminiert HTTPS mit einem Zertifikat unter `*.ts.net`. Das ist nötig, weil Kamerazugriff im Browser **HTTPS** voraussetzt.
+- Docker Compose mit den Diensten `db` (Postgres), `api` und `worker`. **Tailscale läuft direkt auf dem VPS** (Entscheidung 17.10.2026, statt Sidecar-Container).
+- `tailscale serve` terminiert HTTPS mit einem Zertifikat unter `*.ts.net` und leitet auf `127.0.0.1:8000` weiter. Das ist nötig, weil Kamerazugriff im Browser **HTTPS** voraussetzt.
 - Das Flutter-Web-Build wird als statische Dateien über denselben Dienst ausgeliefert.
 
 ### 8.2 Freunde einbinden
