@@ -2,7 +2,7 @@
 
 Eine private Sammel-App im Stil von SCNDX: Pokémon-Karten scannen, Sammlung verwalten, belegte Marktpreise sehen. Sie ist für den Freundeskreis gedacht und wird nicht veröffentlicht.
 
-Stand: 17.10.2026 · Status: **Phase 0 läuft**
+Stand: 17.10.2026 · Status: **Phase 0 abgeschlossen, Phase 1 wartet auf Freigabe**
 
 ---
 
@@ -10,7 +10,7 @@ Stand: 17.10.2026 · Status: **Phase 0 läuft**
 
 | Phase | Status | Notiz |
 |---|---|---|
-| 0 – Spikes und Fundament | 🟡 fast fertig | Alle Spikes ausgewertet. **Wartet auf:** 3 Entscheidungen (siehe Phase-0-Aufgaben), dann Abschluss |
+| 0 – Spikes und Fundament | ✅ erledigt | Alle Spikes ausgewertet, alle Entscheidungen getroffen (Ergebnis unten) |
 | 1 – Backend-Kern | ⚪ offen | |
 | 2 – Preise | ⚪ offen | |
 | 3 – Sammlung, Merkliste, Dashboard | ⚪ offen | |
@@ -49,10 +49,22 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
   - **Asiatische Karten:** JP-Preise vorhanden, ZH teilweise. Katalogbilder fehlen oft
   - **pokemontcg.io:** diesmal erreichbar, aber Preise vom 18.11.2025 (veraltet)
 - [x] Entscheidung Nutzer (17.10.2026): Preise aus TCGdex + markierte Schätzung **und** Plug-in-Schnittstelle für weitere Quellen. Kein eigener Cardmarket-Abruf → Abschnitt 5.3 angepasst, Einstellung `PT_EXTRA_PRICE_PROVIDERS` statt `PT_CARDMARKET_LISTING_ENABLED`
-- [ ] ❓ Entscheidung Nutzer: pokemontcg.io streichen (Preise veraltet, Daten in TCGdex aktuell)?
-- [ ] ❓ Entscheidung Nutzer: eigene Referenzbilder aus bestätigten Scans (schließt Bildlücken im Katalog)?
-- [ ] ❓ Entscheidung Nutzer: fehlende Karten selbst anlegen können?
-- [ ] Abschluss Phase 0: Go/No-Go je Spike festhalten, Plan anpassen, Phase 1 freigeben
+- [x] Entscheidung Nutzer: pokemontcg.io bleibt als **Reserve** (nur englische Karten, nur wenn TCGdex ausfällt; Preise mit ihrem eigenen, oft alten Datum) → 5.1
+- [x] Entscheidung Nutzer: eigene Referenzbilder aus bestätigten Scans, **pro Nutzer** → 4, 5.6
+- [x] Entscheidung Nutzer: fehlende Karten selbst anlegen, **für alle sichtbar**, Admin kann bearbeiten/löschen → 4, 5.1
+- [x] Abschluss Phase 0 (Ergebnis siehe unten)
+
+### Phase 0 – Ergebnis (Go/No-Go)
+
+| Spike | Ergebnis | Kernaussage |
+|---|---|---|
+| Fundament (Repo, CI, Tests, Docker) | ✅ Go | Docker-Build + Health-Check auf dem VPS ok |
+| Datenquelle TCGdex | ✅ Go | Alle Sprachen, aktuelle Cardmarket-Preise mit Datum + Produkt-ID; Lücken bei Bildern asiatischer Karten |
+| pokemontcg.io | ⚠️ Reserve | Preise ~11 Monate alt |
+| Cardmarket direkt | ❌ No-Go | Cloudflare-Sperre → Preisstrategie 5.3 (TCGdex + Schätzung + Plug-ins) |
+| Scanner-OCR (PP-OCRv6 + KO) | ✅ Go | Nummer in 5/7, Name in 6/7 Fotos; Slab-Labels komplett lesbar; KO-Modell lädt |
+| Bildabgleich (SIFT) | ✅ Go | Sicher, wenn Katalogbild vorhanden (Score 214–370 vs. ≤ 219); Lücken → eigene Referenzbilder + Karten anlegen |
+| Tailscale | ⏭️ verschoben | Test in Phase 6 (laut Absprache) |
 - [ ] Spike Tailscale: laut Absprache verschoben, wird beim Deployment (Phase 6) getestet
 
 **Regel:** Phase 1 beginnt erst, wenn alle Spike-Ergebnisse vorliegen und ausgewertet sind.
@@ -70,6 +82,7 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 | 17.10.2026 | VPS-Lauf 1 ausgewertet (TCGdex Go, Cardmarket gesperrt, pokemontcg.io 500). Docker-Fehler behoben, Spike Bildabgleich + asiatische Preise ergänzt |
 | 17.10.2026 | Preisstrategie entschieden: TCGdex + Schätzung + Plug-in-Schnittstelle. `CardmarketListingProvider` entfällt |
 | 17.10.2026 | VPS-Lauf 2 ausgewertet: Docker ok, KO-Modell ok, Bildabgleich Top-1 4/7 (Fehlschläge nur durch Katalog-Lücken) |
+| 17.10.2026 | Entscheidungen: pokemontcg.io als Reserve, Referenzbilder pro Nutzer, Karten anlegen für alle. **Phase 0 abgeschlossen** |
 
 ---
 
@@ -80,7 +93,7 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 | Frontend | **Flutter** (Dart): Android-APK plus **PWA (Flutter Web)** für iPhone |
 | Backend | **Python 3.12**, FastAPI, SQLAlchemy 2 (async), Alembic, Pydantic v2, PostgreSQL |
 | Scanner | Serverseitig in Python: OpenCV (Kartenerkennung) + OCR + Bild-Matching, alles lokal und kostenlos |
-| Karten-/Preisdaten | **TCGdex** (mehrsprachig, Cardmarket-Preisfelder) und **pokemontcg.io** als Ergänzung. Preise gelten nur mit Quelle, Datum und Link |
+| Karten-/Preisdaten | **TCGdex** (mehrsprachig, Cardmarket-Preisfelder) als Hauptquelle, **pokemontcg.io** nur als Reserve. Preise gelten nur mit Quelle, Datum und Link |
 | Hosting | **Vorhandener VPS (Ubuntu)** mit Docker Compose |
 | Nutzerzahl | **5–10 Nutzer** (Freundeskreis) |
 | Zugang für Freunde | **Tailscale** (Free-Plan). Das Backend ist nicht öffentlich erreichbar, Freunde nutzen Node-Sharing |
@@ -246,7 +259,8 @@ Pokemon_Tracker/
 | `invite_codes` | code_hash, created_by, expires_at, used_by, used_at, revoked_at |
 | `refresh_tokens` | id, user_id, token_hash, expires_at, revoked_at, replaced_by (Rotation) |
 | `sets` | id, external_id, name_de/en/…, series, release_date, total_cards, logo_url |
-| `cards` | id, external_id, set_id, number, language, name, name_de/en, rarity, image_url, search_vector (tsvector), phash |
+| `cards` | id, external_id, set_id, number, language, name, name_de/en, rarity, image_url, search_vector (tsvector), source (`tcgdex`/`user`), created_by, updated_by |
+| `card_reference_images` | id, card_id, user_id (Eigentümer, Referenz wirkt nur für ihn), image_path, features (vorberechnete Merkmale), source_scan_id, created_at |
 | `products` | id, set_id, kind (`booster`, `bundle`, `etb`, `display`, `case` …), language, name, image_url, is_custom, created_by (für eigene Produkte) |
 | `price_points` | id, item_type (`card`/`product`), item_id, source, kind (`verified`/`estimated`), condition (nullable), currency, value, fetched_at, source_url |
 | `folders` | id, user_id, name, sort_order |
@@ -268,12 +282,14 @@ Regeln:
 ## 5. Daten, Preise und Scanner
 
 ### 5.1 Katalog
-- **Quelle:** TCGdex (REST, mehrsprachig, Karten mit Bild-URLs) als Hauptquelle. pokemontcg.io ergänzt die Daten, die dort besser sind.
+- **Quelle:** TCGdex (REST, mehrsprachig, Karten mit Bild-URLs, Cardmarket-Preise) als Hauptquelle.
+- **Reserve:** pokemontcg.io nur für englische Karten und nur, wenn TCGdex nicht erreichbar ist. Preise von dort tragen ihr eigenes Datum (im Spike ~11 Monate alt) und werden entsprechend angezeigt.
+- **Selbst angelegte Karten:** Fehlt eine Karte (z. B. alte JP-Karten, chinesische Sondersets), kann jeder Nutzer sie mit Name, Set, Nummer, Sprache und Foto anlegen. Sie ist für alle sichtbar (`source = user`), der Admin kann sie bearbeiten oder löschen. Preise dafür: Eigenpreis oder Plug-in-Quelle.
 - Worker `catalog_sync`:
   - Initialer Import aller Sets und Karten pro Sprache. Danach tägliche Inkremente anhand neuer Sets.
   - Volltextsuche über Postgres (`tsvector` + `pg_trgm`) für Tippfehler und gemischte DE/EN-Namen.
 - Der Suchparser trennt Name und Nummer: `nachtara 215` → Name ≈ „nachtara“, Nummer = 215. Dazu kommen Formate wie `125/SM-P`, `215/203` und `SV9 12`.
-- **Phase-0-Spike:** Die tatsächlichen Felder und Limits von TCGdex und pokemontcg.io prüfen (siehe Abschnitt 9). Dort liegt auch die Entscheidung, ob eine Quelle genügt.
+- **Phase-0-Ergebnis:** siehe [`docs/spikes/datenquellen_auswertung.md`](docs/spikes/datenquellen_auswertung.md).
 
 ### 5.2 Versiegelte Produkte
 - Für Booster, Displays und Boxen ist **keine freie, strukturierte Quelle bekannt**. Das wird in Phase 0 geprüft.
@@ -350,7 +366,8 @@ Das Preissystem ist **austauschbar** gebaut (`PriceProvider`-Protokoll in `app/p
 5. **Identifikation (Reihenfolge):**
    1. **Setcode + Nummer**: in der Regel eindeutig.
    2. **Nummer + Name unscharf** (Logos wie „ex“, „V“, „VMAX“ fehlen oft im OCR).
-   3. **Bildabgleich** (pHash/Embedding) gegen die Katalogbilder der Kandidaten. Er ist zugleich Kontrolle und Rettungsweg, wenn kein Text lesbar ist (kleine Screenshots, Glitzerfolie).
+   3. **Bildabgleich** (SIFT-Merkmale + RANSAC, im Spike erprobt) gegen die Katalogbilder der Kandidaten **und die eigenen Referenzbilder des Nutzers**. Er ist zugleich Kontrolle und Rettungsweg, wenn kein Text lesbar ist (kleine Screenshots, Glitzerfolie). Schwelle für einen sicheren Treffer: Score ≥ 50 (im Spike: richtige Treffer 214–370).
+   - **Eigene Referenzbilder (pro Nutzer):** Bestätigt ein Nutzer einen Treffer oder wählt die Karte selbst aus, wird der Kartenausschnitt seines Fotos samt Merkmalen gespeichert. Die Referenz wirkt nur bei seinen eigenen Scans. So schließen sich Bildlücken (v. a. JP/ZH) mit der Zeit.
 6. **Slab-Pfad:** Wird ein Grading-Label erkannt (PSA/BGS/CGC), liest der Scanner Set, Name, Nummer und Note daraus. Die Karte wird als „gegradet“ vorgeschlagen.
 7. **Ergebnis:** bester Treffer plus bis zu 4 Alternativen mit **Confidence-Score**. Bei niedriger Confidence zeigt die App „Falsche Karte? Selbst suchen“ und die Kandidatenliste.
 8. **Stapel:** mehrere Bilder nacheinander durch dieselbe Pipeline, Ergebnisliste zum Bestätigen und Korrigieren.
