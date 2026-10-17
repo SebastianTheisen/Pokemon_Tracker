@@ -47,7 +47,8 @@ class ConditionPriceOut(BaseModel):
     source: str
     updated_at: datetime
     url: str | None
-    basis_metric: str | None
+    basis_metric: str | None = Field(description="z. B. „median(trend, avg7, avg30)“.")
+    basis_value: Decimal | None
     factor: Decimal | None
 
     @classmethod

@@ -2,7 +2,7 @@
 
 Eine private Sammel-App im Stil von SCNDX: Pokémon-Karten scannen, Sammlung verwalten, belegte Marktpreise sehen. Sie ist für den Freundeskreis gedacht und wird nicht veröffentlicht.
 
-Stand: 17.10.2026 · Status: **Phase 2 – Code fertig, wartet auf VPS-Lauf**
+Stand: 17.10.2026 · Status: **Phase 2 – fast fertig, kurzer Nachtest offen**
 
 ---
 
@@ -12,7 +12,7 @@ Stand: 17.10.2026 · Status: **Phase 2 – Code fertig, wartet auf VPS-Lauf**
 |---|---|---|
 | 0 – Spikes und Fundament | ✅ erledigt | Alle Spikes ausgewertet, alle Entscheidungen getroffen (Ergebnis unten) |
 | 1 – Backend-Kern | ✅ erledigt | 65.561 Karten importiert, Abnahme-Suchen ✅, Nachtest 0 Fehler, 111 Tests (96 % Coverage) |
-| 2 – Preise | 🟡 in Arbeit | Code + 156 Tests fertig (95 % Coverage). **Wartet auf:** VPS-Lauf mit echten Preisen (`deploy/phase2_vps.sh`) |
+| 2 – Preise | 🟡 fast fertig | VPS-Lauf ✅ (echte Preise für 7 Karten, Worker läuft). NM-Basis auf Median umgestellt. **Wartet auf:** kurzer Nachtest |
 | 3 – Sammlung, Merkliste, Dashboard | ⚪ offen | |
 | 4 – Scanner | ⚪ offen | |
 | 5 – Flutter-App | ⚪ offen | |
@@ -124,8 +124,11 @@ Entscheidungen/Annahmen (17.10.2026):
 - [x] API: `GET /cards/{id}/prices`, `GET /cards/{id}/price-history`, `GET/PATCH /me/settings`, `GET /admin/price-sources`
 - [x] Worker (`python -m app.worker`, eigener Docker-Dienst) mit Sommer-/Winterzeit-sicherer Planung; CLI `refresh-prices` und `prices "<suche>"`
 - [x] Qualität: ruff, mypy strict, **156 Tests grün, 95 % Coverage**; dabei gefunden und behoben: `idProduct: true` hätte einen kaputten Link erzeugt; ein Test prüfte den Fehlerfall nicht wirklich
-- [ ] ⏳ **VPS-Lauf durch den Nutzer:** `bash deploy/phase2_vps.sh` – echte Preise für 7 Karten (DE/EN/JA/ZH), Worker-Start, Historie. Ergebnis `docs/phase2/ergebnis.md` zurückschicken
-- [ ] Abnahme Phase 2: Preis mit Datum und Link, keine erfundenen Preise, Schätzungen markiert
+- [x] VPS-Lauf ausgewertet ([`docs/phase2/ergebnis.md`](docs/phase2/ergebnis.md)): Health ok, Migration `0002_pricing`, Worker läuft (nächste Runde 18.10. 10:30 UTC = 12:30 Uhr). Echte Preise für alle 7 Karten inkl. **JA und ZH-TW** (Cardmarket), Beleglinks per Produkt-ID, TCGplayer für DE/EN-Karten. 65 Preiswerte gespeichert
+- [x] Abnahmekriterien erfüllt: jeder Preis mit Datum und Link, kein erfundener Preis, Schätzungen markiert
+- [x] **Gefunden:** Trend als NM-Basis ist anfällig (Glurak Grundset: Trend 58,10 € < günstigstes Angebot 95 €). **Entscheidung Nutzer:** Median aus Trend, Ø 7, Ø 30 → umgesetzt, mit den echten Glurak-Werten getestet (NM 423,40 € statt 58,10 €), Basis + Wert werden angezeigt. 163 Tests grün
+- [ ] ⏳ Kurzer Nachtest auf dem VPS (Befehle in der Antwort)
+- [ ] Abnahme Phase 2
 
 ### Änderungsprotokoll
 
@@ -145,6 +148,7 @@ Entscheidungen/Annahmen (17.10.2026):
 | 17.10.2026 | VPS-Lauf Phase 1: 65.561 Karten, Abnahme-Suchen ✅. Fix für Set-IDs mit „+“ und leiseres Import-Protokoll; Nachtest offen |
 | 17.10.2026 | Nachtest 0 Fehler; inkrementeller Import vergleicht gemeldete Kartenzahl. **Phase 1 abgeschlossen** |
 | 17.10.2026 | Phase 2 gestartet: Beleglink per Produkt-ID (vom Nutzer geprüft), tägliche Runde 12:30 Uhr. Code, Tests, Worker, CLI und VPS-Skript fertig |
+| 17.10.2026 | VPS-Lauf Phase 2 ✅. NM-Basis auf Median aus Trend/Ø7/Ø30 umgestellt (Ausreißer beim Glurak Grundset) |
 
 ---
 
@@ -161,7 +165,7 @@ Entscheidungen/Annahmen (17.10.2026):
 | Zugang für Freunde | **Tailscale** (Free-Plan). Das Backend ist nicht öffentlich erreichbar, Freunde nutzen Node-Sharing |
 | Nutzerverwaltung | Einladungscode + E-Mail/Passwort. Rollen: `user` und `admin` |
 | Datenschutz | Jeder sieht nur seine Sammlung. Der Admin sieht die Nutzerliste und darf jede Sammlung **lesend** einsehen (mit Audit-Log) |
-| Zustandspreise | TCGdex-Trend als NM-Referenz × Zustandsfaktor (als Schätzung markiert), Eigenpreis, Plug-in-Schnittstelle für weitere Quellen (Abschnitt 5.3) |
+| Zustandspreise | NM-Basis = Median aus Cardmarket-Trend, Ø 7 und Ø 30 Tagen × Zustandsfaktor (als Schätzung markiert), Eigenpreis, Plug-in-Schnittstelle für weitere Quellen (Abschnitt 5.3) |
 | eBay | Deep-Link zur eBay-Suche mit Filter „Verkaufte Artikel“, keine eigenen Verkaufsdaten |
 | KI-Chat | Entfällt (laufende Kosten) |
 | Kosten | Keine zusätzlichen (VPS ist vorhanden). Alle Dienste und Bibliotheken sind kostenlos |
@@ -367,7 +371,7 @@ Grundregel wie im Original: **Wir erfinden keine Preise.** Jede Zahl trägt Typ,
 | Preis-Art | Herkunft | Anzeige |
 |---|---|---|
 | `verified` | TCGdex-Felder `pricing.cardmarket.*` (siehe unten), Datum aus `updated`, Link aus `idProduct` | „Cardmarket · Stand TT.MM.JJJJ“ + Link zur Produktseite |
-| `estimated` | NM-Referenzpreis × Zustandsfaktor | deutlich als **„Schätzung“** markiert, nie als belegt summiert |
+| `estimated` | NM-Basis × Zustandsfaktor | deutlich als **„Schätzung“** markiert, nie als belegt summiert |
 | `manual` | Eigener Preis des Nutzers | „Dein Preis“ |
 | `external` | Optionale Plug-in-Quelle (siehe unten) | Name der Quelle + Datum + Link, wie vom Plug-in geliefert |
 
@@ -375,9 +379,11 @@ Grundregel wie im Original: **Wir erfinden keine Preise.** Jede Zahl trägt Typ,
 
 | Feld | Anzeige in der App | Verwendung |
 |---|---|---|
-| `trend` | **Marktpreis (Trend)** | Hauptwert und **NM-Referenz** für die Schätzung. Fallback: `avg30`, dann `avg` |
+| `trend` | **Marktpreis (Trend)** | Hauptwert der Anzeige; fließt in die NM-Basis ein |
 | `low` | **Günstigstes Angebot** (beliebiger Zustand) | Info, nicht als NM-Preis verwenden. Im Spike: 220 € bei 1.806 € Trend |
 | `avg1`, `avg7`, `avg30` | Durchschnitt 1/7/30 Tage | Detailansicht und Preisverlauf |
+
+**NM-Basis (Entscheidung 17.10.2026 nach VPS-Lauf Phase 2):** Median aus `trend`, `avg7` und `avg30` (soweit vorhanden), Ersatz `avg`. Grund: Beim Glurak (Grundset) lag der Trend mit 58,10 € sogar unter dem günstigsten Angebot (95 €), Ø 7 = 423,40 €, Ø 30 = 765,81 € – der Median (423,40 €) ist robust gegen solche Ausreißer und bei unauffälligen Karten gleich dem Trend. Die App zeigt Basis und Wert immer mit an.
 
 **Zustandsfaktoren (Standard, je Nutzer änderbar):** MT 1,05 · NM 1,00 · EX 0,85 · GD 0,70 · LP 0,55 · PL 0,40 · PO 0,25. Die Werte sind ein Startpunkt und werden im Einstellungsbereich offen angezeigt.
 

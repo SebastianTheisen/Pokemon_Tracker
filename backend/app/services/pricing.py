@@ -4,8 +4,8 @@ Regeln (Plan 5.3):
 
 * **Kein Beleg, kein Preis.** Angezeigt werden nur Werte, die eine Quelle mit Datum (und
   wenn möglich Link) geliefert hat.
-* **Schätzungen sind markiert.** Zustandspreise = NM-Referenz × Zustandsfaktor des Nutzers;
-  NM-Referenz ist der Cardmarket-Trend (Ersatz: 30-Tage-Schnitt, dann Durchschnitt).
+* **Schätzungen sind markiert.** Zustandspreise = NM-Basis × Zustandsfaktor des Nutzers;
+  NM-Basis ist der Median aus Cardmarket-Trend, Ø 7 und Ø 30 Tagen (Ersatz: Durchschnitt).
   Liefert eine externe Quelle einen echten Zustandspreis, hat dieser Vorrang.
 * **Quellen sind isoliert.** Zeitlimit je Abruf; Fehler einer Quelle stören weder andere
   Quellen noch die Anzeige; nach Fehlern in Folge pausiert die Quelle (``SourceHealth``).
@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import statistics
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -43,7 +44,10 @@ from app.services.user_settings import effective_factors, get_user_settings
 log = structlog.get_logger(__name__)
 
 VERIFIED_SOURCES = frozenset({CARDMARKET, TCGPLAYER})
-NM_REFERENCE_METRICS = ("trend", "avg30", "avg")
+# NM-Basis = Median dieser Werte (Nutzerentscheidung 17.10.2026): robust gegen Ausreißer
+# wie einen Trend unter dem günstigsten Angebot. Ersatz, wenn keiner vorhanden ist: ``avg``.
+NM_MEDIAN_METRICS = ("trend", "avg7", "avg30")
+NM_FALLBACK_METRIC = "avg"
 CENT = Decimal("0.01")
 
 Clock = Callable[[], datetime]
@@ -84,6 +88,7 @@ class ConditionPrice:
     updated_at: datetime
     url: str | None
     basis_metric: str | None = None
+    basis_value: Decimal | None = None
     factor: Decimal | None = None
 
 
@@ -415,12 +420,29 @@ def _group_offers(points: Sequence[PricePoint]) -> list[Offer]:
     return offers
 
 
+def nm_basis(metrics: dict[str, Decimal]) -> tuple[str, Decimal] | None:
+    """Near-Mint-Basis: Median aus Trend, Ø 7 und Ø 30 Tagen (soweit vorhanden).
+
+    Beispiel Glurak Grundset: Trend 58,10 · Ø7 423,40 · Ø30 765,81 → 423,40 statt 58,10.
+    Gibt (Beschreibung, Wert) zurück, z. B. ``("median(trend, avg7, avg30)", 423.40)``.
+    """
+    used = [m for m in NM_MEDIAN_METRICS if m in metrics]
+    if not used:
+        if NM_FALLBACK_METRIC in metrics:
+            return NM_FALLBACK_METRIC, metrics[NM_FALLBACK_METRIC]
+        return None
+    if len(used) == 1:
+        return used[0], metrics[used[0]]
+    value = Decimal(statistics.median(metrics[m] for m in used)).quantize(CENT)
+    return f"median({', '.join(used)})", value
+
+
 def _condition_prices(offers: Sequence[Offer], factors: dict[str, Decimal]) -> list[ConditionPrice]:
     """Zustandspreise je Cardmarket-Variante: externer Beleg vor Schätzung."""
     result: list[ConditionPrice] = []
     references = [o for o in offers if o.source == CARDMARKET and o.condition is None]
     for reference in references:
-        basis = next((m for m in NM_REFERENCE_METRICS if m in reference.metrics), None)
+        basis = nm_basis(reference.metrics)
         for condition in CONDITIONS:
             external = [
                 o
@@ -446,18 +468,20 @@ def _condition_prices(offers: Sequence[Offer], factors: dict[str, Decimal]) -> l
                     )
                 )
             elif basis is not None:
+                basis_label, basis_value = basis
                 factor = factors[condition]
                 result.append(
                     ConditionPrice(
                         variant=reference.variant,
                         condition=condition,
-                        value=(reference.metrics[basis] * factor).quantize(CENT),
+                        value=(basis_value * factor).quantize(CENT),
                         currency=reference.currency,
                         kind="estimated",
                         source=reference.source,
                         updated_at=reference.updated_at,
                         url=reference.url,
-                        basis_metric=basis,
+                        basis_metric=basis_label,
+                        basis_value=basis_value,
                         factor=factor,
                     )
                 )

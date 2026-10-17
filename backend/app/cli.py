@@ -176,12 +176,13 @@ async def _prices(
         print(f"  {offer.source}/{offer.variant}: {metrics} {offer.currency}")
         print(f"    Stand {offer.updated_at:%d.%m.%Y %H:%M} UTC · Beleg: {offer.url or '–'}")
     for price in prices.conditions:
-        if price.variant == "normal":
-            print(
-                f"  {price.condition}: {price.value} {price.currency} "
-                f"({'Schätzung' if price.kind == 'estimated' else 'belegt'}"
-                f"{f', {price.basis_metric} × {price.factor}' if price.factor else ''})"
-            )
+        if price.variant != "normal":
+            continue
+        if price.kind == "estimated":
+            detail = f"Schätzung, {price.basis_metric} = {price.basis_value} × {price.factor}"
+        else:
+            detail = f"belegt, {price.source}"
+        print(f"  {price.condition}: {price.value} {price.currency} ({detail})")
 
 
 Command = Callable[

@@ -127,5 +127,5 @@ def test_prices_command_shows_proof_and_estimates(
     assert "Nachtara VMAX · Drachenwandel · 215 [de] (swsh7-215)" in output
     assert "cardmarket/normal: trend 1805.90 EUR" in output
     assert "Beleg: https://www.cardmarket.com/de/Pokemon/Products?idProduct=574273" in output
-    assert "EX: 1535.02 EUR (Schätzung, trend × 0.85)" in output
+    assert "EX: 1535.02 EUR (Schätzung, trend = 1805.90 × 0.85)" in output
     assert "Keine Karte gefunden." in output

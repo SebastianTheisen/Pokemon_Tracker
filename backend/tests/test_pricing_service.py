@@ -14,7 +14,7 @@ from app.core.config import Settings
 from app.models import Card, PriceCheck, PricePoint, Role, User
 from app.providers.pricing import PriceNotAvailableError
 from app.services.price_health import SourceHealth
-from app.services.pricing import CardPrices, PriceService, tracked_card_ids
+from app.services.pricing import CardPrices, PriceService, nm_basis, tracked_card_ids
 from app.services.user_settings import update_user_settings
 from tests.pricing_helpers import UPDATED, FakeProvider, cardmarket, make_card
 
@@ -330,3 +330,59 @@ async def test_viewed_cards_are_tracked_for_daily_refresh(
     async with session_factory() as session:
         assert await tracked_card_ids(session, settings, clock.now) == [card.id]
         assert await tracked_card_ids(session, settings, clock.now + timedelta(days=31)) == []
+
+
+# ----------------------------------------------------------------- NM-Basis (Median)
+
+
+def _metrics(**values: str) -> dict[str, Decimal]:
+    return {key: Decimal(value) for key, value in values.items()}
+
+
+@pytest.mark.parametrize(
+    ("metrics", "expected"),
+    [
+        # Echte Werte vom VPS (17.10.2026): Glurak Grundset – Trend unter günstigstem Angebot
+        (
+            _metrics(trend="58.10", avg7="423.40", avg30="765.81", low="95", avg="741.93"),
+            ("median(trend, avg7, avg30)", Decimal("423.40")),
+        ),
+        # Nachtara VMAX – unauffällig: Median = Trend
+        (
+            _metrics(trend="1805.90", avg7="2249.80", avg30="1772.15"),
+            ("median(trend, avg7, avg30)", Decimal("1805.90")),
+        ),
+        (_metrics(trend="100", avg30="200"), ("median(trend, avg30)", Decimal("150.00"))),
+        (_metrics(trend="42"), ("trend", Decimal("42"))),
+        (_metrics(avg="7.5", low="1"), ("avg", Decimal("7.5"))),
+        (_metrics(low="1"), None),
+    ],
+)
+def test_nm_basis_is_median_of_trend_avg7_avg30(
+    metrics: dict[str, Decimal], expected: tuple[str, Decimal] | None
+) -> None:
+    assert nm_basis(metrics) == expected
+
+
+async def test_outlier_trend_does_not_distort_condition_prices(
+    session_factory: async_sessionmaker[AsyncSession],
+    make_service: ServiceFactory,
+    card: Card,
+    user: User,
+) -> None:
+    provider = FakeProvider(
+        quotes=[
+            cardmarket("trend", "58.10"),
+            cardmarket("avg7", "423.40"),
+            cardmarket("avg30", "765.81"),
+            cardmarket("low", "95"),
+        ]
+    )
+    await _refresh(session_factory, make_service, card, [provider])
+
+    prices = await _prices(session_factory, make_service, card, user)
+
+    nm = next(c for c in prices.conditions if c.condition == "NM")
+    assert (nm.value, nm.basis_value) == (Decimal("423.40"), Decimal("423.40"))
+    assert nm.basis_metric == "median(trend, avg7, avg30)"
+    assert nm.value > Decimal("95")  # nicht mehr unter dem günstigsten Angebot
