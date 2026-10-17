@@ -10,7 +10,7 @@ Stand: 17.10.2026 · Status: **Phase 0 läuft**
 
 | Phase | Status | Notiz |
 |---|---|---|
-| 0 – Spikes und Fundament | 🟡 in Arbeit | Gerüst steht, Spikes blockiert (siehe unten) |
+| 0 – Spikes und Fundament | 🟡 in Arbeit | Alles vorbereitet, **wartet auf VPS-Lauf** (`docs/VPS_PHASE0.md`) |
 | 1 – Backend-Kern | ⚪ offen | |
 | 2 – Preise | ⚪ offen | |
 | 3 – Sammlung, Merkliste, Dashboard | ⚪ offen | |
@@ -30,9 +30,15 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 - [x] `Dockerfile` (Backend) und `docker-compose.yml` (Postgres + API)
 - [ ] Docker-Build verifizieren. **Nicht geprüft:** Docker Hub hat hier mit „429 Too Many Requests“ geantwortet. Wird beim nächsten Versuch oder auf dem VPS geprüft
 - [x] Spike-Skript Datenquellen: `backend/scripts/spike_datasources.py` (TCGdex-Sprachabdeckung und Felder, pokemontcg.io, eine einzelne Cardmarket-Anfrage)
-- [ ] 🔴 Spike Datenquellen **ausführen**. Blockiert: Die Cloud-Umgebung sperrt `api.tcgdex.net`, `assets.tcgdex.net`, `api.pokemontcg.io` und `www.cardmarket.com` (Proxy 403). Lösung: Hosts in den Umgebungseinstellungen freigeben oder das Skript auf dem VPS ausführen
-- [ ] 🔴 Spike Scanner. Blockiert: braucht Kartenbilder (TCGdex, gesperrt) und echte Testfotos (vom Nutzer)
+- [x] Spike-Skript Scanner: `backend/scripts/spike_scanner.py` (Kartenerkennung, Entzerrung, RapidOCR, Name/Nummer, Trefferquote gegen `soll.csv`, Debug-Bilder). Rauchtest mit synthetischem Kartenfoto grün: Karte gefunden, Name und Nummer korrekt, ca. 330 ms
+- [x] VPS-Skript `deploy/phase0_vps.sh` + Anleitung `docs/VPS_PHASE0.md`. Hier einmal komplett durchgelaufen (Lint/Typen/Tests grün, Berichte erzeugt)
+- [ ] ⏳ **VPS-Lauf durch den Nutzer:** `bash deploy/phase0_vps.sh` mit ca. 20 Testfotos in `scanner_testset/`, Ergebnisse zurückschicken
+- [ ] Auswertung Spike Datenquellen (Go/No-Go). In der Cloud-Umgebung gesperrt (Proxy 403), deshalb Lauf auf dem VPS
+- [ ] Auswertung Spike Scanner mit echten Fotos (Go/No-Go)
+- [ ] Docker-Build verifizieren (läuft im VPS-Skript mit, falls Docker installiert ist)
 - [ ] Spike Tailscale: laut Absprache verschoben, wird beim Deployment (Phase 6) getestet
+
+**Regel:** Phase 1 beginnt erst, wenn alle Spike-Ergebnisse vorliegen und ausgewertet sind.
 
 ### Änderungsprotokoll
 
@@ -41,6 +47,7 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 | 17.10.2026 | Plan erstellt |
 | 17.10.2026 | Vorhandener Ubuntu-VPS, 5–10 Nutzer, optionaler `CardmarketListingProvider` (ohne Tor/IP-Rotation) |
 | 17.10.2026 | Phase 0 gestartet: Backend-Gerüst, Tooling, CI, Docker, Spike-Skript Datenquellen |
+| 17.10.2026 | Scanner-Spike, VPS-Skript und Anleitung ergänzt. Phase 0 wartet auf den VPS-Lauf |
 
 ---
 

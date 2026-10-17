@@ -13,8 +13,10 @@ build/
 # Secrets
 .env
 
-# Scanner-Testfotos (privat)
-backend/scanner_testset/
+# Scanner-Testfotos und Debug-Bilder (privat)
+scanner_testset/
+docs/spikes/scanner_debug/
+docs/spikes_ergebnisse.tar.gz
 
 # Editor / OS
 .idea/

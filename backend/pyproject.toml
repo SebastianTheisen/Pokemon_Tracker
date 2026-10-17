@@ -25,6 +25,13 @@ dev = [
     "pytest-cov>=5.0",
     "pre-commit>=3.8",
 ]
+spike = [
+    "numpy>=2.5.4",
+    "opencv-python-headless>=5.0.0.93",
+    "pillow>=13.0.0",
+    "pillow-heif>=1.8.1",
+    "rapidocr-onnxruntime>=1.4.4",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -43,7 +50,7 @@ select = [
 ]
 ignore = ["PLR0913"]
 # Deutsche Texte nutzen bewusst Gedankenstriche.
-allowed-confusables = ["–"]
+allowed-confusables = ["–", "×"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "PLR2004"]
@@ -54,6 +61,11 @@ python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 files = ["app", "tests", "scripts"]
+
+[[tool.mypy.overrides]]
+# Ohne Typ-Stubs; wird über eine typisierte Hülle (scripts/spike_scanner.Ocr) genutzt.
+module = ["rapidocr_onnxruntime", "pillow_heif"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

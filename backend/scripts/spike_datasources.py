@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,7 @@ class SpikeReport:
     """Gesammelte Ergebnisse, die am Ende als Markdown ausgegeben werden."""
 
     sections: list[tuple[str, list[str]]] = field(default_factory=list)
+    failed_probes: list[str] = field(default_factory=list)
 
     def add(self, title: str, lines: list[str]) -> None:
         self.sections.append((title, lines))
@@ -150,6 +152,7 @@ async def run() -> SpikeReport:
             try:
                 await probe(client, report)
             except httpx.HTTPError as exc:
+                report.failed_probes.append(probe.__name__)
                 report.add(probe.__name__, [f"Fehler: `{exc!r}`"])
     return report
 
@@ -164,6 +167,9 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(report.to_markdown(), encoding="utf-8")
     print(f"Bericht geschrieben: {out_path}")
+    if report.failed_probes:
+        print(f"Fehlgeschlagene Prüfungen: {', '.join(report.failed_probes)}", file=sys.stderr)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
