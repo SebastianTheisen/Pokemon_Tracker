@@ -302,10 +302,11 @@ class _ConditionValue extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final basis = price.basisMetric == null
-        ? null
-        : '${metricLabels[price.basisMetric] ?? price.basisMetric} '
-              '${money(price.basisValue)} × ${price.factor?.replaceAll('.', ',')}';
+    // Verständlich statt technisch: nur den Zustandsfaktor nennen, wenn er nicht 1 ist.
+    final factor = double.tryParse(price.factor ?? '');
+    final basis = price.isEstimate && factor != null && factor != 1
+        ? 'Near-Mint-Preis × ${price.factor!.replaceAll('.', ',')}'
+        : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -329,8 +330,8 @@ class _ConditionValue extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           [
-            '${conditionLabels[price.condition] ?? price.condition} · ${sourceLabel(price.source)}',
-            'Stand ${date(price.updatedAt)}',
+            '${conditionLabels[price.condition] ?? price.condition} · ${sourceLabel(price.source)} · '
+                'Stand ${date(price.updatedAt)}',
             ?basis,
           ].join('\n'),
           style: const TextStyle(color: AppColors.textMuted, fontSize: 12),

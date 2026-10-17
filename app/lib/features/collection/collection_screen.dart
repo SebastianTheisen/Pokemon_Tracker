@@ -127,11 +127,27 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                       ),
                     ]
                   : [
-                      SliverList.separated(
-                        itemCount: page.items.length,
-                        separatorBuilder: (_, _) => const Divider(indent: 72),
-                        itemBuilder: (context, index) =>
-                            _ItemTile(item: page.items[index], onChanged: _reload),
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                        sliver: SliverGrid(
+                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 130,
+                            mainAxisSpacing: 16,
+                            crossAxisSpacing: 12,
+                            childAspectRatio: 0.52,
+                          ),
+                          delegate: SliverChildBuilderDelegate(
+                            childCount: page.items.length,
+                            (context, index) => LayoutBuilder(
+                              builder: (context, constraints) => ItemThumb(
+                                item: page.items[index],
+                                width: constraints.maxWidth,
+                                onTap: () =>
+                                    showItemActions(context, ref, page.items[index], _reload),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                       if (page.total > page.items.length)
                         SliverToBoxAdapter(
@@ -240,43 +256,32 @@ class _SummaryHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final change = parseAmount(summary.changeSinceAdded) ?? 0;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      money(summary.totalValue),
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      signedMoney(summary.changeSinceAdded),
-                      style: TextStyle(color: change >= 0 ? AppColors.gain : AppColors.loss),
-                    ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('${summary.positions} Positionen · ${summary.items} Stück'),
-                  Text(
-                    'Roh ${money(summary.raw.value)} · Graded ${money(summary.graded.value)}'
-                    '\nVersiegelt ${money(summary.sealed.value)}',
-                    textAlign: TextAlign.end,
-                    style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-                  ),
-                ],
-              ),
-            ],
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            money(summary.totalValue),
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
-        ),
+          const SizedBox(width: 10),
+          if (change != 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                signedMoney(summary.changeSinceAdded),
+                style: TextStyle(color: change > 0 ? AppColors.gain : AppColors.loss),
+              ),
+            ),
+          const Spacer(),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              '${summary.items} Karten',
+              style: const TextStyle(color: AppColors.textMuted),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -347,52 +352,69 @@ class _ItemTile extends ConsumerWidget {
     );
   }
 
-  Future<void> _edit(BuildContext context, WidgetRef ref) async {
-    final action = await showModalBottomSheet<String>(
+  Future<void> _edit(BuildContext context, WidgetRef ref) =>
+      showItemActions(context, ref, item, onChanged);
+}
+
+/// Aktionen einer Position: Karte ansehen, bearbeiten, entfernen.
+Future<void> showItemActions(
+  BuildContext context,
+  WidgetRef ref,
+  CollectionItem item,
+  VoidCallback onChanged,
+) async {
+  final action = await showModalBottomSheet<String>(
+    context: context,
+    builder: (_) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (item.card != null)
+            ListTile(
+              leading: const Icon(Icons.style),
+              title: Text('${item.title} ansehen'),
+              onTap: () => Navigator.of(context).pop('open'),
+            ),
+          ListTile(
+            leading: const Icon(Icons.edit),
+            title: const Text('Bearbeiten'),
+            onTap: () => Navigator.of(context).pop('edit'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete_outline, color: AppColors.loss),
+            title: const Text('Entfernen'),
+            onTap: () => Navigator.of(context).pop('delete'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (!context.mounted) return;
+  if (action == 'open') {
+    await context.push('/card/${item.card!.id}');
+  } else if (action == 'edit') {
+    if (await showItemSheet(context, item: item) != null) onChanged();
+  } else if (action == 'delete') {
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.edit),
-              title: const Text('Bearbeiten'),
-              onTap: () => Navigator.of(context).pop('edit'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: AppColors.loss),
-              title: const Text('Entfernen'),
-              onTap: () => Navigator.of(context).pop('delete'),
-            ),
-          ],
-        ),
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Position entfernen?'),
+        content: Text('„${item.title}“ (${item.label}) wird aus der Sammlung entfernt.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Entfernen'),
+          ),
+        ],
       ),
     );
-    if (!context.mounted) return;
-    if (action == 'edit') {
-      if (await showItemSheet(context, item: item) != null) onChanged();
-    } else if (action == 'delete') {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Position entfernen?'),
-          content: Text('„${item.title}“ (${item.label}) wird aus der Sammlung entfernt.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Abbrechen'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Entfernen'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true || !context.mounted) return;
-      if (await runAction(context, () => ref.read(apiProvider).deleteItem(item.id))) {
-        onChanged();
-      }
+    if (confirmed != true || !context.mounted) return;
+    if (await runAction(context, () => ref.read(apiProvider).deleteItem(item.id))) {
+      onChanged();
     }
   }
 }

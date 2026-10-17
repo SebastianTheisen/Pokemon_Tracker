@@ -1,4 +1,4 @@
-// Übersicht: Sammlungswert mit Kurve, Schnellaktionen, Kennzahlen, Highlights.
+// Startseite: Sammlungswert auf einen Blick, großer Scan-Knopf, Karten als Bilder-Reihen.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,10 +18,16 @@ final collectionHistoryProvider = FutureProvider.autoDispose<CollectionHistory>(
   (ref) => ref.watch(apiProvider).collectionHistory(),
 );
 
+/// Wertvollste bzw. zuletzt hinzugefügte Positionen für die Bilder-Reihen.
+final showcaseProvider = FutureProvider.autoDispose.family<List<CollectionItem>, String>(
+  (ref, sort) async => (await ref.watch(apiProvider).items(sort: sort, limit: 12)).items,
+);
+
 /// Nach Änderungen an der Sammlung alle abhängigen Anzeigen neu laden.
 void invalidateCollection(WidgetRef ref) => ref
   ..invalidate(dashboardProvider)
-  ..invalidate(collectionHistoryProvider);
+  ..invalidate(collectionHistoryProvider)
+  ..invalidate(showcaseProvider);
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -31,253 +37,280 @@ class DashboardScreen extends ConsumerWidget {
     final user = ref.watch(sessionProvider).value;
     final summary = ref.watch(dashboardProvider);
     return Scaffold(
-      appBar: AppBar(title: Text('Hallo ${user?.displayName ?? ''}')),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          invalidateCollection(ref);
-          await ref.read(dashboardProvider.future);
-        },
-        child: ListView(
-          padding: const EdgeInsets.only(bottom: 24),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-              child: TextField(
-                readOnly: true,
-                onTap: () => context.go('/search'),
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  hintText: 'Karte suchen – Preis mit Beleg',
-                ),
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: () async {
+            invalidateCollection(ref);
+            await ref.read(dashboardProvider.future);
+          },
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Hallo ${user?.displayName ?? ''} 👋',
+                      style: Theme.of(context).textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    tooltip: 'Suchen',
+                    onPressed: () => context.go('/search'),
+                    icon: const Icon(Icons.search),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 16),
-            AsyncBody(
-              value: summary,
-              onRetry: () => invalidateCollection(ref),
-              builder: (data) => _SummaryContent(summary: data),
-            ),
-          ],
+              const SizedBox(height: 16),
+              AsyncBody(
+                value: summary,
+                onRetry: () => invalidateCollection(ref),
+                builder: (data) => _ValueHero(summary: data),
+              ),
+              const SizedBox(height: 16),
+              _ScanCallToAction(onTap: () => context.push('/scan')),
+              if (summary.value case final data? when data.items == 0)
+                const _EmptyHint()
+              else ...[
+                const _Showcase(title: 'Wertvollste Karten', sort: 'value_desc'),
+                const _Showcase(title: 'Zuletzt hinzugefügt', sort: 'added_desc'),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _SummaryContent extends ConsumerWidget {
-  const _SummaryContent({required this.summary});
+class _ValueHero extends ConsumerWidget {
+  const _ValueHero({required this.summary});
 
   final CollectionSummary summary;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final change = parseAmount(summary.changeSinceAdded) ?? 0;
-    final history = ref.watch(collectionHistoryProvider);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
+    final history = ref.watch(collectionHistoryProvider).value;
+    return InkWell(
+      onTap: () => context.go('/collection'),
+      borderRadius: BorderRadius.circular(24),
+      child: Ink(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        decoration: BoxDecoration(
+          gradient: AppColors.scanGradient,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Sammlungswert', style: TextStyle(color: Colors.white.withValues(alpha: 0.85))),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                money(summary.totalValue),
+                key: const Key('total-value'),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 38,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                if (change != 0)
+                  Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${change > 0 ? '▲' : '▼'} ${signedMoney(summary.changeSinceAdded)}',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                Flexible(
+                  child: Text(
+                    '${summary.items} Karten · ${summary.sets} Sets',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.85)),
+                  ),
+                ),
+              ],
+            ),
+            ValueChart(
+              height: 70,
+              onDark: true,
+              emptyHint: false,
+              points: [
+                for (final point in history?.points ?? const <ValuePoint>[])
+                  ChartPoint(point.date, parseAmount(point.totalValue) ?? 0),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScanCallToAction extends StatelessWidget {
+  const _ScanCallToAction({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: AppColors.surface,
+    borderRadius: BorderRadius.circular(20),
+    child: InkWell(
+      key: const Key('home-scan'),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.outline),
+        ),
+        child: const Row(
+          children: [
+            CircleAvatar(
+              radius: 26,
+              backgroundColor: AppColors.primary,
+              child: Icon(Icons.photo_camera, color: Colors.white, size: 26),
+            ),
+            SizedBox(width: 16),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Sammlungswert', style: TextStyle(color: AppColors.textMuted)),
-                  const SizedBox(height: 4),
                   Text(
-                    money(summary.totalValue),
-                    key: const Key('total-value'),
-                    style: Theme.of(context).textTheme.headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    'Karte scannen',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: 2),
                   Text(
-                    '${signedMoney(summary.changeSinceAdded)} seit dem Hinzufügen',
-                    style: TextStyle(
-                      color: change > 0
-                          ? AppColors.gain
-                          : change < 0
-                          ? AppColors.loss
-                          : AppColors.textMuted,
-                    ),
-                  ),
-                  if ((parseAmount(summary.estimatedValue) ?? 0) > 0)
-                    Text(
-                      'davon geschätzt: ${money(summary.estimatedValue)}',
-                      style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-                    ),
-                  const SizedBox(height: 12),
-                  history.maybeWhen(
-                    data: (data) => ValueChart(
-                      points: [
-                        for (final point in data.points)
-                          ChartPoint(
-                            point.date,
-                            parseAmount(point.totalValue) ?? 0,
-                            highlighted: point.isLive,
-                          ),
-                      ],
-                    ),
-                    orElse: () => const SizedBox(height: 160),
+                    'Foto machen – Preis sofort sehen',
+                    style: TextStyle(color: AppColors.textMuted),
                   ),
                 ],
               ),
             ),
+            Icon(Icons.chevron_right, color: AppColors.textMuted),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _EmptyHint extends StatelessWidget {
+  const _EmptyHint();
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.only(top: 40),
+    child: EmptyView(
+      icon: Icons.style,
+      message: 'Deine Kiste ist noch leer.\nScanne deine erste Karte oder suche sie.',
+    ),
+  );
+}
+
+/// Waagerechte Reihe aus Kartenbildern mit Wert.
+class _Showcase extends ConsumerWidget {
+  const _Showcase({required this.title, required this.sort});
+
+  final String title;
+  final String sort;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final items = ref.watch(showcaseProvider(sort)).value ?? const <CollectionItem>[];
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 24, bottom: 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ),
+              TextButton(onPressed: () => context.go('/collection'), child: const Text('Alle')),
+            ],
           ),
         ),
-        const SizedBox(height: 16),
         SizedBox(
-          height: 92,
-          child: ListView(
+          height: 216,
+          child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            children: [
-              _QuickAction(Icons.document_scanner, 'Scannen', () => context.push('/scan')),
-              _QuickAction(Icons.burst_mode, 'Stapel', () => context.push('/scan/batch')),
-              _QuickAction(Icons.grid_view, 'Binder', () => context.push('/scan/binder')),
-              _QuickAction(Icons.collections_bookmark, 'Sammlung', () => context.go('/collection')),
-              _QuickAction(Icons.favorite, 'Merkliste', () => context.go('/lists')),
-            ],
+            itemCount: items.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 12),
+            itemBuilder: (context, index) => ItemThumb(item: items[index], width: 104),
           ),
         ),
-        const SectionTitle('Kennzahlen'),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              _Stat('${summary.items}', 'Karten'),
-              const SizedBox(width: 8),
-              _Stat('${summary.sets}', 'Sets'),
-              const SizedBox(width: 8),
-              _Stat(money(summary.topItem?.value.unitValue), 'höchster Wert'),
-            ],
-          ),
-        ),
-        if (summary.unvaluedPositions > 0)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Text(
-              '${summary.unvaluedPositions} Positionen ohne Wert (kein belegter Preis – '
-              'Eigenpreis eintragen)',
-              style: const TextStyle(color: AppColors.warning, fontSize: 12),
-            ),
-          ),
-        const SectionTitle('Aufteilung'),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              _Stat(money(summary.raw.value), 'Rohkarten'),
-              const SizedBox(width: 8),
-              _Stat(money(summary.graded.value), 'Gegradet'),
-              const SizedBox(width: 8),
-              _Stat(money(summary.sealed.value), 'Versiegelt'),
-            ],
-          ),
-        ),
-        const SectionTitle('Highlights'),
-        if (summary.topItem == null)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Noch keine Karten – scanne deine erste Karte!',
-              style: TextStyle(color: AppColors.textMuted),
-            ),
-          ),
-        if (summary.topItem case final item?) _Highlight('Top-Karte', item),
-        if (summary.biggestGain case final item?) _Highlight('Größter Gewinner', item),
-        if (summary.biggestLoss case final item?) _Highlight('Größter Verlierer', item),
       ],
     );
   }
 }
 
-class _QuickAction extends StatelessWidget {
-  const _QuickAction(this.icon, this.label, this.onTap);
+/// Kartenbild mit Name und Wert darunter (Startseite und Sammlungs-Raster).
+class ItemThumb extends StatelessWidget {
+  const ItemThumb({required this.item, this.width = 104, this.onTap, super.key});
 
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 4),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Ink(
-        width: 84,
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.outline),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: AppColors.primary),
-            const SizedBox(height: 6),
-            Text(label, style: const TextStyle(fontSize: 12)),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-class _Stat extends StatelessWidget {
-  const _Stat(this.value, this.label);
-
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Expanded(
-    child: Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            FittedBox(
-              child: Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            ),
-            const SizedBox(height: 2),
-            Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-class _Highlight extends StatelessWidget {
-  const _Highlight(this.title, this.item);
-
-  final String title;
   final CollectionItem item;
+  final double width;
+
+  /// Statt die Karte zu öffnen (z. B. Aktionsmenü in der Sammlung).
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final change = parseAmount(item.value.change);
-    return ListTile(
-      onTap: item.card == null ? null : () => context.push('/card/${item.card!.id}'),
-      leading: CardImage(url: item.card?.image(), width: 40),
-      title: Text(item.title),
-      subtitle: Text(title, style: const TextStyle(color: AppColors.textMuted)),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(money(item.value.unitValue), style: const TextStyle(fontWeight: FontWeight.w600)),
-          if (change != null && change != 0)
-            Text(
-              signedMoney(item.value.change),
-              style: TextStyle(fontSize: 12, color: change > 0 ? AppColors.gain : AppColors.loss),
+    final card = item.card;
+    return SizedBox(
+      width: width,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap ?? (card == null ? null : () => context.push('/card/${card.id}')),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              children: [
+                CardImage(url: card?.image(), width: width),
+                if (item.quantity > 1 || item.kind == 'graded')
+                  Positioned(
+                    right: 4,
+                    top: 4,
+                    child: Tag(
+                      item.kind == 'graded' ? item.label : '×${item.quantity}',
+                      color: AppColors.accent,
+                    ),
+                  ),
+              ],
             ),
-        ],
+            const SizedBox(height: 6),
+            Text(money(item.value.totalValue), style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text(
+              item.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
+          ],
+        ),
       ),
     );
   }

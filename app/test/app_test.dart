@@ -19,9 +19,10 @@ void main() {
     await tester.tap(find.text('Anmelden'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Hallo Sebastian'), findsOneWidget);
+    expect(find.textContaining('Hallo Sebastian'), findsOneWidget);
     expect(find.text('4.894,67\u00a0€'), findsOneWidget);
-    expect(find.text('+51,00\u00a0€ seit dem Hinzufügen'), findsOneWidget);
+    expect(find.text('▲ +51,00\u00a0€'), findsOneWidget);
+    expect(find.text('Wertvollste Karten'), findsOneWidget);
   });
 
   testWidgets('Registrierung prüft Eingaben', (tester) async {
@@ -73,7 +74,7 @@ void main() {
         'conditions': <Object>[],
       };
     await pumpApp(tester, api);
-    final topCard = find.text('Nachtara VMAX'); // Top-Karte auf der Übersicht
+    final topCard = find.text('Nachtara VMAX').first; // wertvollste Karte auf der Startseite
     await tester.ensureVisible(topCard); // liegt unterhalb des sichtbaren Bereichs
     await tester.pumpAndSettle();
     await tester.tap(topCard);
@@ -81,11 +82,10 @@ void main() {
     expect(find.byKey(const Key('no-price')), findsOneWidget);
   });
 
-  testWidgets('Scan → bestätigen → zur Sammlung (Slab vorausgefüllt)', (tester) async {
+  testWidgets('Scan → ein Tipp fügt hinzu (Slab mit Note), dann nächste Karte', (tester) async {
     final api = FakeApi(loggedIn: true)
       ..scanResult = scanJson(grading: {'company': 'PSA', 'grade': '10'});
-    final images = FakeImageSource();
-    await pumpApp(tester, api, images: images);
+    await pumpApp(tester, api);
 
     await tester.tap(find.byKey(const Key('scan-button')));
     await tester.pumpAndSettle();
@@ -93,23 +93,28 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(api.calls, contains('scan:galerie.jpg'));
-    expect(find.text('Erkannt als Nachtara VMAX'), findsOneWidget);
-    expect(find.text('Slab erkannt: PSA 10'), findsOneWidget);
-    expect(find.text('Umbreon VMAX'), findsOneWidget); // Alternative
+    expect(find.text('Erkannt'), findsOneWidget);
+    expect(find.byKey(const Key('scan-price')), findsOneWidget);
+    expect(find.text('Slab: PSA 10'), findsOneWidget);
+    expect(find.text('Umbreon VMAX'), findsNothing); // Alternativen erst auf Wunsch
 
     await tester.tap(find.byKey(const Key('scan-add')));
     await tester.pumpAndSettle();
-    expect(api.calls, contains('confirm:scan1:c1'));
-    await tester.tap(find.byKey(const Key('item-save')));
-    await tester.pumpAndSettle();
+    expect(api.calls, containsAllInOrder(['confirm:scan1:c1', 'addItem']));
+    expect(api.lastItemBody, {
+      'card_id': 'c1',
+      'quantity': 1,
+      'grading_company': 'PSA',
+      'grade': '10',
+    });
+    expect(find.text('Hinzugefügt'), findsOneWidget);
 
-    expect(api.lastItemBody?['card_id'], 'c1');
-    expect(api.lastItemBody?['grading_company'], 'PSA');
-    expect(api.lastItemBody?['grade'], '10');
-    expect(api.lastItemBody?.containsKey('condition'), isFalse);
+    await tester.tap(find.byKey(const Key('scan-next')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('scan-camera')), findsOneWidget);
   });
 
-  testWidgets('unsicherer Scan: Alternative wählen und bestätigen', (tester) async {
+  testWidgets('unsicherer Scan: andere Karte wählen und hinzufügen', (tester) async {
     final api = FakeApi(loggedIn: true)..scanResult = scanJson(confident: false);
     await pumpApp(tester, api);
     await tester.tap(find.byKey(const Key('scan-button')));
@@ -117,12 +122,41 @@ void main() {
     await tester.tap(find.byKey(const Key('scan-camera')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Bitte prüfen – stimmt die Karte?'), findsOneWidget);
+    expect(find.text('Bitte prüfen'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('scan-other')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Umbreon VMAX'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Umbreon VMAX'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('scan-card-name')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('scan-add')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('scan-add')));
     await tester.pumpAndSettle();
     expect(api.calls, contains('confirm:scan1:c2'));
+    expect(api.lastItemBody?['condition'], 'NM');
+  });
+
+  testWidgets('Hinzufügen von der Karten-Seite: nur Zustand und Anzahl', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    final topCard = find.text('Nachtara VMAX').first;
+    await tester.ensureVisible(topCard);
+    await tester.pumpAndSettle();
+    await tester.tap(topCard);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('add-to-collection')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Kaufpreis (Stück)'), findsNothing); // eingeklappt
+    await tester.tap(find.text('EX').last);
+    await tester.tap(find.byIcon(Icons.add).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('item-save')));
+    await tester.pumpAndSettle();
+    expect(api.lastItemBody?['condition'], 'EX');
+    expect(api.lastItemBody?['quantity'], 2);
   });
 
   testWidgets('Admin erzeugt Einladung und sieht den Code', (tester) async {

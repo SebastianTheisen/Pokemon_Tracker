@@ -14,15 +14,29 @@ class ChartPoint {
 }
 
 class ValueChart extends StatelessWidget {
-  const ValueChart({required this.points, this.height = 160, this.currency = 'EUR', super.key});
+  const ValueChart({
+    required this.points,
+    this.height = 160,
+    this.currency = 'EUR',
+    this.onDark = false,
+    this.emptyHint = true,
+    super.key,
+  });
 
   final List<ChartPoint> points;
   final double height;
   final String currency;
 
+  /// Weiße Linie auf farbigem Hintergrund (Wert-Karte der Startseite).
+  final bool onDark;
+
+  /// Ohne Daten einen Hinweis zeigen (sonst nur Platz freihalten).
+  final bool emptyHint;
+
   @override
   Widget build(BuildContext context) {
     if (points.length < 2) {
+      if (!emptyHint) return SizedBox(height: height);
       return SizedBox(
         height: height,
         child: const Center(
@@ -70,7 +84,8 @@ class ValueChart extends StatelessWidget {
               isCurved: true,
               preventCurveOverShooting: true,
               barWidth: 2.5,
-              gradient: AppColors.scanGradient,
+              gradient: onDark ? null : AppColors.scanGradient,
+              color: onDark ? Colors.white : null,
               dotData: FlDotData(
                 checkToShowDot: (spot, _) => points[spots.indexOf(spot)].highlighted,
               ),
@@ -78,8 +93,8 @@ class ValueChart extends StatelessWidget {
                 show: true,
                 gradient: LinearGradient(
                   colors: [
-                    AppColors.primary.withValues(alpha: 0.25),
-                    AppColors.primary.withValues(alpha: 0),
+                    (onDark ? Colors.white : AppColors.primary).withValues(alpha: 0.25),
+                    (onDark ? Colors.white : AppColors.primary).withValues(alpha: 0),
                   ],
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,

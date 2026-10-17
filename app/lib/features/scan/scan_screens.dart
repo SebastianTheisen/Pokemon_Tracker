@@ -16,6 +16,7 @@ import '../../models/models.dart';
 import '../../widgets/common.dart';
 import '../collection/item_sheet.dart';
 import '../dashboard/dashboard_screen.dart';
+import '../card/card_detail_screen.dart';
 import '../search/search_screen.dart';
 import '../wishlist/wishlist_screen.dart';
 
@@ -55,37 +56,33 @@ class PickerImageSource implements ScanImageSource {
 
 final imageSourceProvider = Provider<ScanImageSource>((ref) => PickerImageSource());
 
-/// Bestätigt einen Treffer und bietet „Zur Sammlung“ an. Gibt `true` zurück, wenn gespeichert.
-Future<bool> acceptCard(
+/// Bestätigt den Treffer (wird eigenes Referenzbild) und setzt die Karte auf die Merkliste.
+Future<bool> addScanToWishlist(
   BuildContext context,
   WidgetRef ref,
   ScanResult result,
-  CardInfo card, {
-  required bool toCollection,
-}) async {
+  CardInfo card,
+) async {
   final api = ref.read(apiProvider);
-  final confirmed = await runAction(context, () => api.confirmScan(result.scanId, card.id));
-  if (!confirmed || !context.mounted) return false;
-  if (!toCollection) {
-    final ok = await runAction(context, () => api.addToWishlist(cardId: card.id));
-    if (ok && context.mounted) {
-      ref.invalidate(wishlistProvider);
-      showMessage(context, '${card.name} steht auf der Merkliste.');
-    }
-    return ok;
+  final ok = await runAction(context, () async {
+    await api.confirmScan(result.scanId, card.id);
+    await api.addToWishlist(cardId: card.id);
+  });
+  if (ok && context.mounted) {
+    ref.invalidate(wishlistProvider);
+    showMessage(context, '${card.name} steht auf der Merkliste.');
   }
-  final saved = await showItemSheet(context, card: card, grading: result.grading);
-  if (saved == null || !context.mounted) return false;
-  invalidateCollection(ref);
-  showMessage(context, '${card.name} ist in der Sammlung.');
-  return true;
+  return ok;
 }
 
-/// Ergebnis eines Scans: Hinweis, gewählter Treffer, Alternativen, „Selbst suchen“.
+/// Ergebnis eines Scans: großes Kartenbild, Preis, ein Knopf „Hinzufügen“.
+/// Alternativen, Suche und Begründungen nur auf Wunsch.
 class ScanResultView extends ConsumerStatefulWidget {
   const ScanResultView({required this.result, required this.onDone, super.key});
 
   final ScanResult result;
+
+  /// „Nächste Karte“ – zurück zum Scannen bzw. Liste schließen.
   final VoidCallback onDone;
 
   @override
@@ -94,8 +91,20 @@ class ScanResultView extends ConsumerStatefulWidget {
 
 class _ScanResultViewState extends ConsumerState<ScanResultView> {
   late CardInfo? _selected = widget.result.best?.card;
+  late bool _showAlternatives = widget.result.best == null;
+  CollectionItem? _added;
+  bool _busy = false;
+
   ScanMatch? get _match =>
       widget.result.matches.where((m) => m.card.id == _selected?.id).firstOrNull;
+
+  bool get _isConfirmedBest =>
+      widget.result.confident && _selected?.id == widget.result.best?.card.id;
+
+  void _select(CardInfo card) => setState(() {
+    _selected = card;
+    _showAlternatives = false;
+  });
 
   Future<void> _searchMyself() async {
     final card = await showModalBottomSheet<CardInfo>(
@@ -110,153 +119,293 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
         ),
       ),
     );
-    if (card != null) setState(() => _selected = card);
+    if (card != null) _select(card);
   }
 
-  Future<void> _accept({required bool toCollection}) async {
+  /// Ein Tipp: bestätigen + mit Standardwerten hinzufügen (NM, 1×; Slab mit Note).
+  Future<void> _quickAdd() async {
     final card = _selected;
     if (card == null) return;
-    if (await acceptCard(context, ref, widget.result, card, toCollection: toCollection)) {
-      widget.onDone();
+    final grading = widget.result.grading;
+    setState(() => _busy = true);
+    final api = ref.read(apiProvider);
+    CollectionItem? item;
+    final ok = await runAction(context, () async {
+      await api.confirmScan(widget.result.scanId, card.id);
+      item = await api.addItem({
+        'card_id': card.id,
+        'quantity': 1,
+        if (grading == null) 'condition': 'NM',
+        if (grading != null)
+          'grading_company': gradingCompanies.contains(grading.company) ? grading.company : 'OTHER',
+        if (grading?.grade != null) 'grade': grading!.grade,
+      });
+    });
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      if (ok) _added = item;
+    });
+    if (ok) invalidateCollection(ref);
+  }
+
+  Future<void> _editAdded() async {
+    final item = _added;
+    if (item == null) return;
+    final saved = await showItemSheet(context, item: item);
+    if (saved != null && mounted) {
+      setState(() => _added = saved);
+      invalidateCollection(ref);
     }
+  }
+
+  Future<void> _undo() async {
+    final item = _added;
+    if (item == null) return;
+    if (await runAction(context, () => ref.read(apiProvider).deleteItem(item.id))) {
+      invalidateCollection(ref);
+      if (mounted) setState(() => _added = null);
+    }
+  }
+
+  void _showReasons() {
+    final match = _match;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Warum diese Karte?'),
+        content: Text(
+          match == null
+              ? 'Selbst ausgewählt.'
+              : [
+                  'Sicherheit: ${percent(match.confidence)}',
+                  ...match.reasons.map((reason) => '• $reason'),
+                ].join('\n'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('OK')),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final result = widget.result;
     final selected = _selected;
-    final match = _match;
-    final banner = result.confident && selected?.id == result.best?.card.id
-        ? (color: AppColors.gain, icon: Icons.check_circle, text: result.hint)
-        : (
-            color: AppColors.warning,
-            icon: Icons.help_outline,
-            text: selected == null ? result.hint : 'Bitte prüfen – stimmt die Karte?',
-          );
+    final added = _added;
     return ListView(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
-        Container(
-          margin: const EdgeInsets.all(16),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: banner.color.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(12),
+        if (selected == null)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Text(
+              'Keine Karte erkannt.\nWähle unten eine Möglichkeit oder suche selbst.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16),
+            ),
+          )
+        else ...[
+          Center(child: CardImage(url: selected.image(high: true), width: 190)),
+          const SizedBox(height: 16),
+          Center(
+            child: added != null
+                ? const _StatusChip(Icons.check_circle, 'Hinzugefügt', AppColors.gain)
+                : _isConfirmedBest
+                ? const _StatusChip(Icons.verified, 'Erkannt', AppColors.gain)
+                : const _StatusChip(Icons.help_outline, 'Bitte prüfen', AppColors.warning),
           ),
-          child: Row(
-            children: [
-              Icon(banner.icon, color: banner.color),
-              const SizedBox(width: 8),
-              Expanded(child: Text(banner.text, key: const Key('scan-hint'))),
-            ],
+          const SizedBox(height: 10),
+          Text(
+            selected.name,
+            key: const Key('scan-card-name'),
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
-        ),
-        if (result.grading case final grading?)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Row(
+          Text(
+            '${selected.subtitle} · ${languageTag(selected.language)}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.textMuted),
+          ),
+          if (widget.result.grading case final grading?)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'Slab: ${grading.company} ${grading.grade ?? ''}'.trim(),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600),
+              ),
+            ),
+          const SizedBox(height: 12),
+          _NmPrice(cardId: selected.id),
+          const SizedBox(height: 20),
+          if (added == null) ...[
+            FilledButton.icon(
+              key: const Key('scan-add'),
+              onPressed: _busy ? null : _quickAdd,
+              icon: const Icon(Icons.add),
+              label: Text(widget.result.grading == null ? 'Hinzufügen' : 'Als Slab hinzufügen'),
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              alignment: WrapAlignment.center,
               children: [
-                const Icon(Icons.verified, color: AppColors.accent),
-                const SizedBox(width: 8),
-                Text('Slab erkannt: ${grading.company} ${grading.grade ?? ''}'.trim()),
+                TextButton(
+                  key: const Key('scan-other'),
+                  onPressed: () => setState(() => _showAlternatives = !_showAlternatives),
+                  child: const Text('Andere Karte?'),
+                ),
+                TextButton(
+                  onPressed: () => addScanToWishlist(context, ref, widget.result, selected),
+                  child: const Text('Merkliste'),
+                ),
+                TextButton(onPressed: _showReasons, child: const Text('Warum?')),
               ],
             ),
-          ),
-        if (selected != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CardImage(url: selected.image(high: true), width: 110),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            selected.name,
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            selected.subtitle,
-                            style: const TextStyle(color: AppColors.textMuted),
-                          ),
-                          const SizedBox(height: 4),
-                          Tag(languageLabels[selected.language] ?? selected.language),
-                          if (match != null) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              'Sicherheit: ${percent(match.confidence)}',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                            for (final reason in match.reasons)
-                              Text(
-                                '• $reason',
-                                style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                              ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+          ] else ...[
+            FilledButton.icon(
+              key: const Key('scan-next'),
+              onPressed: widget.onDone,
+              icon: const Icon(Icons.photo_camera),
+              label: const Text('Nächste Karte'),
             ),
+            const SizedBox(height: 4),
+            Wrap(
+              alignment: WrapAlignment.center,
+              children: [
+                TextButton(onPressed: _editAdded, child: const Text('Zustand/Preis ändern')),
+                TextButton(onPressed: _undo, child: const Text('Rückgängig')),
+              ],
+            ),
+          ],
+        ],
+        if (_showAlternatives && added == null) ...[
+          const SizedBox(height: 12),
+          const Text(
+            'Andere Möglichkeiten',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
-        const SizedBox(height: 12),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
             children: [
-              FilledButton.icon(
-                key: const Key('scan-add'),
-                onPressed: selected == null ? null : () => _accept(toCollection: true),
-                icon: const Icon(Icons.add),
-                label: const Text('Zur Sammlung hinzufügen'),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: selected == null ? null : () => _accept(toCollection: false),
-                      icon: const Icon(Icons.favorite_border),
-                      label: const Text('Merkliste'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      key: const Key('scan-search'),
-                      onPressed: _searchMyself,
-                      icon: const Icon(Icons.search),
-                      label: const Text('Selbst suchen'),
-                    ),
-                  ),
-                ],
-              ),
+              for (final match in widget.result.matches)
+                if (match.card.id != selected?.id)
+                  _AlternativeThumb(match: match, onTap: () => _select(match.card)),
             ],
           ),
-        ),
-        if (result.matches.length > 1) ...[
-          const SectionTitle('Andere Möglichkeiten'),
-          for (final other in result.matches)
-            if (other.card.id != selected?.id)
-              CardTile(
-                card: other.card,
-                trailing: Text(percent(other.confidence)),
-                onTap: () => setState(() => _selected = other.card),
-              ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            key: const Key('scan-search'),
+            onPressed: _searchMyself,
+            icon: const Icon(Icons.search),
+            label: const Text('Selbst suchen'),
+          ),
         ],
       ],
     );
   }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip(this.icon, this.label, this.color);
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.15),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          key: const Key('scan-status'),
+          style: TextStyle(color: color, fontWeight: FontWeight.w600),
+        ),
+      ],
+    ),
+  );
+}
+
+/// NM-Preis einer Karte (belegt oder geschätzt) – kompakt für das Scan-Ergebnis.
+class _NmPrice extends ConsumerWidget {
+  const _NmPrice({required this.cardId});
+
+  final String cardId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final prices = ref.watch(pricesProvider(cardId));
+    return prices.when(
+      loading: () => const Center(
+        child: SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+      ),
+      error: (_, _) => const SizedBox.shrink(),
+      data: (data) {
+        final nm = data.conditions
+            .where((c) => c.condition == 'NM' && c.variant == 'normal')
+            .firstOrNull;
+        if (nm == null) {
+          return const Text(
+            'Noch kein belegter Preis',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textMuted),
+          );
+        }
+        return Column(
+          children: [
+            Text(
+              money(nm.value, currency: nm.currency),
+              key: const Key('scan-price'),
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+            ),
+            Text(
+              nm.isEstimate ? 'Near Mint · geschätzt' : 'Near Mint · mit Beleg',
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _AlternativeThumb extends StatelessWidget {
+  const _AlternativeThumb({required this.match, required this.onTap});
+
+  final ScanMatch match;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(8),
+    child: SizedBox(
+      width: 96,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CardImage(url: match.card.image(), width: 96),
+          const SizedBox(height: 4),
+          Text(match.card.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+          Text(
+            '${match.card.number} · ${languageTag(match.card.language)}',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class ScanScreen extends ConsumerStatefulWidget {
@@ -366,89 +515,101 @@ class _StartView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(16),
+    padding: const EdgeInsets.all(24),
     children: [
-      Container(
-        height: 260,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.primary, width: 2),
-          color: AppColors.surface,
+      const SizedBox(height: 12),
+      Center(
+        child: Container(
+          width: 200,
+          height: 280,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.primary, width: 3),
+          ),
+          child: const Icon(Icons.style, size: 72, color: AppColors.textMuted),
         ),
-        child: const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.style, size: 64, color: AppColors.textMuted),
-            SizedBox(height: 12),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 24),
-              child: Text(
-                'Karte formatfüllend fotografieren – Name und Nummer sollten lesbar sein. '
-                'Slabs, Toploader und Sleeves funktionieren auch.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted),
-              ),
-            ),
-          ],
-        ),
+      ),
+      const SizedBox(height: 20),
+      const Text(
+        'Karte ganz ins Bild – Name und Nummer sollten lesbar sein.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: AppColors.textMuted),
       ),
       if (error != null)
         Padding(
           padding: const EdgeInsets.only(top: 12),
-          child: Text(error!, style: const TextStyle(color: AppColors.loss)),
+          child: Text(
+            error!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.loss),
+          ),
         ),
-      const SizedBox(height: 16),
-      FilledButton.icon(
-        key: const Key('scan-camera'),
-        onPressed: onCamera,
-        icon: const Icon(Icons.photo_camera),
-        label: const Text('Foto aufnehmen'),
+      const SizedBox(height: 24),
+      SizedBox(
+        height: 60,
+        child: FilledButton.icon(
+          key: const Key('scan-camera'),
+          onPressed: onCamera,
+          icon: const Icon(Icons.photo_camera, size: 26),
+          label: const Text('Foto aufnehmen', style: TextStyle(fontSize: 17)),
+        ),
       ),
       const SizedBox(height: 8),
-      OutlinedButton.icon(
+      TextButton.icon(
         key: const Key('scan-gallery'),
         onPressed: onGallery,
         icon: const Icon(Icons.photo_library),
-        label: const Text('Aus der Galerie'),
-      ),
-      const SizedBox(height: 16),
-      DropdownButtonFormField<String?>(
-        isExpanded: true,
-        initialValue: language,
-        decoration: const InputDecoration(labelText: 'Sprache der Karte'),
-        items: [
-          const DropdownMenuItem(child: Text('Automatisch erkennen')),
-          for (final entry in languageLabels.entries)
-            DropdownMenuItem(value: entry.key, child: Text(entry.value)),
-        ],
-        onChanged: onLanguage,
+        label: const Text('Aus der Galerie wählen'),
       ),
       const SizedBox(height: 24),
-      Row(
+      Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 8,
         children: [
-          Expanded(
-            child: TextButton.icon(
-              onPressed: () => context.push('/scan/batch'),
-              icon: const Icon(Icons.burst_mode),
-              label: const Text('Stapel-Scan'),
-            ),
+          ActionChip(
+            avatar: const Icon(Icons.burst_mode, size: 18),
+            label: const Text('Mehrere Karten'),
+            onPressed: () => context.push('/scan/batch'),
           ),
-          Expanded(
-            child: TextButton.icon(
-              onPressed: () => context.push('/scan/binder'),
-              icon: const Icon(Icons.grid_view),
-              label: const Text('Binder (Beta)'),
+          ActionChip(
+            avatar: const Icon(Icons.grid_view, size: 18),
+            label: const Text('Binderseite (Beta)'),
+            onPressed: () => context.push('/scan/binder'),
+          ),
+          ActionChip(
+            avatar: const Icon(Icons.translate, size: 18),
+            label: Text(
+              language == null ? 'Sprache: automatisch' : 'Sprache: ${languageTag(language!)}',
             ),
+            onPressed: () => _pickLanguage(context),
           ),
         ],
-      ),
-      TextButton.icon(
-        onPressed: () => context.go('/search'),
-        icon: const Icon(Icons.edit_note),
-        label: const Text('Manuell hinzufügen (Suche)'),
       ),
     ],
   );
+
+  Future<void> _pickLanguage(BuildContext context) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text('Automatisch erkennen'),
+              onTap: () => Navigator.of(sheetContext).pop('auto'),
+            ),
+            for (final entry in languageLabels.entries)
+              ListTile(
+                title: Text(entry.value),
+                onTap: () => Navigator.of(sheetContext).pop(entry.key),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (choice != null) onLanguage(choice == 'auto' ? null : choice);
+  }
 }
 
 /// Zeile einer Ergebnisliste (Stapel/Binder); Tippen öffnet das Ergebnis.
