@@ -1,0 +1,482 @@
+"""Preislogik: Abruf aus den Quellen, Historie, Anzeige mit Zustandsschätzung.
+
+Regeln (Plan 5.3):
+
+* **Kein Beleg, kein Preis.** Angezeigt werden nur Werte, die eine Quelle mit Datum (und
+  wenn möglich Link) geliefert hat.
+* **Schätzungen sind markiert.** Zustandspreise = NM-Referenz × Zustandsfaktor des Nutzers;
+  NM-Referenz ist der Cardmarket-Trend (Ersatz: 30-Tage-Schnitt, dann Durchschnitt).
+  Liefert eine externe Quelle einen echten Zustandspreis, hat dieser Vorrang.
+* **Quellen sind isoliert.** Zeitlimit je Abruf; Fehler einer Quelle stören weder andere
+  Quellen noch die Anzeige; nach Fehlern in Folge pausiert die Quelle (``SourceHealth``).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import dataclasses
+import uuid
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
+from typing import Literal
+
+import structlog
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import distinct_on, insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import Settings
+from app.models import Card, PriceCheck, PricePoint, User
+from app.providers.pricing import (
+    CONDITIONS,
+    CardRef,
+    PriceNotAvailableError,
+    PriceProvider,
+    PriceQuote,
+)
+from app.providers.pricing.tcgdex_prices import CARDMARKET, TCGPLAYER
+from app.services.price_health import SourceHealth
+from app.services.user_settings import effective_factors, get_user_settings
+
+log = structlog.get_logger(__name__)
+
+VERIFIED_SOURCES = frozenset({CARDMARKET, TCGPLAYER})
+NM_REFERENCE_METRICS = ("trend", "avg30", "avg")
+CENT = Decimal("0.01")
+
+Clock = Callable[[], datetime]
+FetchOutcome = Literal["fetched", "fresh", "retry_later", "paused", "failed", "not_available"]
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+# ----------------------------------------------------------------- Ergebnisse
+
+
+@dataclass(frozen=True)
+class Offer:
+    """Alle aktuellen Werte einer Quelle für eine Variante (und ggf. einen Zustand)."""
+
+    source: str
+    variant: str
+    condition: str | None
+    currency: str
+    kind: Literal["verified", "external"]
+    updated_at: datetime
+    url: str | None
+    metrics: dict[str, Decimal]
+
+
+@dataclass(frozen=True)
+class ConditionPrice:
+    """Preis je Zustand – geschätzt (Faktor) oder von einer externen Quelle belegt."""
+
+    variant: str
+    condition: str
+    value: Decimal
+    currency: str
+    kind: Literal["estimated", "external"]
+    source: str
+    updated_at: datetime
+    url: str | None
+    basis_metric: str | None = None
+    factor: Decimal | None = None
+
+
+@dataclass(frozen=True)
+class CardPrices:
+    card_id: uuid.UUID
+    last_checked_at: datetime | None
+    offers: list[Offer]
+    conditions: list[ConditionPrice]
+
+    @property
+    def has_prices(self) -> bool:
+        return bool(self.offers)
+
+
+@dataclass(frozen=True)
+class HistoryPoint:
+    day: date
+    value: Decimal
+
+
+@dataclass(frozen=True)
+class PriceHistory:
+    source: str
+    variant: str
+    metric: str
+    currency: str | None
+    points: list[HistoryPoint]
+    lowest: Decimal | None
+    highest: Decimal | None
+    observed_since: datetime | None
+
+
+@dataclass
+class RefreshReport:
+    outcomes: dict[str, FetchOutcome] = field(default_factory=dict)
+    quotes_stored: int = 0
+
+
+def card_ref(card: Card) -> CardRef:
+    return CardRef(
+        card_id=card.id,
+        external_id=card.external_id,
+        language=card.language,
+        name=card.name,
+        number=card.number,
+        set_name=card.card_set.name,
+    )
+
+
+# --------------------------------------------------------------------- Service
+
+
+class PriceService:
+    """Preise abrufen, speichern und für die Anzeige aufbereiten. Commit macht der Aufrufer."""
+
+    def __init__(
+        self,
+        session: AsyncSession,
+        settings: Settings,
+        providers: Sequence[PriceProvider],
+        health: SourceHealth,
+        *,
+        clock: Clock = _utc_now,
+    ) -> None:
+        self._session = session
+        self._settings = settings
+        self._providers = providers
+        self._health = health
+        self._now = clock
+
+    @property
+    def providers(self) -> Sequence[PriceProvider]:
+        return self._providers
+
+    @property
+    def health(self) -> SourceHealth:
+        return self._health
+
+    # ------------------------------------------------------------- Abruf
+
+    async def refresh(
+        self, card: Card, *, force: bool = False, viewed: bool = False
+    ) -> RefreshReport:
+        """Holt Preise, wenn sie veraltet sind (oder ``force``). ``viewed`` merkt die Karte
+        für die tägliche Aktualisierung vor."""
+        report = RefreshReport()
+        now = self._now()
+        for provider in self._providers:
+            check = await self._session.get(PriceCheck, (card.id, provider.name))
+            outcome = self._decide(provider, check, now=now, force=force)
+            ok = check.ok if check else False
+            message = check.message if check else None
+            checked_at = check.checked_at if check else now
+
+            if outcome == "fetched":
+                outcome, ok, message, stored = await self._fetch(provider, card)
+                report.quotes_stored += stored
+                checked_at = now
+            elif outcome == "paused" and check is None:
+                message = "Quelle pausiert"
+
+            report.outcomes[provider.name] = outcome
+            if check is not None or outcome != "fresh" or viewed:
+                await self._upsert_check(
+                    card, provider.name, checked_at=checked_at, ok=ok, message=message,
+                    viewed_at=now if viewed else None,
+                )  # fmt: skip
+        return report
+
+    def _decide(
+        self, provider: PriceProvider, check: PriceCheck | None, *, now: datetime, force: bool
+    ) -> FetchOutcome:
+        if self._health.is_paused(provider.name):
+            return "paused"
+        if force or check is None:
+            return "fetched"
+        age = now - check.checked_at
+        if check.ok and age < timedelta(hours=self._settings.price_max_age_hours):
+            return "fresh"
+        if not check.ok and age < timedelta(minutes=self._settings.price_failure_retry_minutes):
+            return "retry_later"
+        return "fetched"
+
+    async def _fetch(
+        self, provider: PriceProvider, card: Card
+    ) -> tuple[FetchOutcome, bool, str | None, int]:
+        """Ruft eine Quelle mit Zeitlimit ab und speichert neue Werte."""
+        try:
+            quotes = await asyncio.wait_for(
+                provider.fetch(card_ref(card)),
+                timeout=self._settings.price_provider_timeout_seconds,
+            )
+        except PriceNotAvailableError:
+            self._health.record_success(provider.name)
+            return "not_available", True, "Quelle kennt die Karte nicht", 0
+        except Exception as exc:  # Quellen (auch Plug-ins) dürfen nichts stören
+            error = f"{type(exc).__name__}: {exc}"[:300]
+            self._health.record_failure(provider.name, error)
+            log.warning(
+                "pricing.fetch_failed", source=provider.name, card=str(card.id), error=error
+            )
+            return "failed", False, error, 0
+
+        self._health.record_success(provider.name)
+        if provider.kind == "external":
+            # Externe Quellen dürfen keine eingebauten Quellen „vortäuschen“.
+            quotes = [dataclasses.replace(q, source=provider.name) for q in quotes]
+        stored = await self._store(card, quotes)
+        return "fetched", True, None if quotes else "keine Preise", stored
+
+    async def _store(self, card: Card, quotes: Sequence[PriceQuote]) -> int:
+        if not quotes:
+            return 0
+        rows = [
+            {
+                "card_id": card.id,
+                "source": q.source[:64],
+                "variant": q.variant[:32],
+                "metric": q.metric[:32],
+                "condition": q.condition if q.condition in CONDITIONS else None,
+                "value": q.value.quantize(CENT),
+                "currency": q.currency[:3].upper(),
+                "source_updated_at": q.source_updated_at,
+                "source_url": (q.source_url or "")[:500] or None,
+            }
+            for q in quotes
+        ]
+        result = await self._session.execute(
+            insert(PricePoint)
+            .values(rows)
+            .on_conflict_do_nothing(constraint="uq_price_points_identity")
+            .returning(PricePoint.id)
+        )
+        return len(result.all())
+
+    async def _upsert_check(
+        self,
+        card: Card,
+        source: str,
+        *,
+        checked_at: datetime,
+        ok: bool,
+        message: str | None,
+        viewed_at: datetime | None,
+    ) -> None:
+        values = {
+            "card_id": card.id,
+            "source": source,
+            "checked_at": checked_at,
+            "ok": ok,
+            "message": message,
+            "last_viewed_at": viewed_at,
+        }
+        update = {"checked_at": checked_at, "ok": ok, "message": message}
+        if viewed_at is not None:
+            update["last_viewed_at"] = viewed_at
+        statement = insert(PriceCheck).values(values)
+        await self._session.execute(
+            statement.on_conflict_do_update(
+                index_elements=[PriceCheck.card_id, PriceCheck.source], set_=update
+            )
+        )
+        # Die Identity-Map soll den frischen Stand liefern, nicht den alten.
+        if (cached := await self._session.get(PriceCheck, (card.id, source))) is not None:
+            await self._session.refresh(cached)
+
+    # ------------------------------------------------------------- Anzeige
+
+    async def get_prices(self, card: Card, user: User | None) -> CardPrices:
+        """Aktuelle Preise je Quelle/Variante und Zustandspreise (Faktoren des Nutzers,
+        ohne Nutzer die Standardfaktoren)."""
+        latest = (
+            await self._session.scalars(
+                select(PricePoint)
+                .where(PricePoint.card_id == card.id)
+                .ext(
+                    distinct_on(
+                        PricePoint.source,
+                        PricePoint.variant,
+                        PricePoint.metric,
+                        PricePoint.condition,
+                    )
+                )
+                .order_by(
+                    PricePoint.source,
+                    PricePoint.variant,
+                    PricePoint.metric,
+                    PricePoint.condition,
+                    PricePoint.source_updated_at.desc(),
+                )
+            )
+        ).all()
+        offers = _group_offers(latest)
+        user_settings = await get_user_settings(self._session, user) if user else None
+        factors = effective_factors(user_settings)
+        last_checked = await self._session.scalar(
+            select(func.max(PriceCheck.checked_at)).where(
+                PriceCheck.card_id == card.id, PriceCheck.ok.is_(True)
+            )
+        )
+        return CardPrices(
+            card_id=card.id,
+            last_checked_at=last_checked,
+            offers=offers,
+            conditions=_condition_prices(offers, factors),
+        )
+
+    async def get_history(
+        self,
+        card: Card,
+        *,
+        source: str = CARDMARKET,
+        variant: str = "normal",
+        metric: str = "trend",
+        days: int = 365,
+    ) -> PriceHistory:
+        """Verlauf eines Werts (ein Punkt je Tag) plus Tiefst-/Höchstwert seit Beobachtung."""
+        series = (
+            PricePoint.card_id == card.id,
+            PricePoint.source == source,
+            PricePoint.variant == variant,
+            PricePoint.metric == metric,
+            PricePoint.condition.is_(None),
+        )
+        since = self._now() - timedelta(days=days)
+        rows = (
+            await self._session.execute(
+                select(PricePoint.source_updated_at, PricePoint.value, PricePoint.currency)
+                .where(*series, PricePoint.source_updated_at >= since)
+                .order_by(PricePoint.source_updated_at)
+            )
+        ).all()
+        per_day: dict[date, Decimal] = {}
+        for updated_at, value, _currency in rows:
+            per_day[updated_at.date()] = value  # letzter Wert des Tages gewinnt
+        stats = (
+            await self._session.execute(
+                select(
+                    func.min(PricePoint.value),
+                    func.max(PricePoint.value),
+                    func.min(PricePoint.source_updated_at),
+                ).where(*series)
+            )
+        ).one()
+        return PriceHistory(
+            source=source,
+            variant=variant,
+            metric=metric,
+            currency=rows[-1][2] if rows else None,
+            points=[HistoryPoint(day, value) for day, value in per_day.items()],
+            lowest=stats[0],
+            highest=stats[1],
+            observed_since=stats[2],
+        )
+
+
+# ------------------------------------------------------------------ Aufbereitung
+
+
+def _group_offers(points: Sequence[PricePoint]) -> list[Offer]:
+    grouped: dict[tuple[str, str, str | None], list[PricePoint]] = {}
+    for point in points:
+        grouped.setdefault((point.source, point.variant, point.condition), []).append(point)
+    offers = [
+        Offer(
+            source=source,
+            variant=variant,
+            condition=condition,
+            currency=group[0].currency,
+            kind="verified" if source in VERIFIED_SOURCES else "external",
+            updated_at=max(p.source_updated_at for p in group),
+            url=next((p.source_url for p in group if p.source_url), None),
+            metrics={p.metric: p.value for p in group},
+        )
+        for (source, variant, condition), group in grouped.items()
+    ]
+    source_order = {CARDMARKET: 0, TCGPLAYER: 1}
+    variant_order = {"normal": 0, "reverse": 1, "holo": 2}
+    offers.sort(
+        key=lambda o: (
+            source_order.get(o.source, 2),
+            o.source,
+            variant_order.get(o.variant, 9),
+            o.variant,
+            CONDITIONS.index(o.condition) if o.condition in CONDITIONS else -1,
+        )
+    )
+    return offers
+
+
+def _condition_prices(offers: Sequence[Offer], factors: dict[str, Decimal]) -> list[ConditionPrice]:
+    """Zustandspreise je Cardmarket-Variante: externer Beleg vor Schätzung."""
+    result: list[ConditionPrice] = []
+    references = [o for o in offers if o.source == CARDMARKET and o.condition is None]
+    for reference in references:
+        basis = next((m for m in NM_REFERENCE_METRICS if m in reference.metrics), None)
+        for condition in CONDITIONS:
+            external = [
+                o
+                for o in offers
+                if o.kind == "external"
+                and o.variant == reference.variant
+                and o.condition == condition
+                and o.currency == reference.currency
+                and o.metrics
+            ]
+            if external:
+                best = min(external, key=lambda o: min(o.metrics.values()))
+                result.append(
+                    ConditionPrice(
+                        variant=reference.variant,
+                        condition=condition,
+                        value=min(best.metrics.values()),
+                        currency=best.currency,
+                        kind="external",
+                        source=best.source,
+                        updated_at=best.updated_at,
+                        url=best.url,
+                    )
+                )
+            elif basis is not None:
+                factor = factors[condition]
+                result.append(
+                    ConditionPrice(
+                        variant=reference.variant,
+                        condition=condition,
+                        value=(reference.metrics[basis] * factor).quantize(CENT),
+                        currency=reference.currency,
+                        kind="estimated",
+                        source=reference.source,
+                        updated_at=reference.updated_at,
+                        url=reference.url,
+                        basis_metric=basis,
+                        factor=factor,
+                    )
+                )
+    return result
+
+
+# ------------------------------------------------------------- Tägliche Runde
+
+
+async def tracked_card_ids(
+    session: AsyncSession, settings: Settings, now: datetime
+) -> list[uuid.UUID]:
+    """Karten für die tägliche Aktualisierung.
+
+    Bis Phase 3: in den letzten ``price_tracking_view_days`` Tagen angesehene Karten.
+    Ab Phase 3 kommen Karten aus Sammlungen und Merklisten hinzu.
+    """
+    since = now - timedelta(days=settings.price_tracking_view_days)
+    result = await session.scalars(
+        select(PriceCheck.card_id).where(PriceCheck.last_viewed_at >= since).distinct()
+    )
+    return list(result.all())

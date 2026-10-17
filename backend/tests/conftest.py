@@ -30,6 +30,7 @@ from app.db.session import create_engine, create_session_factory
 from app.main import create_app
 from app.models import Role, User
 from app.services.admin import AdminService
+from tests.pricing_helpers import FakeProvider
 
 TEST_DATABASE_URL = os.environ.get(
     "PT_TEST_DATABASE_URL", "postgresql+asyncpg://tracker:tracker@localhost:5432/tracker_test"
@@ -88,9 +89,17 @@ def session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
 
 
 @pytest.fixture
-async def client(settings: Settings, engine: AsyncEngine) -> AsyncIterator[AsyncClient]:
+def price_provider() -> FakeProvider:
+    """Steuerbare Preisquelle statt TCGdex – kein Test geht ins Netz."""
+    return FakeProvider()
+
+
+@pytest.fixture
+async def client(
+    settings: Settings, engine: AsyncEngine, price_provider: FakeProvider
+) -> AsyncIterator[AsyncClient]:
     """HTTP-Client gegen die App (inkl. Lifespan), ohne echten Server."""
-    app = create_app(settings, engine=engine)
+    app = create_app(settings, engine=engine, price_providers=[price_provider])
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as http_client:

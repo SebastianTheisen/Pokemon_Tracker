@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
+from datetime import timedelta
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,11 +16,21 @@ from app.api.v1 import api_router
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import create_engine, create_session_factory
+from app.providers.pricing import PriceProvider
+from app.providers.pricing.registry import build_price_providers
+from app.providers.tcgdex import TcgdexClient
+from app.services.price_health import SourceHealth
 from app.services.rate_limit import FailureLimiter
 
 
-def create_app(settings: Settings | None = None, *, engine: AsyncEngine | None = None) -> FastAPI:
-    """Erzeugt die Anwendung (Factory, damit Tests eigene Settings/Engine übergeben können)."""
+def create_app(
+    settings: Settings | None = None,
+    *,
+    engine: AsyncEngine | None = None,
+    price_providers: Sequence[PriceProvider] | None = None,
+) -> FastAPI:
+    """Erzeugt die Anwendung (Factory, damit Tests Settings, Engine und Preisquellen
+    übergeben können)."""
     settings = settings or get_settings()
     configure_logging(level=settings.log_level, json_output=settings.log_json)
 
@@ -29,7 +40,15 @@ def create_app(settings: Settings | None = None, *, engine: AsyncEngine | None =
         app_engine = engine or create_engine(settings.database_url)
         app.state.engine = app_engine
         app.state.session_factory = create_session_factory(app_engine)
-        yield
+        async with TcgdexClient(
+            base_url=settings.tcgdex_base_url, user_agent=settings.http_user_agent
+        ) as tcgdex:
+            app.state.price_providers = (
+                list(price_providers)
+                if price_providers is not None
+                else build_price_providers(settings, tcgdex)
+            )
+            yield
         if own_engine:
             await app_engine.dispose()
 
@@ -41,6 +60,10 @@ def create_app(settings: Settings | None = None, *, engine: AsyncEngine | None =
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.state.price_health = SourceHealth(
+        threshold=settings.price_breaker_threshold,
+        pause=timedelta(minutes=settings.price_breaker_pause_minutes),
+    )
     app.state.login_limiter = FailureLimiter(
         max_failures=settings.login_rate_limit, window_seconds=settings.login_rate_window_seconds
     )

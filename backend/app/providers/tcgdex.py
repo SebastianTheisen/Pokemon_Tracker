@@ -57,7 +57,11 @@ class SetDetail(SetBrief):
 
 
 class TcgdexError(Exception):
-    """TCGdex nicht erreichbar oder Antwort unbrauchbar."""
+    """TCGdex nicht erreichbar oder Antwort unbrauchbar. ``status_code`` bei HTTP-Fehlern."""
+
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class TcgdexClient:
@@ -96,7 +100,8 @@ class TcgdexClient:
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as exc:
-            raise TcgdexError(f"GET {path}: HTTP {exc.response.status_code}") from exc
+            status = exc.response.status_code
+            raise TcgdexError(f"GET {path}: HTTP {status}", status_code=status) from exc
         except (httpx.HTTPError, ValueError) as exc:
             raise TcgdexError(f"GET {path}: {type(exc).__name__}: {exc}") from exc
 
@@ -111,6 +116,13 @@ class TcgdexClient:
             except ValidationError:
                 continue  # einzelne kaputte Einträge überspringen statt alles abzubrechen
         return sets
+
+    async def get_card(self, language: str, card_id: str) -> dict[str, object]:
+        """Kartendetails inkl. ``pricing`` (Rohdaten; die Preislogik wertet sie aus)."""
+        data = await self._get_json(f"/{language}/cards/{quote(card_id, safe='')}")
+        if not isinstance(data, dict):
+            raise TcgdexError(f"/{language}/cards/{card_id}: Objekt erwartet")
+        return data
 
     async def get_set(self, language: str, set_id: str) -> SetDetail:
         # Set-IDs können Sonderzeichen enthalten (z. B. „SM1+“) → als Pfadsegment kodieren.

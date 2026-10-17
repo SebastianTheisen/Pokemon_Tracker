@@ -64,6 +64,30 @@ class Settings(BaseSettings):
     http_user_agent: str = "PokemonTracker/0.1 (private Sammel-App)"
 
     # --- Preise --------------------------------------------------------------
+    price_max_age_hours: int = Field(
+        default=12, ge=1, le=168, description="Ältere Preise werden beim Ansehen neu geholt."
+    )
+    price_failure_retry_minutes: int = Field(
+        default=60, ge=1, description="Nach einem Fehlschlag frühestens erneut versuchen."
+    )
+    price_provider_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+    price_breaker_threshold: int = Field(
+        default=3, ge=1, description="Fehler in Folge, nach denen eine Quelle pausiert."
+    )
+    price_breaker_pause_minutes: int = Field(default=60, ge=1)
+    price_refresh_time: str = Field(
+        default="12:30",
+        pattern=r"^([01]\d|2[0-3]):[0-5]\d$",
+        description=(
+            "Tägliche Preisaktualisierung (Ortszeit). TCGdex aktualisiert vormittags (UTC), "
+            "deshalb mittags statt nachts."
+        ),
+    )
+    timezone: str = "Europe/Berlin"
+    price_tracking_view_days: int = Field(
+        default=30, ge=1, description="Angesehene Karten werden so lange täglich mitgeführt."
+    )
+    price_refresh_concurrency: int = Field(default=4, ge=1, le=16)
     extra_price_providers: list[str] = Field(
         default_factory=list,
         description=(

@@ -15,6 +15,7 @@ from app.models import User
 from app.services.admin import AdminService
 from app.services.auth import AuthService
 from app.services.errors import AuthenticationError, PermissionDeniedError
+from app.services.pricing import PriceService
 from app.services.rate_limit import FailureLimiter
 
 _bearer = HTTPBearer(auto_error=False, description="Access-Token aus /auth/login")
@@ -87,5 +88,12 @@ def get_admin_service(session: SessionDep, settings: SettingsDep) -> AdminServic
     return AdminService(session, settings)
 
 
+def get_price_service(request: Request, session: SessionDep, settings: SettingsDep) -> PriceService:
+    return PriceService(
+        session, settings, request.app.state.price_providers, request.app.state.price_health
+    )
+
+
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+PriceServiceDep = Annotated[PriceService, Depends(get_price_service)]
 AdminServiceDep = Annotated[AdminService, Depends(get_admin_service)]

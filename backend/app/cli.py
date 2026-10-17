@@ -7,6 +7,8 @@ Beispiele (im Container: ``docker compose exec api python -m app.cli ...``)::
     python -m app.cli sync-catalog                 # alle Sprachen, inkrementell
     python -m app.cli sync-catalog --languages de en --full
     python -m app.cli search "nachtara 215"
+    python -m app.cli refresh-prices               # Preis-Runde sofort ausführen
+    python -m app.cli prices "nachtara 215" --language de
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ import getpass
 import os
 import sys
 from collections.abc import Awaitable, Callable
+from datetime import timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -24,11 +27,15 @@ from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import create_engine, create_session_factory
 from app.models import Role, User
+from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
 from app.services.admin import AdminService
 from app.services.catalog_search import search_cards
 from app.services.catalog_sync import sync_catalog
 from app.services.errors import ServiceError
+from app.services.price_health import SourceHealth
+from app.services.pricing import PriceService
+from app.worker import refresh_tracked_prices
 
 MIN_PASSWORD_LENGTH = 10
 
@@ -115,6 +122,68 @@ async def _search(
         )
 
 
+async def _refresh_prices(
+    factory: async_sessionmaker[AsyncSession], settings: Settings, _args: argparse.Namespace
+) -> None:
+    health = SourceHealth(
+        threshold=settings.price_breaker_threshold,
+        pause=timedelta(minutes=settings.price_breaker_pause_minutes),
+    )
+    async with TcgdexClient(
+        base_url=settings.tcgdex_base_url, user_agent=settings.http_user_agent
+    ) as client:
+        summary = await refresh_tracked_prices(
+            factory, settings, build_price_providers(settings, client), health
+        )
+    print(
+        f"Karten: {summary.cards} · neue Preiswerte: {summary.quotes_stored} · "
+        f"mit Fehlern: {summary.failed_cards}"
+    )
+
+
+async def _prices(
+    factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
+) -> None:
+    """Erste Trefferkarte der Suche: Preise sofort holen und anzeigen."""
+    health = SourceHealth(
+        threshold=settings.price_breaker_threshold,
+        pause=timedelta(minutes=settings.price_breaker_pause_minutes),
+    )
+    async with (
+        TcgdexClient(
+            base_url=settings.tcgdex_base_url, user_agent=settings.http_user_agent
+        ) as client,
+        factory() as session,
+    ):
+        hits = await search_cards(session, args.query, language=args.language, limit=1)
+        if not hits:
+            print("Keine Karte gefunden.")
+            return
+        card = hits[0].card
+        service = PriceService(session, settings, build_price_providers(settings, client), health)
+        report = await service.refresh(card, force=True)
+        prices = await service.get_prices(card, None)
+        await session.commit()
+
+    print(
+        f"{card.name} · {card.card_set.name} · {card.number} [{card.language}] ({card.external_id})"
+    )
+    print(f"Abruf: {', '.join(f'{k}={v}' for k, v in report.outcomes.items())}")
+    if not prices.has_prices:
+        print("Kein belegter Preis.")
+    for offer in prices.offers:
+        metrics = ", ".join(f"{k} {v}" for k, v in sorted(offer.metrics.items()))
+        print(f"  {offer.source}/{offer.variant}: {metrics} {offer.currency}")
+        print(f"    Stand {offer.updated_at:%d.%m.%Y %H:%M} UTC · Beleg: {offer.url or '–'}")
+    for price in prices.conditions:
+        if price.variant == "normal":
+            print(
+                f"  {price.condition}: {price.value} {price.currency} "
+                f"({'Schätzung' if price.kind == 'estimated' else 'belegt'}"
+                f"{f', {price.basis_metric} × {price.factor}' if price.factor else ''})"
+            )
+
+
 Command = Callable[
     [async_sessionmaker[AsyncSession], Settings, argparse.Namespace], Awaitable[None]
 ]
@@ -139,6 +208,16 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--languages", nargs="+", help="z. B. de en ja (Standard: alle)")
     sync.add_argument("--full", action="store_true", help="alle Sets neu laden")
     sync.set_defaults(handler=_sync_catalog)
+
+    prices = commands.add_parser(
+        "refresh-prices", help="Preise aller vorgemerkten Karten jetzt aktualisieren"
+    )
+    prices.set_defaults(handler=_refresh_prices)
+
+    card_prices = commands.add_parser("prices", help="Preise der ersten Trefferkarte anzeigen")
+    card_prices.add_argument("query")
+    card_prices.add_argument("--language")
+    card_prices.set_defaults(handler=_prices)
 
     search = commands.add_parser("search", help="Katalog durchsuchen")
     search.add_argument("query")

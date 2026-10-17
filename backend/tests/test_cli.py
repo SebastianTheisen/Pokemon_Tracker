@@ -18,6 +18,7 @@ from app.db.base import Base
 from app.db.session import create_engine
 from app.providers.tcgdex import TcgdexClient
 from tests.fake_tcgdex import FakeTcgdex
+from tests.pricing_helpers import FakeProvider, cardmarket
 
 
 async def _truncate(database_url: str) -> None:
@@ -97,3 +98,34 @@ def test_sync_catalog_exits_with_error_on_failures(
         cli.main(["sync-catalog", "--languages", "ja"])
 
     assert exc_info.value.code == 1
+
+
+def test_refresh_prices_command(
+    cli_env: None, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    provider = FakeProvider(quotes=[cardmarket("trend", "10")])
+    monkeypatch.setattr(cli, "build_price_providers", lambda _settings, _client: [provider])
+
+    cli.main(["refresh-prices"])
+
+    assert "Karten: 0 · neue Preiswerte: 0 · mit Fehlern: 0" in capsys.readouterr().out
+
+
+def test_prices_command_shows_proof_and_estimates(
+    cli_env: None, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake = FakeTcgdex()
+    monkeypatch.setattr(cli, "TcgdexClient", partial(TcgdexClient, transport=fake.transport()))
+    cli.main(["sync-catalog", "--languages", "de"])
+    provider = FakeProvider(quotes=[cardmarket("trend", "1805.90")])
+    monkeypatch.setattr(cli, "build_price_providers", lambda _settings, _client: [provider])
+
+    cli.main(["prices", "nachtara 215", "--language", "de"])
+    cli.main(["prices", "gibtsnicht"])
+
+    output = capsys.readouterr().out
+    assert "Nachtara VMAX · Drachenwandel · 215 [de] (swsh7-215)" in output
+    assert "cardmarket/normal: trend 1805.90 EUR" in output
+    assert "Beleg: https://www.cardmarket.com/de/Pokemon/Products?idProduct=574273" in output
+    assert "EX: 1535.02 EUR (Schätzung, trend × 0.85)" in output
+    assert "Keine Karte gefunden." in output

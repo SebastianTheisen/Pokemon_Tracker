@@ -2,7 +2,7 @@
 
 Eine private Sammel-App im Stil von SCNDX: Pokémon-Karten scannen, Sammlung verwalten, belegte Marktpreise sehen. Sie ist für den Freundeskreis gedacht und wird nicht veröffentlicht.
 
-Stand: 17.10.2026 · Status: **Phase 1 abgeschlossen, Phase 2 wartet auf Freigabe**
+Stand: 17.10.2026 · Status: **Phase 2 – Code fertig, wartet auf VPS-Lauf**
 
 ---
 
@@ -12,7 +12,7 @@ Stand: 17.10.2026 · Status: **Phase 1 abgeschlossen, Phase 2 wartet auf Freigab
 |---|---|---|
 | 0 – Spikes und Fundament | ✅ erledigt | Alle Spikes ausgewertet, alle Entscheidungen getroffen (Ergebnis unten) |
 | 1 – Backend-Kern | ✅ erledigt | 65.561 Karten importiert, Abnahme-Suchen ✅, Nachtest 0 Fehler, 111 Tests (96 % Coverage) |
-| 2 – Preise | ⚪ offen | |
+| 2 – Preise | 🟡 in Arbeit | Code + 156 Tests fertig (95 % Coverage). **Wartet auf:** VPS-Lauf mit echten Preisen (`deploy/phase2_vps.sh`) |
 | 3 – Sammlung, Merkliste, Dashboard | ⚪ offen | |
 | 4 – Scanner | ⚪ offen | |
 | 5 – Flutter-App | ⚪ offen | |
@@ -104,6 +104,29 @@ Entscheidungen (17.10.2026): Passwort-Reset **durch den Admin** (Einmal-Code, ke
 
 **Nicht prüfbar in der Cloud-Umgebung:** echter TCGdex-Import (Host gesperrt) und Docker-Build (GHCR gesperrt) – beides übernimmt der VPS-Lauf.
 
+### Phase 2 – Aufgaben
+
+Entscheidungen/Annahmen (17.10.2026):
+- **Beleglink Cardmarket:** direkt per Produkt-ID (`…/Products?idProduct=…`), ohne ID die Cardmarket-Suche – beide vom Nutzer im Browser geprüft
+- **Frische:** beim Ansehen neu holen, wenn älter als 12 h; nach einem Fehler frühestens nach 60 min erneut
+- **Tägliche Runde um 12:30 Uhr (Europe/Berlin)** statt nachts – TCGdex aktualisiert vormittags (UTC), eine Runde um 4 Uhr hätte nur den Vortagsstand
+- **Bis Phase 3** umfasst die tägliche Runde die in den letzten 30 Tagen angesehenen Karten; ab Phase 3 zusätzlich Sammlung und Merkliste
+- **Eigenpreis** wird mit der Sammlungsposition gespeichert (Phase 3); Phase 2 liefert die Logik der Zustandspreise
+
+- [x] Datenbank: Migration `0002_pricing` – `price_points` (Historie, nie überschrieben, doppelte Stände verworfen), `price_checks` (Frische, Fehler, „angesehen“), `user_settings`
+- [x] Preisquellen-Schnittstelle (`app/providers/pricing`): `PriceProvider`-Protokoll, `PriceQuote` mit Wert, Datum, Beleglink; „Kein Beleg, kein Preis“
+- [x] TCGdex-Preise: Cardmarket (Trend, günstigstes Angebot, Ø, Ø 1/7/30 Tage; Normal + Reverse Holo) und TCGplayer (USD); 0/leer = kein Preis; getestet mit der echten Spike-Antwort
+- [x] Plug-ins über `PT_EXTRA_PRICE_PROVIDERS` (fehlerhafte Einträge brechen den Start ab); externe Quellen können sich nicht als Cardmarket ausgeben
+- [x] Absicherung: Zeitlimit je Abruf, Fehler isoliert, „Sicherung“ pausiert eine Quelle nach 3 Fehlern in Folge für 60 min; „Karte unbekannt“ zählt nicht als Ausfall
+- [x] Anzeige: aktuelle Werte je Quelle/Variante; Zustandspreise MT–PO = Trend × Faktor (als **Schätzung** markiert, mit Basis und Faktor); externer belegter Zustandspreis hat Vorrang; ohne belegten Preis keine Schätzung
+- [x] Preisverlauf: ein Punkt je Tag, Tiefst-/Höchstwert seit Beobachtungsbeginn
+- [x] Einstellungen: eigene Zustandsfaktoren (0 < f ≤ 3), Zurücksetzen, Standardsprache – je Nutzer getrennt
+- [x] API: `GET /cards/{id}/prices`, `GET /cards/{id}/price-history`, `GET/PATCH /me/settings`, `GET /admin/price-sources`
+- [x] Worker (`python -m app.worker`, eigener Docker-Dienst) mit Sommer-/Winterzeit-sicherer Planung; CLI `refresh-prices` und `prices "<suche>"`
+- [x] Qualität: ruff, mypy strict, **156 Tests grün, 95 % Coverage**; dabei gefunden und behoben: `idProduct: true` hätte einen kaputten Link erzeugt; ein Test prüfte den Fehlerfall nicht wirklich
+- [ ] ⏳ **VPS-Lauf durch den Nutzer:** `bash deploy/phase2_vps.sh` – echte Preise für 7 Karten (DE/EN/JA/ZH), Worker-Start, Historie. Ergebnis `docs/phase2/ergebnis.md` zurückschicken
+- [ ] Abnahme Phase 2: Preis mit Datum und Link, keine erfundenen Preise, Schätzungen markiert
+
 ### Änderungsprotokoll
 
 | Datum | Änderung |
@@ -121,6 +144,7 @@ Entscheidungen (17.10.2026): Passwort-Reset **durch den Admin** (Einmal-Code, ke
 | 17.10.2026 | Phase 1 gestartet. Entscheidungen: Passwort-Reset durch Admin, Katalog in allen 6 Sprachen. Code, Tests, CLI, Docker-Start mit Migrationen und VPS-Skript fertig |
 | 17.10.2026 | VPS-Lauf Phase 1: 65.561 Karten, Abnahme-Suchen ✅. Fix für Set-IDs mit „+“ und leiseres Import-Protokoll; Nachtest offen |
 | 17.10.2026 | Nachtest 0 Fehler; inkrementeller Import vergleicht gemeldete Kartenzahl. **Phase 1 abgeschlossen** |
+| 17.10.2026 | Phase 2 gestartet: Beleglink per Produkt-ID (vom Nutzer geprüft), tägliche Runde 12:30 Uhr. Code, Tests, Worker, CLI und VPS-Skript fertig |
 
 ---
 
@@ -301,7 +325,8 @@ Pokemon_Tracker/
 | `cards` | id, external_id, set_id, number, language, name, name_de/en, rarity, image_url, search_vector (tsvector), source (`tcgdex`/`user`), created_by, updated_by |
 | `card_reference_images` | id, card_id, user_id (Eigentümer, Referenz wirkt nur für ihn), image_path, features (vorberechnete Merkmale), source_scan_id, created_at |
 | `products` | id, set_id, kind (`booster`, `bundle`, `etb`, `display`, `case` …), language, name, image_url, is_custom, created_by (für eigene Produkte) |
-| `price_points` | id, item_type (`card`/`product`), item_id, source, kind (`verified`/`estimated`), condition (nullable), currency, value, fetched_at, source_url |
+| `price_points` | id, card_id, source (`cardmarket`/`tcgplayer`/Plug-in), variant, metric (`trend`, `low`, …), condition (nur bei zustandsgenauen Quellen), value, currency, source_updated_at, source_url, fetched_at. Schätzungen werden nicht gespeichert, sondern berechnet. Preise für versiegelte Produkte folgen mit den Produkten |
+| `price_checks` | card_id + source, checked_at, ok, message, last_viewed_at |
 | `folders` | id, user_id, name, sort_order |
 | `collection_items` | id, user_id, folder_id, item_type, card_id/product_id, language, condition, quantity, purchase_price, note, custom_price, grading_company, grade, added_at |
 | `collection_events` | id, user_id, item_id, delta_quantity, value_at_event, created_at (Basis für die markierten Punkte) |
@@ -424,7 +449,7 @@ Katalog-Bildindex: Das Herunterladen von über 100.000 Kartenbildern ist teuer. 
 | Bereich | Endpunkte |
 |---|---|
 | Auth | `POST /auth/register` (mit Einladungscode), `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/reset-password` (Code vom Admin) |
-| Katalog | `GET /cards/search?q=&lang=`, `GET /cards/{id}`, `GET /cards/{id}/prices?condition=`, `GET /cards/{id}/price-history`, `GET /sets`, `GET /products/search` |
+| Katalog | `GET /cards/search?q=&lang=`, `GET /cards/{id}`, `GET /cards/{id}/prices`, `GET /cards/{id}/price-history?source=&variant=&metric=&days=`, `GET /sets`, `GET /products/search` |
 | Scan | `POST /scan` (Bild), `POST /scan/batch`, `POST /scan/binder` |
 | Sammlung | `GET /collection` (Filter, Sortierung, Gruppierung), `POST /collection/items`, `PATCH /collection/items/{id}`, `DELETE /collection/items/{id}`, `GET /collection/summary`, `GET /collection/history`, `GET /collection/export.csv` |
 | Ordner | `GET/POST/PATCH/DELETE /folders` |
