@@ -1,0 +1,135 @@
+Compose can now delegate builds to bake for better performance.
+ To do so, set COMPOSE_BAKE=true.
+#0 building with "default" instance using docker driver
+
+#1 [api internal] load build definition from Dockerfile
+#1 DONE 0.0s
+
+#1 [api internal] load build definition from Dockerfile
+#1 transferring dockerfile: 948B 0.0s done
+#1 DONE 0.1s
+
+#2 [api] resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 0.7s
+
+#3 [api] docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#3 CACHED
+
+#4 [api internal] load metadata for ghcr.io/astral-sh/uv:0.11
+#4 DONE 0.5s
+
+#5 [api internal] load metadata for docker.io/library/python:3.12-slim
+#5 DONE 0.6s
+
+#6 [api internal] load .dockerignore
+#6 transferring context: 2B done
+#6 DONE 0.0s
+
+#7 [api] FROM ghcr.io/astral-sh/uv:0.11@sha256:77280f2f771df71f90786c314fe1bbc1e023feac652969bbf139c280babf2eb7
+#7 DONE 0.0s
+
+#8 [api base 1/9] FROM docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+#8 DONE 0.0s
+
+#9 [api internal] load build context
+#9 transferring context: 5.72kB done
+#9 DONE 0.0s
+
+#10 [api base 2/9] COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
+#10 CACHED
+
+#11 [api base 3/9] WORKDIR /srv
+#11 CACHED
+
+#12 [api base 4/9] COPY pyproject.toml uv.lock ./
+#12 CACHED
+
+#13 [api base 5/9] RUN uv sync --frozen --no-default-groups --no-install-project
+#13 1.505 Using CPython 3.12.15 interpreter at: /usr/local/bin/python3
+#13 1.513 Creating virtual environment at: .venv
+#13 1.869 Downloading pydantic-core (2.1MiB)
+#13 1.884 Downloading uvloop (4.3MiB)
+#13 1.887 Downloading asyncpg (3.6MiB)
+#13 1.891 Downloading sqlalchemy (4.5MiB)
+#13 2.338  Downloaded pydantic-core
+#13 2.499  Downloaded asyncpg
+#13 2.605  Downloaded uvloop
+#13 2.655  Downloaded sqlalchemy
+#13 2.658 Prepared 31 packages in 1.02s
+#13 2.789 Installed 31 packages in 131ms
+#13 4.121 Bytecode compiled 983 files in 1.32s
+#13 4.121  + alembic==1.20.0
+#13 4.121  + annotated-doc==0.0.5
+#13 4.121  + annotated-types==0.8.0
+#13 4.121  + anyio==4.15.1
+#13 4.121  + asyncpg==0.32.0
+#13 4.121  + certifi==2026.7.22
+#13 4.121  + click==8.5.0
+#13 4.121  + fastapi==0.143.3
+#13 4.121  + greenlet==3.5.6
+#13 4.121  + h11==0.16.0
+#13 4.121  + httpcore==1.0.9
+#13 4.121  + httptools==0.9.0
+#13 4.121  + httpx==0.28.1
+#13 4.121  + idna==3.20
+#13 4.121  + mako==1.4.3
+#13 4.121  + markupsafe==3.0.4
+#13 4.121  + opentelemetry-api==1.45.1
+#13 4.121  + pydantic==2.14.1
+#13 4.121  + pydantic-core==2.50.1
+#13 4.121  + pydantic-settings==2.16.0
+#13 4.121  + python-dotenv==1.2.4
+#13 4.121  + pyyaml==6.0.3
+#13 4.121  + sqlalchemy==2.1.5
+#13 4.121  + starlette==1.8.0
+#13 4.121  + structlog==26.1.0
+#13 4.121  + typing-extensions==4.16.0
+#13 4.121  + typing-inspection==0.4.4
+#13 4.121  + uvicorn==0.54.0
+#13 4.121  + uvloop==0.23.0
+#13 4.121  + watchfiles==1.3.0
+#13 4.121  + websockets==17.2
+#13 DONE 4.9s
+
+#14 [api base 6/9] COPY README.md ./
+#14 DONE 0.1s
+
+#15 [api base 7/9] COPY app ./app
+#15 DONE 0.1s
+
+#16 [api base 8/9] RUN uv sync --frozen --no-default-groups
+#16 0.678    Building pokemon-tracker-backend @ file:///srv
+#16 2.637       Built pokemon-tracker-backend @ file:///srv
+#16 2.639 Prepared 1 package in 1.96s
+#16 2.644 Installed 1 package in 4ms
+#16 3.029 Bytecode compiled 983 files in 379ms
+#16 3.029  + pokemon-tracker-backend==0.1.0 (from file:///srv)
+#16 DONE 3.3s
+
+#17 [api base 9/9] RUN useradd --create-home --uid 1000 tracker
+#17 DONE 0.4s
+
+#18 [api] exporting to image
+#18 exporting layers
+#18 exporting layers 1.2s done
+#18 writing image sha256:1f97338be06584788679f9d350f074445a1e43646b6cda9c2d94fec3f2cff00a done
+#18 naming to docker.io/library/pokemon_tracker-api 0.0s done
+#18 DONE 1.2s
+
+#19 [api] resolving provenance for metadata file
+#19 DONE 0.0s
+ api  Built
+ Network pokemon_tracker_default  Creating
+ Network pokemon_tracker_default  Created
+ Volume "pokemon_tracker_db-data"  Creating
+ Volume "pokemon_tracker_db-data"  Created
+ Container pokemon_tracker-db-1  Creating
+ Container pokemon_tracker-db-1  Created
+ Container pokemon_tracker-api-1  Creating
+ Container pokemon_tracker-api-1  Created
+ Container pokemon_tracker-db-1  Starting
+ Container pokemon_tracker-db-1  Started
+ Container pokemon_tracker-db-1  Waiting
+ Container pokemon_tracker-db-1  Healthy
+ Container pokemon_tracker-api-1  Starting
+ Container pokemon_tracker-api-1  Started

@@ -10,19 +10,19 @@ OCR-Modell: PP-OCRv6 (mitgeliefert, CH/EN/JP/Latein)
 - **Soll-Nummer im erkannten Text:** 5/7 (71 %)
 - Name automatisch geraten (Zonen-Heuristik): 1/7 (14 %)
 - Nummer automatisch geraten: 4/7 (57 %)
-- Ø Zeit pro Foto (Erkennung + OCR): 1441 ms
+- Ø Zeit pro Foto (Erkennung + OCR): 2692 ms
 
 ## Einzelergebnisse
 
 | Datei | Soll | Name im Text | Nummer im Text | Name geraten | Nummer geraten | Kontur | ms |
 |---|---|---|---|---|---|---|---|
-| 01.jpg | ゼニガメ · 007 | ✅ | ✅ | FSA | – | 0.57 | 2124 |
-| 02.jpg | Team Rockets Mewtu ex · 231/182 | ❌ | ✅ | TeamRocketsMewtu | 231/182 | 0.725 | 1558 |
-| 03.jpg | ルギアV · 110/098 | ✅ | ✅ | – | 110/098 | 0.615 | 1415 |
-| 04.jpg | ルギアV · 110/098 | ✅ | ❌ | – | – | 0.562 | 1193 |
-| 05.jpg | ブラッキーex · 217/187 | ❌ | ❌ | ブラッキ- | – | 0.636 | 1065 |
-| 06.jpg | ルギア · 142/103 | ✅ | ✅ | – | 142/103 | 0.72 | 1718 |
-| 07.jpg | 鲤鱼王 · 165/103 | ❌ | ✅ | – | 165/103 | 0.75 | 1014 |
+| 01.jpg | ゼニガメ · 007 | ✅ | ✅ | FSA | – | 0.57 | 4160 |
+| 02.jpg | Team Rockets Mewtu ex · 231/182 | ❌ | ✅ | TeamRocketsMewtu | 231/182 | 0.725 | 2115 |
+| 03.jpg | ルギアV · 110/098 | ✅ | ✅ | – | 110/098 | 0.615 | 1174 |
+| 04.jpg | ルギアV · 110/098 | ✅ | ❌ | – | – | 0.562 | 1151 |
+| 05.jpg | ブラッキーex · 217/187 | ❌ | ❌ | ブラッキ- | – | 0.636 | 1171 |
+| 06.jpg | ルギア · 142/103 | ✅ | ✅ | – | 142/103 | 0.72 | 7169 |
+| 07.jpg | 鲤鱼王 · 165/103 | ❌ | ✅ | – | 165/103 | 0.75 | 1905 |
 
 ## Erkannter Rohtext (ganzes Foto + Kartenausschnitt)
 
