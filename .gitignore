@@ -13,8 +13,7 @@ build/
 # Secrets
 .env
 
-# Scanner-Testfotos und Debug-Bilder (privat)
-scanner_testset/
+# Scanner-Debug-Bilder (werden bei jedem Lauf neu erzeugt)
 docs/spikes/scanner_debug/
 docs/spikes_ergebnisse.tar.gz
 

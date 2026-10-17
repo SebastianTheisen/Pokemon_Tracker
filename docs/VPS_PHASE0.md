@@ -25,7 +25,9 @@ Ist das Repo schon geklont, holst du nur den neuesten Stand:
 cd Pokemon_Tracker && git pull
 ```
 
-## 2. Testfotos vorbereiten (für den Scanner-Test)
+## 2. Testfotos (optional)
+
+Im Repo liegt bereits ein fester Testsatz mit 7 Fotos (`scanner_testset/`). Das Skript nutzt ihn automatisch, du musst nichts hochladen. Der folgende Abschnitt ist nur nötig, wenn du den Testsatz später erweitern willst.
 
 Ziel: **ca. 20 Fotos** mit dem Handy, so wie man später scannen würde. Bitte gemischt:
 

@@ -10,7 +10,7 @@ Stand: 17.10.2026 · Status: **Phase 0 läuft**
 
 | Phase | Status | Notiz |
 |---|---|---|
-| 0 – Spikes und Fundament | 🟡 in Arbeit | Alles vorbereitet, **wartet auf VPS-Lauf** (`docs/VPS_PHASE0.md`) |
+| 0 – Spikes und Fundament | 🟡 in Arbeit | Scanner ausgewertet. **Wartet auf:** Freigabe Scanner-Strategie + Datenquellen-Lauf (VPS oder Freigabe der Hosts) |
 | 1 – Backend-Kern | ⚪ offen | |
 | 2 – Preise | ⚪ offen | |
 | 3 – Sammlung, Merkliste, Dashboard | ⚪ offen | |
@@ -32,9 +32,11 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 - [x] Spike-Skript Datenquellen: `backend/scripts/spike_datasources.py` (TCGdex-Sprachabdeckung und Felder, pokemontcg.io, eine einzelne Cardmarket-Anfrage)
 - [x] Spike-Skript Scanner: `backend/scripts/spike_scanner.py` (Kartenerkennung, Entzerrung, RapidOCR, Name/Nummer, Trefferquote gegen `soll.csv`, Debug-Bilder). Rauchtest mit synthetischem Kartenfoto grün: Karte gefunden, Name und Nummer korrekt, ca. 330 ms
 - [x] VPS-Skript `deploy/phase0_vps.sh` + Anleitung `docs/VPS_PHASE0.md`. Hier einmal komplett durchgelaufen (Lint/Typen/Tests grün, Berichte erzeugt)
-- [ ] ⏳ **VPS-Lauf durch den Nutzer:** `bash deploy/phase0_vps.sh` mit ca. 20 Testfotos in `scanner_testset/`, Ergebnisse zurückschicken
-- [ ] Auswertung Spike Datenquellen (Go/No-Go). In der Cloud-Umgebung gesperrt (Proxy 403), deshalb Lauf auf dem VPS
-- [ ] Auswertung Spike Scanner mit echten Fotos (Go/No-Go)
+- [x] Testsatz: 7 Fotos des Nutzers liegen fest im Repo unter `scanner_testset/` (mit `soll.csv` und Beschreibung)
+- [x] Spike Scanner mit echten Fotos ausgeführt und ausgewertet → [`docs/spikes/scanner_auswertung.md`](docs/spikes/scanner_auswertung.md). Ergebnis: **Go mit Anpassung.** Konturerkennung allein reicht nicht (2/7 richtige Ausschnitte). Die Nummer per OCR ist sprachunabhängig gut lesbar (3 von 4 sichtbaren Fällen). Slab-Labels sind komplett lesbar. Japanische Namen sind mit dem Standardmodell nicht lesbar
+- [ ] ❓ **Entscheidung Nutzer:** angepasste Scanner-Strategie (Rahmen im Live-Scan; Identifikation über Setcode + Nummer, dann Bildabgleich; Name nur als Zusatz). Erst nach Freigabe ändere ich Plan-Abschnitt 5.6
+- [ ] 🔴 Spike Datenquellen ausführen und auswerten. In der Cloud-Umgebung gesperrt (Proxy 403). Entweder `bash deploy/phase0_vps.sh` auf dem VPS (ohne Fotos möglich) oder die Hosts in der Umgebung freigeben
+- [ ] Bildabgleich gegen Katalogbilder nachweisen (braucht TCGdex-Bilder, gleiche Sperre)
 - [ ] Docker-Build verifizieren (läuft im VPS-Skript mit, falls Docker installiert ist)
 - [ ] Spike Tailscale: laut Absprache verschoben, wird beim Deployment (Phase 6) getestet
 
@@ -48,6 +50,7 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 | 17.10.2026 | Vorhandener Ubuntu-VPS, 5–10 Nutzer, optionaler `CardmarketListingProvider` (ohne Tor/IP-Rotation) |
 | 17.10.2026 | Phase 0 gestartet: Backend-Gerüst, Tooling, CI, Docker, Spike-Skript Datenquellen |
 | 17.10.2026 | Scanner-Spike, VPS-Skript und Anleitung ergänzt. Phase 0 wartet auf den VPS-Lauf |
+| 17.10.2026 | Scanner-Spike mit 7 Nutzerfotos ausgewertet: Go mit Anpassung, Strategie-Vorschlag wartet auf Freigabe |
 
 ---
 
