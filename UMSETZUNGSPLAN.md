@@ -43,7 +43,8 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
   - **KO-Modell:** Der Test in Lauf 1 war wegen eines Testfehlers nicht aussagekräftig (Modell wird erst bei erkanntem Text geladen). Korrigiert, wird in Lauf 2 wiederholt
 - [x] Bildabgleich (SIFT + RANSAC) offline geprüft: gleiche Karte auf verschiedenen Fotos 184–192 Übereinstimmungen, andere Karten ≤ 20, ca. 60 ms pro Vergleich. Spike-Skript gegen TCGdex-Katalog geschrieben (`backend/scripts/spike_image_match.py`), offline mit simuliertem TCGdex getestet
 - [ ] ⏳ **VPS-Lauf 2 durch den Nutzer:** `git pull && bash deploy/phase0_vps.sh`, danach `git add docs/spikes && git commit -m "Phase 0: Ergebnisse Lauf 2" && git push`. Liefert: Preise und Bilder asiatischer Karten, Bildabgleich gegen den echten Katalog, KO-Modell, Docker
-- [ ] ❓ **Entscheidung Nutzer:** Cardmarket-Angebots-Provider streichen (Cloudflare-Sperre)? pokemontcg.io streichen?
+- [x] Entscheidung Nutzer (17.10.2026): Preise aus TCGdex + markierte Schätzung **und** Plug-in-Schnittstelle für weitere Quellen. Kein eigener Cardmarket-Abruf → Abschnitt 5.3 angepasst, Einstellung `PT_EXTRA_PRICE_PROVIDERS` statt `PT_CARDMARKET_LISTING_ENABLED`
+- [ ] ❓ Entscheidung Nutzer: pokemontcg.io streichen (HTTP 500, Daten auch in TCGdex)?
 - [ ] Abschluss Phase 0: Ergebnisse Lauf 2 auswerten, Go/No-Go je Spike
 - [ ] Spike Tailscale: laut Absprache verschoben, wird beim Deployment (Phase 6) getestet
 
@@ -60,6 +61,7 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 | 17.10.2026 | Scanner-Spike mit 7 Nutzerfotos ausgewertet: Go mit Anpassung, Strategie-Vorschlag wartet auf Freigabe |
 | 17.10.2026 | Strategie inkl. JP/KO-OCR freigegeben, Abschnitt 5.6 angepasst. Umstieg auf RapidOCR 3 (PP-OCRv6) |
 | 17.10.2026 | VPS-Lauf 1 ausgewertet (TCGdex Go, Cardmarket gesperrt, pokemontcg.io 500). Docker-Fehler behoben, Spike Bildabgleich + asiatische Preise ergänzt |
+| 17.10.2026 | Preisstrategie entschieden: TCGdex + Schätzung + Plug-in-Schnittstelle. `CardmarketListingProvider` entfällt |
 
 ---
 
@@ -76,7 +78,7 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 | Zugang für Freunde | **Tailscale** (Free-Plan). Das Backend ist nicht öffentlich erreichbar, Freunde nutzen Node-Sharing |
 | Nutzerverwaltung | Einladungscode + E-Mail/Passwort. Rollen: `user` und `admin` |
 | Datenschutz | Jeder sieht nur seine Sammlung. Der Admin sieht die Nutzerliste und darf jede Sammlung **lesend** einsehen (mit Audit-Log) |
-| Zustandspreise | Siehe Abschnitt 5.3 (kein Tor-Scraping, begründet dort) |
+| Zustandspreise | TCGdex-Trend als NM-Referenz × Zustandsfaktor (als Schätzung markiert), Eigenpreis, Plug-in-Schnittstelle für weitere Quellen (Abschnitt 5.3) |
 | eBay | Deep-Link zur eBay-Suche mit Filter „Verkaufte Artikel“, keine eigenen Verkaufsdaten |
 | KI-Chat | Entfällt (laufende Kosten) |
 | Kosten | Keine zusätzlichen (VPS ist vorhanden). Alle Dienste und Bibliotheken sind kostenlos |
@@ -272,34 +274,43 @@ Regeln:
 ### 5.3 Preise: belegt, geschätzt, manuell
 Grundregel wie im Original: **Wir erfinden keine Preise.** Jede Zahl trägt Typ, Quelle, Datum und Link.
 
+*Entscheidung 17.10.2026 nach dem Datenquellen-Spike: Cardmarket blockt schon die erste direkte Anfrage per Cloudflare. Umgesetzt werden deshalb (a) Preise aus TCGdex plus markierte Schätzung und (b) eine Plug-in-Schnittstelle für weitere Preisquellen. Ein eigener Cardmarket-Abruf (mit oder ohne Tor) ist nicht Teil des Projekts.*
+
 | Preis-Art | Herkunft | Anzeige |
 |---|---|---|
-| `verified` | Cardmarket-Felder aus TCGdex (Durchschnitt, Trend, günstigster Wert, 1/7/30-Tage-Schnitt, teils Reverse-Holo) | „Cardmarket · Preis vom TT.MM.JJJJ“ + Link |
-| `estimated` | Berechnet aus dem NM-Preis mal Zustandsfaktor (konfigurierbar, Standardtabelle) | deutlich als **„Schätzung“** markiert, nicht in den „belegten“ Summen versteckt |
+| `verified` | TCGdex-Felder `pricing.cardmarket.*` (siehe unten), Datum aus `updated`, Link aus `idProduct` | „Cardmarket · Stand TT.MM.JJJJ“ + Link zur Produktseite |
+| `estimated` | NM-Referenzpreis × Zustandsfaktor | deutlich als **„Schätzung“** markiert, nie als belegt summiert |
 | `manual` | Eigener Preis des Nutzers | „Dein Preis“ |
+| `external` | Optionale Plug-in-Quelle (siehe unten) | Name der Quelle + Datum + Link, wie vom Plug-in geliefert |
 
-Das Preissystem ist **austauschbar** gebaut (`PriceProvider`-Interface in `app/providers/`):
-- `TcgdexCardmarketProvider` (Standard, kostenlos, belegt).
-- `CardmarketListingProvider` (optional, siehe unten): erstes deutsches Angebot im gewählten Zustand.
-- `ConditionFactorEstimator` (Schätzung je Zustand, pro Nutzer anpassbar). Er greift nur, wenn es keinen belegten Zustandspreis gibt.
-- `ManualPriceProvider`.
-- **Optional:** `CardmarketApiProvider` für die offizielle Cardmarket-API (OAuth 1.0, Zugang muss bei Cardmarket beantragt werden und ist nicht garantiert). Er ist standardmäßig aus.
+**TCGdex-Felder und ihre Verwendung** (je Variante: normal bzw. `*-holo` für Holo/Reverse):
 
-**`CardmarketListingProvider`: zurückhaltendes Auslesen ohne Tor und ohne IP-Rotation**
+| Feld | Anzeige in der App | Verwendung |
+|---|---|---|
+| `trend` | **Marktpreis (Trend)** | Hauptwert und **NM-Referenz** für die Schätzung. Fallback: `avg30`, dann `avg` |
+| `low` | **Günstigstes Angebot** (beliebiger Zustand) | Info, nicht als NM-Preis verwenden. Im Spike: 220 € bei 1.806 € Trend |
+| `avg1`, `avg7`, `avg30` | Durchschnitt 1/7/30 Tage | Detailansicht und Preisverlauf |
 
-Ziel: Für Karte + Sprache + Zustand den Preis des ersten Angebots aus Deutschland lesen und als belegten Preis mit Link und Datum speichern.
+**Zustandsfaktoren (Standard, je Nutzer änderbar):** MT 1,05 · NM 1,00 · EX 0,85 · GD 0,70 · LP 0,55 · PL 0,40 · PO 0,25. Die Werte sind ein Startpunkt und werden im Einstellungsbereich offen angezeigt.
 
-Regeln:
-- **Nur bei Bedarf:** wenn ein Nutzer die Detailseite öffnet oder eine Karte in der Sammlung bzw. Merkliste liegt. Kein Durchkämmen des Katalogs.
-- **Cache:** ein Ergebnis gilt 24 Stunden. Der nächtliche Snapshot fragt nur Karten aus Sammlungen ab.
-- **Eine Warteschlange, eine IP (der VPS):** höchstens 1 Anfrage alle paar Sekunden, mit Zufallsabstand. Bei 5–10 Nutzern sind das wenige hundert Abrufe pro Tag.
-- **Keine Umgehung:** kein Tor, keine Proxy-Rotation, kein Captcha-Lösen, kein Fälschen von Browser-Fingerprints.
-- **Bei Sperre (403, Captcha, Cloudflare-Seite):** Der Provider schaltet sich für einige Stunden selbst ab und meldet das im Admin-Bereich. Die App fällt dann auf TCGdex-Preis plus Schätzung zurück.
-- **Schalter in `.env`:** standardmäßig aus. Du entscheidest, ob er läuft.
+**Gegradete Karten:** Ein belegter Preis kommt nur aus einer externen Quelle (Plug-in) oder als Eigenpreis. Eine Schätzung aus Rohkartenpreisen gibt es dafür nicht, weil Grading-Aufschläge zu stark schwanken.
 
-Hinweis: Auch dieses zurückhaltende Auslesen widerspricht den Nutzungsbedingungen von Cardmarket. Das Risiko (z. B. eine Sperre der VPS-IP) trägst du. Die Variante mit Tor und IP-Rotation pro Karte setze ich nicht um, weil ihr einziger Zweck ist, Cardmarkets Sperren zu umgehen.
+**Asiatische Karten:** Ob TCGdex dafür Preise liefert, prüft VPS-Lauf 2. Fehlen sie, gibt es keinen belegten Preis. Die App zeigt dann „kein belegter Preis“ und bietet den Eigenpreis an.
 
-Technik: `httpx` mit festem User-Agent, HTML-Parsing mit `selectolax`. Die Selektoren liegen gekapselt in einer Datei, damit Layoutänderungen nur eine Stelle betreffen. Gespeicherte HTML-Beispielseiten dienen als Testfälle.
+Das Preissystem ist **austauschbar** gebaut (`PriceProvider`-Protokoll in `app/providers/`):
+- `TcgdexCardmarketProvider`: Standard, kostenlos, belegt.
+- `ConditionFactorEstimator`: Schätzung je Zustand. Er greift nur, wenn keine Quelle einen belegten Zustandspreis liefert.
+- `ManualPriceProvider`: Eigenpreis.
+- **Plug-in-Schnittstelle für weitere Quellen** (`external`):
+  - Eine Quelle ist eine Python-Klasse, die das `PriceProvider`-Protokoll erfüllt. Eingebunden wird sie über `PT_EXTRA_PRICE_PROVIDERS` (Liste von Importpfaden, z. B. `meine_quelle.provider:MeinProvider`). Standard ist leer.
+  - Vertrag: Eingabe Karte/Produkt + Sprache + Variante + Zustand. Ausgabe `PricePoint` mit Wert, Währung, Zustand, Quelle, Datum und Beleglink. Kein Beleg heißt kein Preis.
+  - Absicherung im Kern:
+    - Timeout je Abruf.
+    - Fehler einer Quelle legen die App nicht lahm.
+    - Nach wiederholten Fehlern pausiert die Quelle automatisch, mit Hinweis im Admin-Bereich.
+    - Ergebnisse werden 24 Stunden gecacht.
+  - Für Inhalt, Rechtmäßigkeit und Nutzungsbedingungen einer eingebundenen Quelle ist ihr Betreiber verantwortlich. Das Projekt liefert selbst keine Quelle mit, die Zugangssperren umgeht.
+  - Kandidat für später: die **offizielle Cardmarket-API**, falls ein Zugang beantragt und gewährt wird.
 
 ### 5.4 Preis-Snapshots
 - Worker `price_snapshot` täglich (nachts):
@@ -470,8 +481,8 @@ Alle Aufwandsangaben sind grobe Schätzungen für einen Entwickler mit KI-Unters
 
 | Risiko | Auswirkung | Gegenmaßnahme |
 |---|---|---|
-| Keine freie Quelle für Zustandspreise | Zustandspreise nur geschätzt | Optionaler `CardmarketListingProvider`, sonst Schätzung klar markiert, manueller Eigenpreis, optionale offizielle Cardmarket-API |
-| Cardmarket sperrt die VPS-IP oder ändert das Layout | Keine Zustandspreise mehr | Provider schaltet sich selbst ab, Rückfall auf TCGdex + Schätzung, Selektoren an einer Stelle |
+| Keine freie Quelle für Zustandspreise | Zustandspreise nur geschätzt | Schätzung klar markiert, Eigenpreis, Plug-in-Schnittstelle (z. B. offizielle Cardmarket-API bei Zugang) |
+| Externe Plug-in-Quelle fällt aus | Keine externen Preise | Timeout, automatische Pause, Rückfall auf TCGdex + Schätzung, Hinweis im Admin-Bereich |
 | TCGdex/pokemontcg.io ändern API oder Limits | Ausfall von Katalog oder Preisen | Provider-Abstraktion, lokale Kopie des Katalogs, Caching |
 | OCR bei JP/KO/ZH und bei holografischen Karten schwach | Falsche oder keine Erkennung | Bildabgleich als zweites Signal, Kandidatenliste, „Selbst suchen“ |
 | Sprachabdeckung der Datenquellen lückenhaft | Karten fehlen | Phase-0-Spike, manuelles Anlegen von Karten |

@@ -37,9 +37,12 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = Field(default_factory=list)
 
-    cardmarket_listing_enabled: bool = Field(
-        default=False,
-        description="Optionalen Cardmarket-Angebots-Provider aktivieren (siehe Plan 5.3).",
+    extra_price_providers: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Importpfade zusätzlicher Preisquellen (Plug-ins), z. B. "
+            "'meine_quelle.provider:MeinProvider' (siehe Plan 5.3)."
+        ),
     )
 
 
