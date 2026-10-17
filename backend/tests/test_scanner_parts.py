@@ -382,6 +382,12 @@ def test_confidence_rules() -> None:
     assert ranked[0] is right
     assert is_confident(ranked)  # dieselbe Karte auf Chinesisch ist keine Konkurrenz
 
+    # Promo „132/M-P“: Setcode steckt hinter dem Schrägstrich → sicher.
+    promo_text = extract_text_features(lines("ピカチュウex", "132/M-P"))
+    promo = score_text(Candidate(_card("ピカチュウex", "132", set_id="M-P")), promo_text)
+    assert promo.set_code_match
+    assert is_confident([promo])
+
     # Nur Nummer + Name ohne Setgröße/Setcode → nicht sicher.
     weak_text = extract_text_features(lines("ゼニガメ", "No.007"))
     weak = score_text(Candidate(_card("ゼニガメ", "007", set_id="SV2a")), weak_text)

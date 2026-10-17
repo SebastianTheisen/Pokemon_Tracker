@@ -62,6 +62,13 @@ def test_set_code_variants_cover_ocr_confusion() -> None:
     assert set_code_variants("123") == set()
 
 
+def test_promo_total_counts_as_set_code() -> None:
+    # Testfoto des Nutzers: Pikachu ex „132/M-P“ (Mega-Promo, JP)
+    features = extract_text_features(lines("ピカチュウex", "J PROMO 132/M-P"))
+    assert [(hit.number, hit.total_code) for hit in features.numbers] == [("132", "M-P")]
+    assert {"m-p", "mp"} <= features.set_codes
+
+
 def test_parse_set_codes_includes_number_prefix() -> None:
     numbers = parse_numbers("DR231/182")
     assert {"dr", "s12"} <= parse_set_codes(["512 F 110/098 SR", "DR231/182"], numbers)

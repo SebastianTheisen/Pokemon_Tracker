@@ -155,7 +155,8 @@ def score_text(
             break
     if candidate.number_match and not candidate.total_match:
         reasons.append(f"Nummer {card.number} passt")
-    if card_set.external_id.casefold() in text.set_codes:
+    set_code = card_set.external_id.casefold()
+    if set_code in text.set_codes or set_code.replace("-", "") in text.set_codes:
         candidate.set_code_match = True
         reasons.append(f"Setcode {card_set.external_id}")
     candidate.name_score = name_similarity(text.names, card.name)

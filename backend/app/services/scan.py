@@ -206,7 +206,9 @@ class ScanService:
             if totals:
                 narrowing.append(CardSet.card_count_official.in_(totals))
             if set_codes:
-                narrowing.append(func.lower(CardSet.external_id).in_(set_codes))
+                narrowing.append(
+                    func.replace(func.lower(CardSet.external_id), "-", "").in_(set_codes)
+                )
             if languages and not totals:
                 narrowing.append(Card.language.in_(languages))
             statement = (

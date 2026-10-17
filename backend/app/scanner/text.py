@@ -283,7 +283,9 @@ def parse_set_codes(texts: Iterable[str], numbers: Iterable[NumberHit] = ()) -> 
         for token in _CODE_TOKEN.findall(normalize_text(text)):
             codes |= set_code_variants(token)
     codes |= {hit.prefix.casefold() for hit in numbers if hit.prefix}
-    return frozenset(codes)
+    # Promo-Nummern wie „132/M-P“ oder „001/SV-P“: der Teil hinter dem Schrägstrich ist das Set.
+    codes |= {hit.total_code.casefold() for hit in numbers if hit.total_code}
+    return frozenset(codes | {code.replace("-", "") for code in codes})
 
 
 # ------------------------------------------------------------------ Namen
