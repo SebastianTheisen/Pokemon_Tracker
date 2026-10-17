@@ -1,0 +1,30 @@
+name: App
+
+on:
+  push:
+    paths: ["app/**", ".github/workflows/app.yml"]
+  pull_request:
+    paths: ["app/**", ".github/workflows/app.yml"]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.7
+          channel: stable
+      - name: Abhängigkeiten
+        run: flutter pub get
+      - name: Format
+        run: dart format --output=none --set-exit-if-changed lib test
+      - name: Analyse
+        run: flutter analyze
+      - name: Tests
+        run: flutter test
+      - name: Web-Build
+        run: flutter build web --release --no-web-resources-cdn

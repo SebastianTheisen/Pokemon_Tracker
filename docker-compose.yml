@@ -22,8 +22,10 @@ services:
     env_file: .env
     environment:
       PT_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-tracker}:${POSTGRES_PASSWORD:-tracker}@db:5432/${POSTGRES_DB:-tracker}
+      PT_WEB_DIR: /srv/web
     volumes:
       - scanner-data:/data/scanner
+      - ./app/build/web:/srv/web:ro  # Flutter-Web-Build (PWA), gebaut von app-builder
     depends_on:
       db:
         condition: service_healthy
@@ -65,7 +67,18 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Nur zum Bauen der App: docker compose --profile build run --rm app-builder ...
+  app-builder:
+    build: ./deploy/app-builder
+    profiles: ["build"]
+    volumes:
+      - ./app:/work
+      - app-builder-cache:/cache          # pub- und Gradle-Cache (schnellere Builds)
+      - app-builder-android:/root/.android  # Signaturschlüssel: gleich bleibend → Updates installierbar
+
 volumes:
   db-data:
   scanner-data:
   tailscale-state:
+  app-builder-cache:
+  app-builder-android:

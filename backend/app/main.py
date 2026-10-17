@@ -15,6 +15,7 @@ from app import __version__
 from app.api.errors import register_error_handlers
 from app.api.limits import MULTIPART_OVERHEAD, UploadSizeLimit
 from app.api.v1 import api_router
+from app.api.web import mount_web_app
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import create_engine, create_session_factory
@@ -100,6 +101,7 @@ def create_app(
     app.add_middleware(UploadSizeLimit, prefix="/api/v1/scan", max_bytes=scan_upload_limit)
     register_error_handlers(app)
     app.include_router(api_router)
+    mount_web_app(app, settings.web_dir)  # zuletzt: fängt alle übrigen Pfade ab
     return app
 
 

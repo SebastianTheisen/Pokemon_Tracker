@@ -97,6 +97,12 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- App (Flutter-Web-Build) --------------------------------------------
+    web_dir: Path | None = Field(
+        default=None,
+        description="Ordner mit dem Flutter-Web-Build; wird unter / ausgeliefert (PWA).",
+    )
+
     # --- Scanner ------------------------------------------------------------
     scanner_data_dir: Path = Field(
         default=Path("data/scanner"),

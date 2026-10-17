@@ -2,7 +2,7 @@
 
 Eine private Sammel-App im Stil von SCNDX: Pokémon-Karten scannen, Sammlung verwalten, belegte Marktpreise sehen. Sie ist für den Freundeskreis gedacht und wird nicht veröffentlicht.
 
-Stand: 17.10.2026 · Status: **Phase 5 (Flutter-App „Kartenkiste“) in Arbeit – Schritt 1: Tailscale-Container**
+Stand: 17.10.2026 · Status: **Phase 5 (Flutter-App „Kartenkiste“) in Arbeit – App fertig, Build auf dem VPS und Gerätetest offen**
 
 ---
 
@@ -186,14 +186,16 @@ Entscheidungen (17.10.2026):
 - ~~Tailscale direkt auf dem VPS~~ → **revidiert:** Auf dem VPS läuft Tailscale schon für eine andere App (Gerät `gtcha`). Der erste Versuch hat dieses Gerät umbenannt (behoben, Skript benennt nie mehr um). **Entscheidung Nutzer:** Kartenkiste bekommt ein **eigenes Tailscale-Gerät „kartenkiste“ als Docker-Container** (`deploy/tailscale/serve.json`: HTTPS → `api:8000`). Vorteil: Freunde sehen per Node-Sharing nur Kartenkiste → Abschnitt 8.1
 - **Android-APK wird auf dem VPS per Docker gebaut** (Build-Container mit Android-SDK)
 
-- [ ] Schritt 1: Tailscale-Container „kartenkiste“ (Login, HTTPS über Serve-Konfiguration), Erreichbarkeit vom Handy prüfen
-- [ ] Flutter-Grundgerüst `app/` (Theme, Navigation mit zentralem Scan-Button, API-Client mit Token-Refresh)
-- [ ] Auth-Screens (Login, Registrierung mit Einladungscode, Passwort-Reset mit Admin-Code)
-- [ ] Dashboard, Suche, Karten-Detail (Preise, Verlauf, eBay-Link), Sammlung, Merkliste, Mehr-Menü
-- [ ] Scan-Screen (Kamera/Galerie, Ergebnis bestätigen/korrigieren, Stapel, Binder-Beta)
-- [ ] Admin-Screens (Nutzer, Einladungen, Sammlung einsehen)
-- [ ] Web-Build wird von der API unter `/` ausgeliefert (gleiche Adresse, kein CORS), PWA-Manifest und Icons
-- [ ] APK-Build-Container auf dem VPS
+- [x] Schritt 1: Tailscale-Container „kartenkiste“ ([`docs/phase5/tailscale.md`](docs/phase5/tailscale.md)): HTTPS im Tailnet, Health ✅, Gerät „gtcha“ der anderen App unverändert
+- [x] Flutter-Grundgerüst `app/` (Flutter 3.47.7, Riverpod 3, go_router): Navy-Theme, untere Navigation mit zentralem Scan-Button, API-Client mit automatischer Token-Erneuerung (eine gemeinsame Erneuerung für parallele Anfragen), Refresh-Token sicher gespeichert, Access-Token nur im Speicher. Modelle von Hand statt `freezed` (kein Code-Generator nötig)
+- [x] Auth-Screens: Anmelden, Registrieren mit Einladungscode, Passwort-Reset mit Admin-Code
+- [x] Übersicht (Wert, Veränderung, Kurve, Schnellaktionen, Kennzahlen, Aufteilung, Highlights), Suche (Sprachfilter, fehlende Karte anlegen), Karten-Detail (Zustandspreise mit „Schätzung“/„Beleg“, Quellen mit Datum und Link, Verlauf mit Tiefst-/Höchstpreis, eBay „Verkauft“), Sammlung (Filter, Sortierung, Ordner, Bearbeiten/Entfernen, Sets mit Fortschritt), Merkliste, Mehr (Profil, Zustandsfaktoren, Standardsprache, Geräte, Passwort)
+- [x] Scanner: Kamera/Galerie, Ergebnis mit Sicherheit und Begründung, Alternativen, „Selbst suchen“, Bestätigen (→ eigenes Referenzbild), Slab-Vorschlag beim Hinzufügen; Stapel-Scan und Binder-Scan (Beta)
+- [x] Admin: Nutzer (sperren, Rolle, Reset-Code, Sammlung lesend), Einladungen (Code nur einmal sichtbar, kopieren, widerrufen)
+- [x] Web-Build wird von der API unter `/` ausgeliefert (Rückfall auf `index.html` für App-Seiten, API-Fehler bleiben JSON, kein Cache für `index.html`/Service-Worker); PWA-Manifest und eigenes Icon (Kartenkiste)
+- [x] APK-Build-Container (`deploy/app-builder`, Flutter + Android-SDK + JDK 21, Caches und Signaturschlüssel in Volumes) und Skript `deploy/phase5_app.sh`; APK-Download unter `/kartenkiste.apk` (nur im Tailnet)
+- [x] Qualität: `flutter analyze` ohne Befund, **12 Flutter-Tests** (Login, Suche → Detail, kein erfundener Preis, Scan → Sammlung mit Slab, unsicherer Scan, Admin-Einladung, Rechte, Token-Erneuerung, Formatierung); Tests fanden 3 echte Fehler (Navigationsleiste belegte den ganzen Bildschirm, zu breite Auswahlfelder, zu früh freigegebene Eingabedialoge) → behoben. Backend: 316 Tests. CI-Workflow für die App
+- [ ] VPS: App bauen (`deploy/phase5_app.sh`)
 - [ ] Abnahme: Kern-Flows auf iPhone (PWA) und Android
 
 ### Änderungsprotokoll
@@ -224,6 +226,7 @@ Entscheidungen (17.10.2026):
 | 17.10.2026 | Entscheidung: Latenz-Tuning nach Phase 7. **Phase 4 abgeschlossen** |
 | 17.10.2026 | Phase 5 gestartet: App „Kartenkiste“, Tailscale vorgezogen und direkt auf dem VPS, APK-Build per Docker auf dem VPS |
 | 17.10.2026 | Tailscale-Fehler: erstes Skript hat das bestehende VPS-Gerät (andere App) umbenannt. Rückbau-Anleitung, Skript abgesichert; neu: eigenes Gerät „kartenkiste“ im Container |
+| 17.10.2026 | Tailscale-Container ✅. Flutter-App mit allen Kern-Screens, Tests, Web-Auslieferung durch die API, Build-Container für Web + APK |
 
 ---
 
