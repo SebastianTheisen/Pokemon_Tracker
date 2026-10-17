@@ -29,8 +29,10 @@ Json cardJson({
   String name = 'Nachtara VMAX',
   String number = '215',
   String language = 'de',
+  String? translatedName,
 }) => {
   'id': id,
+  'translated_name': translatedName,
   'external_id': 'swsh7-$number',
   'language': language,
   'name': name,

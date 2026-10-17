@@ -111,7 +111,7 @@ class _ItemFormState extends ConsumerState<ItemForm> {
   Widget build(BuildContext context) {
     final folders = ref.watch(foldersProvider).value ?? const <Folder>[];
     final card = widget.card ?? _item!.card;
-    final title = widget.card?.name ?? _item!.title;
+    final title = widget.card?.displayName ?? _item!.title;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SingleChildScrollView(

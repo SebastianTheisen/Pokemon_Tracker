@@ -19,6 +19,7 @@ from sqlalchemy import ColumnElement, Select, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Card, CardSet
+from app.services.card_names import foreign_search_terms
 from app.services.catalog_numbers import ParsedQuery, parse_query
 from app.services.errors import NotFoundError
 
@@ -85,7 +86,32 @@ async def search_cards(
         )
         return [SearchHit(card=card, score=1.0) for card in rows.unique()]
 
-    term = parsed.name.casefold()
+    # Deutsch/Englisch → auch asiatische Pokémon-Namen suchen („pikachu“ findet „ピカチュウ“).
+    hits: dict[uuid.UUID, SearchHit] = {}
+    for term in [parsed.name.casefold(), *foreign_search_terms(parsed.name)]:
+        for hit in await _hits_for_term(session, term, filters, result_language_filter, limit):
+            known = hits.get(hit.card.id)
+            if known is None or known.score < hit.score:
+                hits[hit.card.id] = hit
+    ordered = list(hits.values())
+    ordered.sort(
+        key=lambda hit: (
+            -hit.score,
+            -(hit.card.card_set.release_date.toordinal() if hit.card.card_set.release_date else 0),
+            hit.card.external_id or "",
+            hit.card.language,
+        )
+    )
+    return ordered[:limit]
+
+
+async def _hits_for_term(
+    session: AsyncSession,
+    term: str,
+    filters: list[ColumnElement[bool]],
+    result_language_filter: list[ColumnElement[bool]],
+    limit: int,
+) -> list[SearchHit]:
     score = _name_score(term)
 
     # 1) Beste Ähnlichkeit je TCGdex-ID (über alle Sprachen).
@@ -116,16 +142,7 @@ async def search_cards(
         .limit(limit)
     )
     hits += [SearchHit(card=card, score=float(hit_score)) for card, hit_score in own.unique()]
-
-    hits.sort(
-        key=lambda hit: (
-            -hit.score,
-            -(hit.card.card_set.release_date.toordinal() if hit.card.card_set.release_date else 0),
-            hit.card.external_id or "",
-            hit.card.language,
-        )
-    )
-    return hits[:limit]
+    return hits
 
 
 async def get_card(session: AsyncSession, card_id: uuid.UUID) -> Card:

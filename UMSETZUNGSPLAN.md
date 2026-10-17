@@ -198,6 +198,10 @@ Entscheidungen (17.10.2026):
 - [ ] VPS: App bauen (`deploy/phase5_app.sh`) – 1. Lauf: Web + APK gebaut (11 min), aber das Backend-Image war alt (Skript baute es nicht neu) → Startseite 404. Skript korrigiert. 2. Versuch: Startseite ✅, am iPhone aber nur weiße Seite → Ladeanzeige mit sichtbarer Fehlermeldung (statt weiß), Gzip-Kompression (App-Download 11 MB → 4 MB). Lokal mit echtem Backend im Browser durchgeklickt: Login, Übersicht, Sammlung, Suche, Merkliste, Mehr ✅
 - [x] Gerätetest 1 (iPhone): App läuft. **Rückmeldung Nutzer:** zu unübersichtlich – Startseite überladen/langweilig, Hinzufügen/Scannen umständlich. **Entscheidung:** „wie SCNDX, aber schlanker“, erst Vorschau-Bilder
 - [ ] Neues Design (Vorschau zur Freigabe): Startseite mit farbiger Wert-Karte, großem „Karte scannen“, Bilder-Reihen „Wertvollste Karten“/„Zuletzt hinzugefügt“; Scan-Ergebnis groß mit Preis und **ein Tipp „Hinzufügen“** (NM, 1×; Slab mit Note), danach „Nächste Karte“/„Rückgängig“; Alternativen und Begründung nur auf Wunsch; Hinzufügen-Formular nur Zustand + Anzahl („Weitere Angaben“ aufklappbar); Sammlung als Bilder-Raster; Preis-Erklärung verständlich. 13 App-Tests grün, mit echtem Backend und echter OCR im Browser durchgespielt
+- [x] **Rückmeldung Nutzer (Gerätetest 2):** Viele Kartenbilder fehlen (TCGdex: JA ~30 %, KO/ZH-CN 0 %), japanische Karten ohne Übersetzung schwer zu finden. **Entscheidungen:** eigene Fotos *nicht* als Kartenbild → **bessere Bildquelle suchen**; **Übersetzung über PokéAPI: ja**
+- [x] Scanner: Promo-Nummern wie „132/M-P“ zählen als Setcode (Karte des Nutzers: Pikachu ex Mega-Promo)
+- [x] Übersetzung: Pokémon-Namen aus PokéAPI (`app/data/species_names.json`, 1.025 Pokémon, DE/EN/JA/KO/ZH). Asiatische Karten zeigen den deutschen Namen („ピカチュウex“ → „Pikachu ex“, „ロケット団のミュウツーex“ → „Team Rockets Mewtu ex“) mit Original darunter; Suche „pikachu 132“ findet auch japanische, koreanische und chinesische Karten. Trainer/Energie bleiben unübersetzt
+- [ ] Bildquellen-Recherche: Kostenlose APIs mit JP-Bildern gibt es nicht (Master Setter, Scrydex, pokemontcgapi.com nur bezahlt/Test). **Vielversprechend: offizielle Kartendatenbanken** – JP `pokemon-card.com` (Such-API mit allen Karten inkl. Bild-URL), KO `pokemoncard.co.kr`, TW `asia.pokemon-card.com` (vom Open-Source-Projekt PTCG-database genutzt). Hinweis: pokemon-card.com untersagt die *Weiterverbreitung* der Bilder; Nutzung im privaten Kreis, Bilder direkt vom offiziellen Server laden (nicht kopieren/veröffentlichen). Spike auf dem VPS (`deploy/phase5_bildquellen.sh`) prüft Erreichbarkeit, Bild-URLs und Einbinden. ZH-CN: keine offizielle Datenbank gefunden
 - [ ] Abnahme: Kern-Flows auf iPhone (PWA) und Android
 
 ### Änderungsprotokoll
@@ -229,6 +233,7 @@ Entscheidungen (17.10.2026):
 | 17.10.2026 | Phase 5 gestartet: App „Kartenkiste“, Tailscale vorgezogen und direkt auf dem VPS, APK-Build per Docker auf dem VPS |
 | 17.10.2026 | Tailscale-Fehler: erstes Skript hat das bestehende VPS-Gerät (andere App) umbenannt. Rückbau-Anleitung, Skript abgesichert; neu: eigenes Gerät „kartenkiste“ im Container |
 | 17.10.2026 | Tailscale-Container ✅. Flutter-App mit allen Kern-Screens, Tests, Web-Auslieferung durch die API, Build-Container für Web + APK |
+| 18.10.2026 | Neues, schlankeres Design (Vorschau). Übersetzung asiatischer Kartennamen (PokéAPI) + mehrsprachige Suche. Recherche Bildquellen → Spike offizielle Datenbanken |
 
 ---
 

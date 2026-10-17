@@ -202,6 +202,7 @@ class CardInfo {
     this.externalId,
     this.imageUrl,
     this.rarity,
+    this.translatedName,
   });
 
   factory CardInfo.fromJson(Json json) => CardInfo(
@@ -214,6 +215,7 @@ class CardInfo {
     rarity: json.strOrNull('rarity'),
     source: json.str('source'),
     cardSet: SetSummary.fromJson(json.obj('card_set')),
+    translatedName: json.strOrNull('translated_name'),
   );
 
   final String id;
@@ -225,6 +227,15 @@ class CardInfo {
   final String? rarity;
   final String source; // tcgdex | user
   final SetSummary cardSet;
+
+  /// Deutscher Name bei japanischen, koreanischen und chinesischen Karten (sonst `null`).
+  final String? translatedName;
+
+  /// Lesbarer Name: übersetzt, falls vorhanden.
+  String get displayName => translatedName ?? name;
+
+  /// Originalname, wenn er sich vom angezeigten Namen unterscheidet (z. B. „ピカチュウex“).
+  String? get originalName => translatedName == null ? null : name;
 
   /// TCGdex liefert Bild-URLs ohne Endung; `low` für Listen, `high` für Details.
   String? image({bool high = false}) {
@@ -514,7 +525,7 @@ class CollectionItem {
   final ItemValue value;
   final DateTime createdAt;
 
-  String get title => card?.name ?? product?.name ?? '?';
+  String get title => card?.displayName ?? product?.name ?? '?';
 
   String get label {
     if (kind == 'graded') return '${gradingCompany ?? ''} ${grade ?? ''}'.trim();

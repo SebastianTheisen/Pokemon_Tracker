@@ -168,13 +168,13 @@ class CardTile extends StatelessWidget {
     leading: CardImage(url: card.image(), width: 40),
     title: Row(
       children: [
-        Flexible(child: Text(card.name, overflow: TextOverflow.ellipsis)),
+        Flexible(child: Text(card.displayName, overflow: TextOverflow.ellipsis)),
         const SizedBox(width: 6),
         Tag(languageTag(card.language)),
       ],
     ),
     subtitle: Text(
-      card.subtitle,
+      [?card.originalName, card.subtitle].join(' · '),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: const TextStyle(color: AppColors.textMuted),

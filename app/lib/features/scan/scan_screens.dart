@@ -70,7 +70,7 @@ Future<bool> addScanToWishlist(
   });
   if (ok && context.mounted) {
     ref.invalidate(wishlistProvider);
-    showMessage(context, '${card.name} steht auf der Merkliste.');
+    showMessage(context, '${card.displayName} steht auf der Merkliste.');
   }
   return ok;
 }
@@ -217,13 +217,13 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
           ),
           const SizedBox(height: 10),
           Text(
-            selected.name,
+            selected.displayName,
             key: const Key('scan-card-name'),
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
           Text(
-            '${selected.subtitle} · ${languageTag(selected.language)}',
+            [?selected.originalName, selected.subtitle, languageTag(selected.language)].join(' · '),
             textAlign: TextAlign.center,
             style: const TextStyle(color: AppColors.textMuted),
           ),
@@ -397,7 +397,7 @@ class _AlternativeThumb extends StatelessWidget {
         children: [
           CardImage(url: match.card.image(), width: 96),
           const SizedBox(height: 4),
-          Text(match.card.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+          Text(match.card.displayName, maxLines: 1, overflow: TextOverflow.ellipsis),
           Text(
             '${match.card.number} · ${languageTag(match.card.language)}',
             style: const TextStyle(color: AppColors.textMuted, fontSize: 11),

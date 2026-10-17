@@ -5,9 +5,10 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
 
 from app.models import CardSource
+from app.services.card_names import translate_card_name
 
 
 class SetOut(BaseModel):
@@ -46,6 +47,12 @@ class CardOut(BaseModel):
     rarity: str | None
     source: CardSource
     card_set: SetSummary
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def translated_name(self) -> str | None:
+        """Deutscher Name bei japanischen, koreanischen und chinesischen Karten."""
+        return translate_card_name(self.name, self.language)
 
 
 class SearchHitOut(BaseModel):

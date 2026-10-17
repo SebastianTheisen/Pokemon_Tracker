@@ -159,6 +159,33 @@ void main() {
     expect(api.lastItemBody?['quantity'], 2);
   });
 
+  testWidgets('Japanische Karte zeigt deutschen Namen und Original', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..scanResult = {
+        ...scanJson(),
+        'best': {
+          'card': cardJson(
+            id: 'jp1',
+            name: 'ピカチュウex',
+            number: '132',
+            language: 'ja',
+            translatedName: 'Pikachu ex',
+          ),
+          'confidence': 1.0,
+          'reasons': <String>[],
+          'image_inliers': null,
+        },
+      };
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('scan-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scan-gallery')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pikachu ex'), findsOneWidget);
+    expect(find.textContaining('ピカチュウex · Drachenwandel · 132'), findsOneWidget);
+  });
+
   testWidgets('Admin erzeugt Einladung und sieht den Code', (tester) async {
     final api = FakeApi(loggedIn: true, role: 'admin');
     await pumpApp(tester, api);

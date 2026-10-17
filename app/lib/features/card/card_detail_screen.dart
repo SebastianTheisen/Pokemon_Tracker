@@ -67,7 +67,7 @@ class CardDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final card = ref.watch(cardProvider(cardId));
     return Scaffold(
-      appBar: AppBar(title: Text(card.value?.name ?? 'Karte')),
+      appBar: AppBar(title: Text(card.value?.displayName ?? 'Karte')),
       body: AsyncBody(
         value: card,
         onRetry: () => ref.invalidate(cardProvider(cardId)),
@@ -155,10 +155,12 @@ class _CardBodyState extends ConsumerState<_CardBody> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        card.name,
+                        card.displayName,
                         style: Theme.of(context).textTheme.titleLarge
                             ?.copyWith(fontWeight: FontWeight.bold),
                       ),
+                      if (card.originalName != null)
+                        Text(card.originalName!, style: const TextStyle(fontSize: 16)),
                       const SizedBox(height: 4),
                       Text(card.cardSet.name, style: const TextStyle(color: AppColors.textMuted)),
                       Text(
