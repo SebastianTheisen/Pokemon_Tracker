@@ -3,17 +3,17 @@ Compose can now delegate builds to bake for better performance.
 #0 building with "default" instance using docker driver
 
 #1 [app-builder internal] load build definition from Dockerfile
-#1 transferring dockerfile: 2.03kB done
-#1 DONE 0.0s
+#1 transferring dockerfile: 2.03kB 0.0s done
+#1 DONE 0.1s
 
 #2 [app-builder] resolve image config for docker-image://docker.io/docker/dockerfile:1
-#2 DONE 0.5s
+#2 DONE 0.8s
 
 #3 [app-builder] docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 #3 CACHED
 
 #4 [app-builder internal] load metadata for docker.io/library/ubuntu:24.04
-#4 DONE 0.4s
+#4 DONE 0.7s
 
 #5 [app-builder internal] load .dockerignore
 #5 transferring context: 2B done
@@ -26,164 +26,22 @@ Compose can now delegate builds to bake for better performance.
 #7 CACHED
 
 #8 [app-builder 3/6] RUN curl -fsSL "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.47.7-stable.tar.xz"     | tar -xJ -C /opt     && git config --global --add safe.directory /opt/flutter     && flutter config --no-analytics --no-cli-animations >/dev/null
-#8 89.35    Woah! You appear to be trying to run flutter as root.
-#8 89.35    We strongly recommend running the flutter tool without superuser privileges.
-#8 89.35   /
-#8 89.35 📎
-#8 DONE 91.9s
+#8 CACHED
 
 #9 [app-builder 4/6] RUN set -eux;     tools="$(curl -fsSL https://dl.google.com/android/repository/repository2-3.xml       | grep -o 'commandlinetools-linux-[0-9]*_latest.zip' | sort -V | tail -1)";     mkdir -p "/opt/android-sdk/cmdline-tools";     curl -fsSL -o /tmp/tools.zip "https://dl.google.com/android/repository/${tools}";     unzip -q /tmp/tools.zip -d "/opt/android-sdk/cmdline-tools";     mv "/opt/android-sdk/cmdline-tools/cmdline-tools" "/opt/android-sdk/cmdline-tools/latest";     rm /tmp/tools.zip;     yes | sdkmanager --licenses >/dev/null;     sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0" >/dev/null
-#9 0.233 + curl -fsSL https://dl.google.com/android/repository/repository2-3.xml
-#9 0.234 + grep -o commandlinetools-linux-[0-9]*_latest.zip
-#9 0.234 + sort -V
-#9 0.234 + tail -1
-#9 0.321 + tools=commandlinetools-linux-16111833_latest.zip
-#9 0.321 + mkdir -p /opt/android-sdk/cmdline-tools
-#9 0.324 + curl -fsSL -o /tmp/tools.zip https://dl.google.com/android/repository/commandlinetools-linux-16111833_latest.zip
-#9 5.296 + unzip -q /tmp/tools.zip -d /opt/android-sdk/cmdline-tools
-#9 6.290 + mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest
-#9 6.292 + rm /tmp/tools.zip
-#9 6.312 + yes
-#9 6.313 + sdkmanager --licenses
-#9 6.315 WARNING: The SDK Manager CLI tool (sdkmanager) is deprecated. Android CLI will be used instead.
-#9 6.315 The 'android' binary can also be found in the cmdline-tools directory, and 'android sdk' is the replacement for 'sdkmanager'.
-#9 6.315 To learn more about the Android CLI and how to use it, see the documentation (https://d.android.com/tools/agents/android-cli)
-#9 6.315 
-#9 6.315 Warning: The --licenses option is no longer needed.
-#9 6.316 + sdkmanager --install platform-tools platforms;android-36 build-tools;36.0.0
-#9 6.318 WARNING: The SDK Manager CLI tool (sdkmanager) is deprecated. Android CLI will be used instead.
-#9 6.318 The 'android' binary can also be found in the cmdline-tools directory, and 'android sdk' is the replacement for 'sdkmanager'.
-#9 6.318 To learn more about the Android CLI and how to use it, see the documentation (https://d.android.com/tools/agents/android-cli)
-#9 6.318 
-#9 6.326 Downloading Android CLI...
-#9 8.812 Unpacking embedded installation...
-#9 9.980 
-#9 9.982 Terms of Service and License Agreement for the Android Software Development Kit
-#9 9.982 
-#9 9.982 https://developer.android.com/studio/terms
-#9 9.982 
-#9 9.982 Google collects usage data for the Android CLI, such as commands, sub-commands, and flags used. This data does not include custom parameters or identifiable information. This information helps improve the tool and is collected in accordance with Google's Privacy Policy.
-#9 9.982 
-#9 9.982 https://policies.google.com/privacy
-#9 9.982 
-#9 9.982 Disable Android CLI metrics collection by using the --no-metrics flag.
-#9 9.982 
-#9 9.982 Tip: For the best experience using Android CLI with agents, we strongly recommend running android init to install the necessary skills and resources.
-#9 24.38 Oct 17, 2026 6:44:12 PM java.util.prefs.FileSystemPreferences setupUserRoot
-#9 24.38 INFO: Created user preferences directory.
-#9 DONE 25.0s
+#9 CACHED
 
 #10 [app-builder 5/6] RUN flutter precache --android --web >/dev/null && flutter doctor -v | head -40
-#10 0.215    Woah! You appear to be trying to run flutter as root.
-#10 0.215    We strongly recommend running the flutter tool without superuser privileges.
-#10 0.215   /
-#10 0.215 📎
-#10 9.193    Woah! You appear to be trying to run flutter as root.
-#10 9.193    We strongly recommend running the flutter tool without superuser privileges.
-#10 9.193   /
-#10 9.193 📎
-#10 9.869 [✓] Flutter (Channel stable, 3.47.7, on Ubuntu 24.04.5 LTS 5.4.0-216-lowlatency, locale en_US) [103ms]
-#10 9.869     • Flutter version 3.47.7 on channel stable at /opt/flutter
-#10 9.869     • Upstream repository https://github.com/flutter/flutter.git
-#10 9.869     • Framework revision abaf9c5237 (9 days ago), 2026-10-08 09:51:21 -0700
-#10 9.869     • Engine revision deb287481e
-#10 9.869     • Dart version 3.13.5
-#10 9.869     • DevTools version 2.60.0
-#10 9.869     • Feature flags: enable-web, enable-linux-desktop, enable-macos-desktop, enable-windows-desktop, enable-android, enable-ios, no-cli-animations, enable-native-assets, enable-record-use, enable-swift-package-manager, omit-legacy-version-file, enable-lldb-debugging, enable-uiscene-migration
-#10 9.869 
-#10 9.869 [✓] Android toolchain - develop for Android devices (Android SDK version 36.0.0) [313ms]
-#10 9.869     • Android SDK at /opt/android-sdk
-#10 9.869     • Emulator version unknown
-#10 9.869     • Platform android-36, build-tools 36.0.0
-#10 9.869     • ANDROID_HOME = /opt/android-sdk
-#10 9.869     • ANDROID_SDK_ROOT = /opt/android-sdk
-#10 9.869     • Java binary at: /usr/bin/java
-#10 9.869       This JDK was found in the system PATH.
-#10 9.869       To manually set the JDK path, use: `flutter config --jdk-dir="path/to/jdk"`.
-#10 9.869     • Java version OpenJDK Runtime Environment (build 21.0.12.1+1-1-24.04.4-Ubuntu)
-#10 9.869     • All Android licenses accepted.
-#10 9.869 
-#10 9.869 [✗] Chrome - develop for the web (Cannot find Chrome executable at google-chrome) [130ms]
-#10 9.869     ! Cannot find Chrome. Try setting CHROME_EXECUTABLE to a Chrome executable.
-#10 9.869 
-#10 9.869 [✗] Linux toolchain - develop for Linux desktop [149ms]
-#10 9.869     ✗ clang++ is required for Linux development.
-#10 9.869       It is likely available from your distribution (e.g.: apt install clang), or can be downloaded from https://releases.llvm.org/
-#10 9.869     ✗ CMake is required for Linux development.
-#10 9.869       It is likely available from your distribution (e.g.: apt install cmake), or can be downloaded from https://cmake.org/download/
-#10 9.869     ✗ ninja is required for Linux development.
-#10 9.869       It is likely available from your distribution (e.g.: apt install ninja-build), or can be downloaded from https://github.com/ninja-build/ninja/releases
-#10 9.869     ✗ pkg-config is required for Linux development.
-#10 9.869       It is likely available from your distribution (e.g.: apt install pkg-config), or can be downloaded from https://www.freedesktop.org/wiki/Software/pkg-config/
-#10 9.869 
-#10 9.869 [✓] Connected device (1 available) [276ms]
-#10 9.869     • Linux (desktop) • linux • linux-x64 • Ubuntu 24.04.5 LTS 5.4.0-216-lowlatency
-#10 9.869 
-#10 9.869 [✓] Network resources [365ms]
-#10 9.869     • All expected network resources are available.
-#10 9.869 
-#10 9.877 Unhandled exception:
-#10 9.877 FileSystemException: writeFrom failed, path = '' (OS Error: Broken pipe, errno = 32)
-#10 9.877 #0      _RandomAccessFile.writeFromSync (dart:io/file_impl.dart:999:7)
-#10 9.877 #1      _StdConsumer.addStream.<anonymous closure> (dart:io/stdio.dart:328:17)
-#10 9.877 #2      _rootRunUnary (dart:async/zone_root.dart:56:13)
-#10 9.877 #3      _CustomZone.runUnary (dart:async/zone.dart:816:35)
-#10 9.877 #4      _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
-#10 9.877 #5      _BufferingStreamSubscription._sendData (dart:async/stream_impl.dart:381:11)
-#10 9.877 #6      _BufferingStreamSubscription._add (dart:async/stream_impl.dart:312:7)
-#10 9.877 #7      _SyncStreamControllerDispatch._sendData (dart:async/stream_controller.dart:798:19)
-#10 9.877 #8      _StreamController._add (dart:async/stream_controller.dart:663:7)
-#10 9.877 #9      _StreamController.add (dart:async/stream_controller.dart:618:5)
-#10 9.877 #10     _StreamSinkImpl.add (dart:io/io_sink.dart:155:17)
-#10 9.877 #11     _IOSinkImpl.write (dart:io/io_sink.dart:293:5)
-#10 9.877 #12     _StdSink._write (dart:io/stdio.dart:431:13)
-#10 9.877 #13     _StdSink.write (dart:io/stdio.dart:440:33)
-#10 9.877 #14     Stdio._stdioWrite.<anonymous closure> (package:flutter_tools/src/base/io.dart:328:14)
-#10 9.877 #15     asyncGuard.<anonymous closure> (package:flutter_tools/src/base/async_guard.dart:108:32)
-#10 9.877 #16     _rootRun (dart:async/zone_root.dart:35:13)
-#10 9.877 #17     _CustomZone.run (dart:async/zone.dart:810:35)
-#10 9.877 #18     _runZoned (dart:async/zone_api.dart:165:6)
-#10 9.877 #19     runZonedGuarded (dart:async/zone_api.dart:151:12)
-#10 9.877 #20     asyncGuard (package:flutter_tools/src/base/async_guard.dart:106:3)
-#10 9.877 #21     Stdio._stdioWrite (package:flutter_tools/src/base/io.dart:326:5)
-#10 9.877 #22     Stdio.stdoutWrite (package:flutter_tools/src/base/io.dart:312:7)
-#10 9.877 #23     StdoutLogger.writeToStdOut (package:flutter_tools/src/base/logger.dart:557:48)
-#10 9.877 #24     StdoutLogger.printStatus (package:flutter_tools/src/base/logger.dart:539:5)
-#10 9.877 #25     Doctor.diagnose (package:flutter_tools/src/doctor.dart:456:15)
-#10 9.877 <asynchronous suspension>
-#10 9.877 #26     DoctorCommand.runCommand (package:flutter_tools/src/commands/doctor.dart:59:9)
-#10 9.877 <asynchronous suspension>
-#10 9.877 #27     FlutterCommand.run.<anonymous closure> (package:flutter_tools/src/runner/flutter_command.dart:1663:27)
-#10 9.877 <asynchronous suspension>
-#10 9.877 #28     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
-#10 9.877 <asynchronous suspension>
-#10 9.877 #29     CommandRunner.runCommand (package:args/command_runner.dart:212:13)
-#10 9.877 <asynchronous suspension>
-#10 9.877 #30     FlutterCommandRunner.runCommand.<anonymous closure> (package:flutter_tools/src/runner/flutter_command_runner.dart:496:9)
-#10 9.877 <asynchronous suspension>
-#10 9.877 #31     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
-#10 9.877 <asynchronous suspension>
-#10 9.877 #32     FlutterCommandRunner.runCommand (package:flutter_tools/src/runner/flutter_command_runner.dart:431:5)
-#10 9.877 <asynchronous suspension>
-#10 9.877 #33     FlutterCommandRunner.run.<anonymous closure> (package:flutter_tools/src/runner/flutter_command_runner.dart:307:33)
-#10 9.877 <asynchronous suspension>
-#10 9.877 #34     run.<anonymous closure>.<anonymous closure> (package:flutter_tools/runner.dart:104:11)
-#10 9.877 <asynchronous suspension>
-#10 9.877 #35     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
-#10 9.877 <asynchronous suspension>
-#10 9.877 #36     main (package:flutter_tools/executable.dart:103:3)
-#10 9.877 <asynchronous suspension>
-#10 DONE 10.1s
+#10 CACHED
 
 #11 [app-builder 6/6] WORKDIR /work
-#11 DONE 0.1s
+#11 CACHED
 
 #12 [app-builder] exporting to image
-#12 exporting layers
-#12 exporting layers 8.9s done
-#12 writing image sha256:400ea27886ac6a1e48c99866bf0ce8b740477314e15b7aa439f25718e6f0e264 done
+#12 exporting layers done
+#12 writing image sha256:400ea27886ac6a1e48c99866bf0ce8b740477314e15b7aa439f25718e6f0e264 0.0s done
 #12 naming to docker.io/library/pokemon_tracker-app-builder done
-#12 DONE 8.9s
+#12 DONE 0.1s
 
 #13 [app-builder] resolving provenance for metadata file
 #13 DONE 0.0s
