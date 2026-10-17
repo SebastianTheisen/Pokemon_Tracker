@@ -14,14 +14,15 @@ Stand: 17.10.2026 · Status: Planung (noch kein Code)
 | Backend | **Python 3.12**, FastAPI, SQLAlchemy 2 (async), Alembic, Pydantic v2, PostgreSQL |
 | Scanner | Serverseitig in Python: OpenCV (Kartenerkennung) + OCR + Bild-Matching, alles lokal und kostenlos |
 | Karten-/Preisdaten | **TCGdex** (mehrsprachig, Cardmarket-Preisfelder) und **pokemontcg.io** als Ergänzung. Preise gelten nur mit Quelle, Datum und Link |
-| Hosting | Kleiner VPS (z. B. Hetzner) mit Docker Compose |
+| Hosting | **Vorhandener VPS (Ubuntu)** mit Docker Compose |
+| Nutzerzahl | **5–10 Nutzer** (Freundeskreis) |
 | Zugang für Freunde | **Tailscale** (Free-Plan). Das Backend ist nicht öffentlich erreichbar, Freunde nutzen Node-Sharing |
 | Nutzerverwaltung | Einladungscode + E-Mail/Passwort. Rollen: `user` und `admin` |
 | Datenschutz | Jeder sieht nur seine Sammlung. Der Admin sieht die Nutzerliste und darf jede Sammlung **lesend** einsehen (mit Audit-Log) |
 | Zustandspreise | Siehe Abschnitt 5.3 (kein Tor-Scraping, begründet dort) |
 | eBay | Deep-Link zur eBay-Suche mit Filter „Verkaufte Artikel“, keine eigenen Verkaufsdaten |
 | KI-Chat | Entfällt (laufende Kosten) |
-| Kosten | Nur der VPS (ca. 4–5 €/Monat). Alle Dienste und Bibliotheken sind kostenlos |
+| Kosten | Keine zusätzlichen (VPS ist vorhanden). Alle Dienste und Bibliotheken sind kostenlos |
 
 Abgrenzung: Wir bauen die **Funktionen** nach. Code, Name, Logo, Icon, Texte und Screenshots von SCNDX übernehmen wir **nicht**. Kartenbilder und -namen gehören den Rechteinhabern (The Pokémon Company). Das Projekt bleibt privat.
 
@@ -220,17 +221,28 @@ Grundregel wie im Original: **Wir erfinden keine Preise.** Jede Zahl trägt Typ,
 | `estimated` | Berechnet aus dem NM-Preis mal Zustandsfaktor (konfigurierbar, Standardtabelle) | deutlich als **„Schätzung“** markiert, nicht in den „belegten“ Summen versteckt |
 | `manual` | Eigener Preis des Nutzers | „Dein Preis“ |
 
-**Zustandspreise aus Cardmarket-Angebotslisten per Tor-Scraping: nicht Teil des Plans.**
-Die Idee war: pro Karte das erste deutsche Angebot im passenden Zustand lesen und dabei über Tor mit wechselnden IPs arbeiten. Das setze ich nicht um, aus drei Gründen:
-1. Cardmarket verbietet automatisiertes Auslesen in seinen Nutzungsbedingungen. Die IP-Rotation dient allein dazu, Sperren und Bot-Erkennung zu umgehen.
-2. Es ist fragil: Cloudflare/Captchas, Layoutänderungen und blockierte Tor-Exit-Nodes führen zu ständigen Ausfällen. Tor-Exits sind bei solchen Seiten meist gesperrt.
-3. Es belastet das Tor-Netz unnötig und riskiert eine Sperre der Zugangsdaten und des VPS-Netzes.
-
-Stattdessen ist das Preissystem **austauschbar** gebaut (`PriceProvider`-Interface in `app/providers/`):
+Das Preissystem ist **austauschbar** gebaut (`PriceProvider`-Interface in `app/providers/`):
 - `TcgdexCardmarketProvider` (Standard, kostenlos, belegt).
-- `ConditionFactorEstimator` (Schätzung je Zustand, pro Nutzer anpassbar).
+- `CardmarketListingProvider` (optional, siehe unten): erstes deutsches Angebot im gewählten Zustand.
+- `ConditionFactorEstimator` (Schätzung je Zustand, pro Nutzer anpassbar). Er greift nur, wenn es keinen belegten Zustandspreis gibt.
 - `ManualPriceProvider`.
-- **Optional:** `CardmarketApiProvider` für die offizielle Cardmarket-API (OAuth 1.0, Zugang muss bei Cardmarket beantragt werden und ist nicht garantiert). Er ist standardmäßig aus. Wer Zugangsdaten bekommt, trägt sie in `.env` ein, und die Zustandspreise werden dann wie ein belegter Preis geführt.
+- **Optional:** `CardmarketApiProvider` für die offizielle Cardmarket-API (OAuth 1.0, Zugang muss bei Cardmarket beantragt werden und ist nicht garantiert). Er ist standardmäßig aus.
+
+**`CardmarketListingProvider`: zurückhaltendes Auslesen ohne Tor und ohne IP-Rotation**
+
+Ziel: Für Karte + Sprache + Zustand den Preis des ersten Angebots aus Deutschland lesen und als belegten Preis mit Link und Datum speichern.
+
+Regeln:
+- **Nur bei Bedarf:** wenn ein Nutzer die Detailseite öffnet oder eine Karte in der Sammlung bzw. Merkliste liegt. Kein Durchkämmen des Katalogs.
+- **Cache:** ein Ergebnis gilt 24 Stunden. Der nächtliche Snapshot fragt nur Karten aus Sammlungen ab.
+- **Eine Warteschlange, eine IP (der VPS):** höchstens 1 Anfrage alle paar Sekunden, mit Zufallsabstand. Bei 5–10 Nutzern sind das wenige hundert Abrufe pro Tag.
+- **Keine Umgehung:** kein Tor, keine Proxy-Rotation, kein Captcha-Lösen, kein Fälschen von Browser-Fingerprints.
+- **Bei Sperre (403, Captcha, Cloudflare-Seite):** Der Provider schaltet sich für einige Stunden selbst ab und meldet das im Admin-Bereich. Die App fällt dann auf TCGdex-Preis plus Schätzung zurück.
+- **Schalter in `.env`:** standardmäßig aus. Du entscheidest, ob er läuft.
+
+Hinweis: Auch dieses zurückhaltende Auslesen widerspricht den Nutzungsbedingungen von Cardmarket. Das Risiko (z. B. eine Sperre der VPS-IP) trägst du. Die Variante mit Tor und IP-Rotation pro Karte setze ich nicht um, weil ihr einziger Zweck ist, Cardmarkets Sperren zu umgehen.
+
+Technik: `httpx` mit festem User-Agent, HTML-Parsing mit `selectolax`. Die Selektoren liegen gekapselt in einer Datei, damit Layoutänderungen nur eine Stelle betreffen. Gespeicherte HTML-Beispielseiten dienen als Testfälle.
 
 ### 5.4 Preis-Snapshots
 - Worker `price_snapshot` täglich (nachts):
@@ -293,7 +305,7 @@ Konventionen: OpenAPI-Schema aus FastAPI, Pagination per Cursor, einheitliches F
 
 ---
 
-## 8. Deployment und Verteilung (kostenlos außer VPS)
+## 8. Deployment und Verteilung (kostenlos, vorhandener Ubuntu-VPS)
 
 ### 8.1 Server
 - Docker Compose mit den Diensten `db` (Postgres), `api`, `worker` und `tailscale` (Sidecar).
@@ -386,7 +398,8 @@ Alle Aufwandsangaben sind grobe Schätzungen für einen Entwickler mit KI-Unters
 
 | Risiko | Auswirkung | Gegenmaßnahme |
 |---|---|---|
-| Keine freie Quelle für Zustandspreise | Zustandspreise nur geschätzt | Schätzung klar markiert, manueller Eigenpreis, optionale offizielle Cardmarket-API |
+| Keine freie Quelle für Zustandspreise | Zustandspreise nur geschätzt | Optionaler `CardmarketListingProvider`, sonst Schätzung klar markiert, manueller Eigenpreis, optionale offizielle Cardmarket-API |
+| Cardmarket sperrt die VPS-IP oder ändert das Layout | Keine Zustandspreise mehr | Provider schaltet sich selbst ab, Rückfall auf TCGdex + Schätzung, Selektoren an einer Stelle |
 | TCGdex/pokemontcg.io ändern API oder Limits | Ausfall von Katalog oder Preisen | Provider-Abstraktion, lokale Kopie des Katalogs, Caching |
 | OCR bei JP/KO/ZH und bei holografischen Karten schwach | Falsche oder keine Erkennung | Bildabgleich als zweites Signal, Kandidatenliste, „Selbst suchen“ |
 | Sprachabdeckung der Datenquellen lückenhaft | Karten fehlen | Phase-0-Spike, manuelles Anlegen von Karten |
@@ -405,7 +418,8 @@ Diese Annahmen habe ich getroffen. Sie lassen sich leicht ändern:
 2. Das Währungs-Format ist EUR. Preise stammen vom europäischen Markt (Cardmarket).
 3. Der **erste Admin** wird beim Setup per CLI-Befehl angelegt, weitere Admins ernennt der Admin.
 4. Es gibt **kein Wochen-Kontingent** für Scans, nur ein großzügiges Missbrauchs-Limit.
-5. Ein VPS mit mindestens 2 vCPU und 4 GB RAM reicht für Backend, DB und OCR.
+5. Der vorhandene Ubuntu-VPS reicht für Backend, DB und OCR (Richtwert: mindestens 2 vCPU und 4 GB RAM). Docker und Tailscale werden dort installiert.
+8. Es gibt höchstens 5–10 Nutzer. Skalierung darüber hinaus ist nicht vorgesehen.
 6. Domain: nicht nötig, da die Adresse unter `*.ts.net` über Tailscale läuft.
 7. Entwicklung und Tests laufen hier im Repo. Den echten Gerätetest (iPhone und Android) und die VPS-Einrichtung musst du bzw. ihr mitmachen.
 
@@ -413,7 +427,8 @@ Noch zu klären (blockiert den Start nicht, wird in Phase 0 entschieden):
 - Welche Sprachen die Datenquellen tatsächlich vollständig liefern (v. a. KO, ZH).
 - Ob und woher es versiegelte Produkte gibt.
 - Ob die Cardmarket-API für Privatpersonen noch freigeschaltet wird.
-- Die Grenzen von Tailscale-Node-Sharing im Free-Plan.
+- Die Grenzen von Tailscale-Node-Sharing im Free-Plan (bei 5–10 Nutzern wahrscheinlich kein Problem, wird beim Deployment getestet).
+- Ob Cardmarket die Angebotsseiten ohne Umgehung abrufbar lässt (wird im Preis-Spike getestet).
 
 ---
 
