@@ -1,0 +1,240 @@
+Compose can now delegate builds to bake for better performance.
+ To do so, set COMPOSE_BAKE=true.
+#0 building with "default" instance using docker driver
+
+#1 [api internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.82kB done
+#1 DONE 0.0s
+
+#2 [api] resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 0.6s
+
+#3 [api] docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#3 CACHED
+
+#4 [api internal] load metadata for docker.io/library/python:3.12-slim
+#4 ...
+
+#5 [api internal] load metadata for ghcr.io/astral-sh/uv:0.11
+#5 DONE 0.4s
+
+#4 [api internal] load metadata for docker.io/library/python:3.12-slim
+#4 DONE 0.7s
+
+#6 [api internal] load .dockerignore
+#6 transferring context: 150B done
+#6 DONE 0.1s
+
+#7 [api] FROM ghcr.io/astral-sh/uv:0.11@sha256:77280f2f771df71f90786c314fe1bbc1e023feac652969bbf139c280babf2eb7
+#7 DONE 0.0s
+
+#8 [api base  1/11] FROM docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+#8 DONE 0.0s
+
+#9 [api internal] load build context
+#9 transferring context: 707.21kB 0.1s done
+#9 DONE 0.1s
+
+#10 [api base  2/11] COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
+#10 CACHED
+
+#11 [api base  3/11] WORKDIR /srv
+#11 CACHED
+
+#12 [api base  4/11] COPY pyproject.toml uv.lock ./
+#12 DONE 0.2s
+
+#13 [api base  5/11] RUN uv sync --frozen --no-default-groups --no-install-project
+#13 1.079 Using CPython 3.12.15 interpreter at: /usr/local/bin/python3
+#13 1.081 Creating virtual environment at: .venv
+#13 1.272 Downloading pydantic-core (2.1MiB)
+#13 1.274 Downloading opencv-python-headless (58.4MiB)
+#13 1.275 Downloading uvloop (4.3MiB)
+#13 1.275 Downloading sqlalchemy (4.5MiB)
+#13 1.275 Downloading numpy (16.0MiB)
+#13 1.276 Downloading onnxruntime (22.7MiB)
+#13 1.276 Downloading asyncpg (3.6MiB)
+#13 1.277 Downloading pillow (6.8MiB)
+#13 1.277 Downloading rapidocr (26.0MiB)
+#13 1.277 Downloading pillow-heif (5.4MiB)
+#13 1.279 Downloading shapely (2.2MiB)
+#13 2.155  Downloaded pydantic-core
+#13 2.190  Downloaded shapely
+#13 2.564  Downloaded asyncpg
+#13 2.742  Downloaded uvloop
+#13 2.746  Downloaded sqlalchemy
+#13 2.908  Downloaded pillow-heif
+#13 3.086  Downloaded pillow
+#13 4.084  Downloaded numpy
+#13 4.886  Downloaded rapidocr
+#13 4.894  Downloaded onnxruntime
+#13 5.779  Downloaded opencv-python-headless
+#13 5.781 Prepared 58 packages in 4.62s
+#13 6.750 Installed 58 packages in 968ms
+#13 9.429 Bytecode compiled 2554 files in 2.67s
+#13 9.429  + alembic==1.20.0
+#13 9.429  + annotated-doc==0.0.5
+#13 9.429  + annotated-types==0.8.0
+#13 9.429  + anyio==4.15.1
+#13 9.429  + argon2-cffi==25.1.0
+#13 9.429  + argon2-cffi-bindings==26.1.0
+#13 9.429  + asyncpg==0.32.0
+#13 9.429  + certifi==2026.7.22
+#13 9.429  + cffi==2.1.1
+#13 9.429  + charset-normalizer==3.5.2
+#13 9.429  + click==8.5.0
+#13 9.429  + colorlog==6.12.0
+#13 9.429  + dnspython==2.9.0
+#13 9.429  + email-validator==2.3.0
+#13 9.429  + fastapi==0.143.3
+#13 9.429  + flatbuffers==25.12.19
+#13 9.429  + greenlet==3.5.6
+#13 9.429  + h11==0.16.0
+#13 9.429  + httpcore==1.0.9
+#13 9.429  + httptools==0.9.0
+#13 9.429  + httpx==0.28.1
+#13 9.429  + idna==3.20
+#13 9.429  + mako==1.4.3
+#13 9.429  + markupsafe==3.0.4
+#13 9.429  + numpy==2.5.4
+#13 9.429  + omegaconf==2.4.0
+#13 9.429  + onnxruntime==1.31.0
+#13 9.429  + opencv-python-headless==5.0.0.93
+#13 9.429  + opentelemetry-api==1.45.1
+#13 9.429  + packaging==26.3
+#13 9.429  + pillow==13.0.0
+#13 9.429  + pillow-heif==1.8.1
+#13 9.429  + protobuf==7.36.2
+#13 9.429  + pyclipper==1.4.0
+#13 9.429  + pycparser==3.11
+#13 9.429  + pydantic==2.14.1
+#13 9.429  + pydantic-core==2.50.1
+#13 9.429  + pydantic-settings==2.16.0
+#13 9.429  + pyjwt==2.15.1
+#13 9.429  + python-dotenv==1.2.4
+#13 9.429  + python-multipart==0.0.32
+#13 9.429  + pyyaml==6.0.3
+#13 9.429  + rapidocr==3.10.0
+#13 9.429  + requests==2.34.2
+#13 9.429  + shapely==2.2.0
+#13 9.429  + six==1.17.0
+#13 9.429  + sqlalchemy==2.1.5
+#13 9.429  + starlette==1.8.0
+#13 9.429  + structlog==26.1.0
+#13 9.429  + tqdm==4.70.1
+#13 9.429  + typing-extensions==4.16.0
+#13 9.429  + typing-inspection==0.4.4
+#13 9.429  + tzdata==2026.5
+#13 9.429  + urllib3==2.8.0
+#13 9.429  + uvicorn==0.54.0
+#13 9.429  + uvloop==0.23.0
+#13 9.429  + watchfiles==1.3.0
+#13 9.429  + websockets==17.2
+#13 DONE 10.5s
+
+#14 [api base  6/11] COPY README.md alembic.ini ./
+#14 DONE 0.1s
+
+#15 [api base  7/11] COPY alembic ./alembic
+#15 DONE 0.1s
+
+#16 [api base  8/11] COPY app ./app
+#16 DONE 0.1s
+
+#17 [api base  9/11] RUN uv sync --frozen --no-default-groups
+#17 0.618    Building pokemon-tracker-backend @ file:///srv
+#17 2.136       Built pokemon-tracker-backend @ file:///srv
+#17 2.140 Prepared 1 package in 1.52s
+#17 2.144 Installed 1 package in 4ms
+#17 2.600 Bytecode compiled 2554 files in 456ms
+#17 2.600  + pokemon-tracker-backend==0.1.0 (from file:///srv)
+#17 DONE 2.7s
+
+#18 [api base 10/11] RUN /srv/.venv/bin/python -m app.cli scanner-warmup --korean     || echo "WARNUNG: koreanisches OCR-Modell konnte nicht geladen werden"
+#18 4.688 Standardmodell (PP-OCRv6): 2 Zeilen erkannt
+#18 8.748 Koreanisches Modell: 2 Zeilen erkannt
+#18 DONE 9.3s
+
+#19 [api base 11/11] RUN useradd --create-home --uid 1000 tracker     && mkdir -p /data/scanner && chown tracker:tracker /data/scanner
+#19 DONE 0.4s
+
+#20 [api] exporting to image
+#20 exporting layers
+#20 exporting layers 3.9s done
+#20 writing image sha256:226779de4806b493cc8f57bcb278ae29582796646714b6d94178dfbdebf7db40 done
+#20 naming to docker.io/library/pokemon_tracker-api done
+#20 DONE 3.9s
+
+#21 [api] resolving provenance for metadata file
+#21 DONE 0.0s
+
+#22 [worker internal] load build definition from Dockerfile
+#22 transferring dockerfile: 1.82kB done
+#22 DONE 0.0s
+
+#2 [worker] resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 0.8s
+
+#3 [worker] docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#3 CACHED
+
+#5 [worker internal] load metadata for ghcr.io/astral-sh/uv:0.11
+#5 DONE 0.5s
+
+#4 [worker internal] load metadata for docker.io/library/python:3.12-slim
+#4 DONE 0.8s
+
+#23 [worker internal] load .dockerignore
+#23 transferring context: 150B done
+#23 DONE 0.0s
+
+#7 [worker] FROM ghcr.io/astral-sh/uv:0.11@sha256:77280f2f771df71f90786c314fe1bbc1e023feac652969bbf139c280babf2eb7
+#7 DONE 0.0s
+
+#8 [worker base  1/11] FROM docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+#8 DONE 0.0s
+
+#24 [worker internal] load build context
+#24 transferring context: 4.07kB done
+#24 DONE 0.0s
+
+#25 [worker base  6/11] COPY README.md alembic.ini ./
+#25 CACHED
+
+#26 [worker base  9/11] RUN uv sync --frozen --no-default-groups
+#26 CACHED
+
+#27 [worker base  8/11] COPY app ./app
+#27 CACHED
+
+#28 [worker base  4/11] COPY pyproject.toml uv.lock ./
+#28 CACHED
+
+#10 [worker base  2/11] COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
+#10 CACHED
+
+#29 [worker base  7/11] COPY alembic ./alembic
+#29 CACHED
+
+#30 [worker base 10/11] RUN /srv/.venv/bin/python -m app.cli scanner-warmup --korean     || echo "WARNUNG: koreanisches OCR-Modell konnte nicht geladen werden"
+#30 CACHED
+
+#11 [worker base  3/11] WORKDIR /srv
+#11 CACHED
+
+#31 [worker base  5/11] RUN uv sync --frozen --no-default-groups --no-install-project
+#31 CACHED
+
+#32 [worker base 11/11] RUN useradd --create-home --uid 1000 tracker     && mkdir -p /data/scanner && chown tracker:tracker /data/scanner
+#32 CACHED
+
+#33 [worker] exporting to image
+#33 exporting layers done
+#33 writing image sha256:527f8230a861345fa1a27385b68e32df02e651b42bc2fb7dd5347275fd0376d9 done
+#33 naming to docker.io/library/pokemon_tracker-worker done
+#33 DONE 0.0s
+
+#34 [worker] resolving provenance for metadata file
+#34 DONE 0.0s
+ api  Built
+ worker  Built
