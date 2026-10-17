@@ -7,7 +7,7 @@ Compose can now delegate builds to bake for better performance.
 #1 DONE 0.1s
 
 #2 [app-builder] resolve image config for docker-image://docker.io/docker/dockerfile:1
-#2 DONE 0.8s
+#2 DONE 0.7s
 
 #3 [app-builder] docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 #3 CACHED
@@ -41,7 +41,7 @@ Compose can now delegate builds to bake for better performance.
 #12 exporting layers done
 #12 writing image sha256:400ea27886ac6a1e48c99866bf0ce8b740477314e15b7aa439f25718e6f0e264 0.0s done
 #12 naming to docker.io/library/pokemon_tracker-app-builder done
-#12 DONE 0.1s
+#12 DONE 0.0s
 
 #13 [app-builder] resolving provenance for metadata file
 #13 DONE 0.0s
