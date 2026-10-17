@@ -14,7 +14,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -121,6 +121,7 @@ async def _store_set(session: AsyncSession, language: str, detail: SetDetail) ->
                     "number_norm": card_stmt.excluded.number_norm,
                     "name": card_stmt.excluded.name,
                     "image_url": card_stmt.excluded.image_url,
+                    "image_language": None,  # Ersatzbild wird nach dem Import neu gesetzt
                     "updated_at": func.now(),
                 },
             )
@@ -179,6 +180,40 @@ async def sync_language(
     return report
 
 
+# Bevorzugte Sprache eines Ersatzbildes: Englisch (meist vollständig), dann Deutsch, …
+IMAGE_FALLBACK_ORDER = ("en", "de", "ja", "zh-tw", "ko", "zh-cn")
+
+
+async def fill_image_fallbacks(session: AsyncSession) -> int:
+    """Karten ohne Bild bekommen das Bild einer anderen Sprachfassung derselben Karte.
+
+    Internationale Sets teilen sich die TCGdex-ID (``swsh7-215`` auf Deutsch und Englisch) –
+    das Artwork ist gleich, nur der Kartentext ist englisch. Gibt die Anzahl zurück.
+    """
+    priority = " ".join(
+        f"WHEN '{language}' THEN {index}" for index, language in enumerate(IMAGE_FALLBACK_ORDER)
+    )
+    result = await session.execute(
+        text(
+            f"""
+            UPDATE cards AS target
+            SET image_url = source.image_url, image_language = source.language
+            FROM (
+                SELECT DISTINCT ON (external_id) external_id, image_url, language
+                FROM cards
+                WHERE external_id IS NOT NULL AND image_url IS NOT NULL
+                  AND image_language IS NULL
+                ORDER BY external_id, CASE language {priority} ELSE 99 END
+            ) AS source
+            WHERE target.external_id = source.external_id
+              AND target.image_url IS NULL
+              AND target.source = 'tcgdex'
+            """  # noqa: S608 – nur feste Sprachcodes, keine Nutzereingaben
+        )
+    )
+    return int(getattr(result, "rowcount", 0) or 0)
+
+
 async def sync_catalog(
     client: TcgdexClient,
     session_factory: async_sessionmaker[AsyncSession],
@@ -187,8 +222,13 @@ async def sync_catalog(
     full: bool = False,
     concurrency: int = 4,
 ) -> list[LanguageReport]:
-    """Synchronisiert alle angegebenen Sprachen nacheinander."""
-    return [
+    """Synchronisiert alle angegebenen Sprachen nacheinander, danach Ersatzbilder."""
+    reports = [
         await sync_language(client, session_factory, language, full=full, concurrency=concurrency)
         for language in languages
     ]
+    async with session_factory() as session:
+        filled = await fill_image_fallbacks(session)
+        await session.commit()
+    log.info("catalog.image_fallbacks", filled=filled)
+    return reports

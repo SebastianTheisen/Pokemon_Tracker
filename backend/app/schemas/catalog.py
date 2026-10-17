@@ -44,6 +44,7 @@ class CardOut(BaseModel):
     name: str
     number: str
     image_url: str | None
+    image_language: str | None = None
     rarity: str | None
     source: CardSource
     card_set: SetSummary

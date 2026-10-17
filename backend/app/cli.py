@@ -42,7 +42,7 @@ from app.scanner.ocr import RapidOcrReader
 from app.scanner.runtime import ScannerRuntime
 from app.services.admin import AdminService
 from app.services.catalog_search import search_cards
-from app.services.catalog_sync import sync_catalog
+from app.services.catalog_sync import fill_image_fallbacks, sync_catalog
 from app.services.collection import CollectionService, ItemFilter, ItemInput
 from app.services.errors import ServiceError
 from app.services.price_health import SourceHealth
@@ -119,6 +119,16 @@ async def _sync_catalog(
             print(f"    ! {error}")
     if any(report.errors for report in reports):
         sys.exit(1)
+
+
+async def _fill_images(
+    factory: async_sessionmaker[AsyncSession], _settings: Settings, _args: argparse.Namespace
+) -> None:
+    """Fehlende Kartenbilder durch Bilder anderer Sprachfassungen ergänzen."""
+    async with factory() as session:
+        filled = await fill_image_fallbacks(session)
+        await session.commit()
+    print(f"Ersatzbilder gesetzt: {filled}")
 
 
 async def _search(
@@ -374,6 +384,11 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--languages", nargs="+", help="z. B. de en ja (Standard: alle)")
     sync.add_argument("--full", action="store_true", help="alle Sets neu laden")
     sync.set_defaults(handler=_sync_catalog)
+
+    images = commands.add_parser(
+        "fill-images", help="Fehlende Bilder aus anderen Sprachfassungen ergänzen"
+    )
+    images.set_defaults(handler=_fill_images)
 
     prices = commands.add_parser(
         "refresh-prices", help="Preise aller vorgemerkten Karten jetzt aktualisieren"

@@ -270,3 +270,38 @@ async def test_sets_with_fewer_delivered_than_announced_cards_are_not_refetched(
 
     assert fake.set_requests == []
     assert reports[0].sets_skipped == reports[0].sets_total
+
+
+async def test_missing_images_use_other_language_of_same_card(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    from sqlalchemy import select  # noqa: PLC0415
+
+    from app.models import Card  # noqa: PLC0415
+    from app.services.catalog_sync import fill_image_fallbacks  # noqa: PLC0415
+    from tests.pricing_helpers import make_card  # noqa: PLC0415
+
+    english = await make_card(
+        session_factory, external_id="swsh7-215", name="Umbreon VMAX", language="en"
+    )
+    german = await make_card(
+        session_factory, external_id="swsh7-215", name="Nachtara VMAX", language="de"
+    )
+    lonely = await make_card(session_factory, external_id="xy1-1", name="Bisasam", language="de")
+    async with session_factory() as session:
+        en = await session.get(Card, english.id)
+        assert en is not None
+        en.image_url = "https://assets.tcgdex.net/en/swsh/swsh7/215"
+        await session.commit()
+
+        assert await fill_image_fallbacks(session) == 1
+        await session.commit()
+        rows = {
+            card.id: card
+            for card in (
+                await session.scalars(select(Card).where(Card.id.in_([german.id, lonely.id])))
+            ).all()
+        }
+    assert rows[german.id].image_url == "https://assets.tcgdex.net/en/swsh/swsh7/215"
+    assert rows[german.id].image_language == "en"
+    assert rows[lonely.id].image_url is None

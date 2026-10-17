@@ -1,4 +1,7 @@
-"""Spike: Bilder und Daten aus den offiziellen Kartendatenbanken (JP, KO, TW).
+"""Spike: Bildquellen für fehlende Kartenbilder – alle Sprachen.
+
+* DE/EN: TCGdex-Bild trotzdem vorhanden? Offizielle Bilder von pokemon.com, pokemontcg.io.
+* JP/KO/TW: offizielle Kartendatenbanken.
 
 Läuft im API-Container (dort ist httpx installiert) und gibt einen Markdown-Bericht aus.
 Prüft je Quelle: Suche/Liste, Detailseite, Bild-URL, ob das Bild auch mit fremdem
@@ -9,6 +12,8 @@ Prüft je Quelle: Suche/Liste, Detailseite, Bild-URL, ob das Bild auch mit fremd
 
 from __future__ import annotations
 
+import json
+import os
 import re
 import time
 from html import unescape
@@ -164,9 +169,57 @@ def taiwan(client: httpx.Client) -> None:
                 check_image(client, url)
 
 
+def status(client: httpx.Client, url: str) -> str:
+    time.sleep(1)
+    try:
+        response = client.get(url)
+    except httpx.HTTPError as exc:
+        return f"Fehler ({type(exc).__name__})"
+    kind = response.headers.get("content-type", "")
+    return f"{response.status_code} {kind.split(';')[0]} {len(response.content)} B"
+
+
+def western(client: httpx.Client) -> None:
+    """Deutsch/Englisch: Lücken bei TCGdex und mögliche Ersatzquellen."""
+    out("## Deutsch und Englisch\n")
+    samples = json.loads(os.environ.get("SAMPLES", "[]"))
+    out("### Karten ohne Bild in unserem Katalog (Stichprobe)\n")
+    out("| Sprache | Karte | Set | TCGdex-Bild direkt | pokemontcg.io | pokemon.com |")
+    out("|---|---|---|---|---|---|")
+    for sample in samples[:16]:
+        base = (sample.get("logo") or "").rsplit("/logo", 1)[0]
+        tcgdex = status(client, f"{base}/{sample['number']}/high.webp") if base else "–"
+        number = str(sample["number"]).lstrip("0") or "0"
+        ptcg = status(client, f"https://images.pokemontcg.io/{sample['set']}/{number}_hires.png")
+        lang = sample["language"].upper()
+        code = sample["set"].upper()
+        official = status(
+            client,
+            f"https://assets.pokemon.com/assets/cms2{'' if lang == 'EN' else '-de-de'}/img/cards/web/"
+            f"{code}/{code}_{lang}_{number}.png",
+        )
+        out(f"| {sample['language']} | {sample['name']} {sample['number']} | {sample['set']} "
+            f"| {tcgdex} | {ptcg} | {official} |")
+
+    out("\n### Offizielle Bild-Adressen von pokemon.com (bekannte Karten)\n")
+    for label, url in (
+        ("Nachtara VMAX DE (alt)", "https://assets.pokemon.com/assets/cms2-de-de/img/cards/web/SWSH7/SWSH7_DE_215.png"),
+        ("Nachtara VMAX DE (neu)", "https://assets.pokemon.com/static-assets/content-assets/cms2-de-de/img/cards/web/SWSH7/SWSH7_DE_215.png"),
+        ("Umbreon VMAX EN (alt)", "https://assets.pokemon.com/assets/cms2/img/cards/web/SWSH7/SWSH7_EN_215.png"),
+        ("Umbreon VMAX EN (neu)", "https://assets.pokemon.com/static-assets/content-assets/cms2/img/cards/web/SWSH7/SWSH7_EN_215.png"),
+        ("SV08 162 DE", "https://assets.pokemon.com/static-assets/content-assets/cms2-de-de/img/cards/web/SV08/SV08_DE_162.png"),
+        ("SV08 162 EN", "https://assets.pokemon.com/static-assets/content-assets/cms2/img/cards/web/SV08/SV08_EN_162.png"),
+        ("Grundset Glurak EN", "https://assets.pokemon.com/assets/cms2/img/cards/web/BS/BS_EN_4.png"),
+    ):
+        out(f"- {label}: {status(client, url)} – `{url}`")
+    out(f"- Kartendatenbank DE: {status(client, 'https://www.pokemon.com/de/pokemon-sammelkartenspiel/pokemon-karten/')}")
+    out(f"- pokemontcg.io API (swsh7 215): {status(client, 'https://api.pokemontcg.io/v2/cards/swsh7-215')}")
+    out(f"- pokemontcg.io Bild (swsh7 215): {status(client, 'https://images.pokemontcg.io/swsh7/215_hires.png')}\n")
+
+
 def main() -> None:
     with httpx.Client(headers={"User-Agent": UA}, timeout=30, follow_redirects=True) as client:
-        for source in (japan, korea, taiwan):
+        for source in (western, japan, korea, taiwan):
             try:
                 source(client)
             except Exception as exc:  # Spike: Fehler nur berichten

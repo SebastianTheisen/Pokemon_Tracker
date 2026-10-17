@@ -85,6 +85,9 @@ class Card(UuidPrimaryKeyMixin, TimestampMixin, Base):
     number_norm: Mapped[str] = mapped_column(String(32), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     image_url: Mapped[str | None] = mapped_column(String(500))
+    # Sprache des Bildes, wenn es von einer anderen Sprachfassung derselben Karte stammt
+    # (z. B. englisches Bild für eine deutsche Karte, deren Bild bei TCGdex fehlt).
+    image_language: Mapped[str | None] = mapped_column(String(8))
     rarity: Mapped[str | None] = mapped_column(String(100))
     source: Mapped[CardSource] = mapped_column(
         Enum(
