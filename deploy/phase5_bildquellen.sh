@@ -8,6 +8,11 @@ mkdir -p docs/phase5
 set -a; source .env; set +a
 psql_db() { docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -tAc "$1"; }
 
+if ! grep -q "def western" deploy/spikes/official_images.py; then
+  echo "FEHLER: alter Stand – bitte zuerst 'git pull' ausführen." >&2
+  exit 1
+fi
+
 echo "==> Neuen Stand bauen (Migration 0005: Ersatzbilder) und fehlende Bilder ergänzen"
 docker compose up -d --build api worker
 for _ in $(seq 1 60); do curl -fsS http://127.0.0.1:8000/api/v1/health >/dev/null 2>&1 && break; sleep 2; done
@@ -30,8 +35,10 @@ docker compose exec -T -e SAMPLES="${samples}" api python - < deploy/spikes/offi
   echo "Vorher:"; echo '```'; echo "${coverage_before}"; echo '```'
   echo "Ersatzbilder aus anderer Sprachfassung: ${fill}"; echo
   echo "Nachher:"; echo '```'; echo "${coverage_after}"; echo '```'
+  echo
+  echo "_Lauf: $(date -u '+%Y-%m-%d %H:%M UTC'), Stand $(git rev-parse --short HEAD)_"
 } >> docs/phase5/bildquellen.md
 cat docs/phase5/bildquellen.md
 echo
 echo "Ergebnis zurückschicken:"
-echo "  git add docs/phase5 && git commit -m 'Spike Bildquellen' && git push"
+echo "  git add docs/phase5 && git commit -m 'Spike Bildquellen DE/EN' && git push"
