@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 cv2 = pytest.importorskip("cv2")
-pytest.importorskip("rapidocr_onnxruntime")
+pytest.importorskip("rapidocr")
 
 import numpy as np  # noqa: E402
 from PIL import Image, ImageDraw, ImageFont  # noqa: E402
@@ -54,9 +54,27 @@ def test_pipeline_finds_card_name_and_number(tmp_path: Path) -> None:
     assert result.name_guess is not None
     assert "nachtara" in result.name_guess.casefold()
     assert result.number_guess == "215/203"
+    result.expected_name, result.expected_number = "Nachtara VMAX", "215/203"
+    assert result.name_in_text
+    assert result.number_in_text
 
 
 def test_number_normalization() -> None:
     assert scanner._normalize_number("015/203") == "15"
     assert scanner._normalize_number("SWSH 050") == "SWSH050"
     assert scanner._normalize_number(None) == ""
+
+
+@pytest.mark.parametrize(
+    ("expected", "texts", "found"),
+    [
+        ("110/098", ["512 F 110/098 SR"], True),
+        ("110/098", ["11O/O98"], True),  # O statt 0
+        ("165/103", ["G504C 165/103"], True),
+        ("165/103", ["1165/1030"], False),  # keine Teiltreffer in längeren Zahlen
+        ("007", ["No. 007"], True),
+        ("007", ["1007"], False),
+    ],
+)
+def test_number_occurs(expected: str, texts: list[str], found: bool) -> None:
+    assert scanner._number_occurs(expected, texts) is found

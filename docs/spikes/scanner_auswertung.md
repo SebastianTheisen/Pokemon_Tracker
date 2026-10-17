@@ -1,46 +1,40 @@
 # Auswertung Spike Scanner (17.10.2026)
 
-Testsatz: 7 Fotos des Nutzers (`scanner_testset/`): 1× DE, 5× JP, 1× ZH, davon 2 PSA-Slabs, 1 Toploader, 1 Sleeve, 2 Screenshots. Rohbericht: [`scanner.md`](scanner.md).
+Testsatz: 7 Fotos des Nutzers (`scanner_testset/`): 1× DE, 5× JP, 1× ZH, davon 2 PSA-Slabs, 1 Toploader, 1 Sleeve, 2 Screenshots. Aktueller Rohbericht: [`scanner.md`](scanner.md).
 
-## Ergebnis Lauf 1 (Pipeline wie geplant: Kontur → Entzerren → OCR in Zonen)
+## Lauf 1: Kontur → Entzerren → OCR in Zonen (RapidOCR 1.4, Modell CH/EN)
 
 | Kennzahl | Wert |
 |---|---|
-| Karte „gefunden“ | 7/7, aber **nur 2/7 mit richtigem Ausschnitt** (02, 06 knapp) |
-| Name korrekt | 0/7 (02 fast: „Team Rockets MewtuCx“) |
+| Richtiger Kartenausschnitt (laut Debug-Bildern) | **2/7** |
+| Name korrekt | 0/7 |
 | Nummer korrekt | 1/7 |
-| Zeit pro Foto | ca. 0,5 s (CPU, 4 Kerne) |
 
-## Gegenprobe: OCR auf dem ganzen Foto (ohne Kartenerkennung)
+Ursachen: Die Konturerkennung greift bei Händen, Slabs, Toploadern, unruhigem Hintergrund und Screenshots das falsche Viereck. Das CH/EN-Modell liest kein Japanisch („ルギアV“ → „半刀V“).
 
-| Datei | Gelesen | Bewertung |
-|---|---|---|
-| 01 Schiggy-Slab (Screenshot) | Slab-Label ist zensiert („0000 XXXX“), alte Karte hat keine Bruchnummer | nicht lösbar per Nummer → Bildabgleich nötig |
-| 02 Mewtu ex (DE) | `231/182`, `Team RocketsMewtuCx`, Setcode-Teil `DR` | ✅ Nummer und Name |
-| 03 Lugia V (Toploader) | `S12 110/098 SR` (als `512110/098SR`) | ✅ Nummer und Setcode |
-| 04 Lugia V (Slab, Daumen) | Label: `2022 POKEMON JPN.SWSH`, `FA/LUGIA V`, `#110`, `PARADIGM TRIGGER`, `GEM MT 10` | ✅ **Slab-Label komplett lesbar** (Set, Name, Nummer, Note) |
-| 05 Nachtara ex (289×435 px) | fast nichts | ❌ Auflösung zu gering |
-| 06 Lugia (JP) | `142/103` | ✅ Nummer |
-| 07 Karpador (ZH) | `跳跃高手` (Attacke), `G306C` ≈ Setcode `30th C`, Nummer verstümmelt (`E0L/591`) | ⚠️ chinesischer Text gut, Nummer nicht |
+## Lauf 2: OCR auf dem ganzen Foto + Kartenausschnitt (RapidOCR 3.10, PP-OCRv6 mitgeliefert)
+
+| Datei | Soll | Name im Text | Nummer im Text | Bemerkung |
+|---|---|---|---|---|
+| 01 Schiggy-Slab (Screenshot) | ゼニガメ · 007 | ✅ | ✅ | `No.007` gelesen, Label zensiert |
+| 02 Mewtu ex (DE) | Team Rockets Mewtu ex · 231/182 | ≈ | ✅ | „Team Rockets Mewtu“ – das „ex“ ist ein Logo; Setcode `DR` |
+| 03 Lugia V (Toploader) | ルギアV · 110/098 | ✅ | ✅ | `S12 F 110/098 SR` |
+| 04 Lugia V (Slab, Daumen) | ルギアV · 110/098 | ✅ | ❌ (verdeckt) | Slab-Label: `FA/LUGIA V`, `#110`, `PARADIGM TRIGGER`, `GEM MT 10` |
+| 05 Nachtara ex (289×435 px) | ブラッキーex · 217/187 | ≈ | ❌ | „ブラッキー“ ohne „ex“-Logo; Nummer zu klein |
+| 06 Lugia (JP) | ルギア · 142/103 | ✅ | ✅ | |
+| 07 Karpador (ZH) | 鲤鱼王 · 165/103 | ❌ | ✅ | Setcode `G 30th C` gelesen, Name auf Glitzerfolie nicht |
+
+**Summe:** Name 4/7 exakt (6/7 inkl. „≈“, also ohne Logo-Zusatz), Nummer 5/7. **In jedem der 7 Fotos** ist mindestens ein starkes Merkmal (Nummer, Name oder Slab-Label) vorhanden. Zeit: ca. 0,7 s pro OCR-Durchlauf auf 4 CPU-Kernen (der Spike rechnet doppelt: Foto + Ausschnitt).
 
 ## Erkenntnisse
 
-1. **Kartenerkennung per Kontur reicht nicht.** Bei Händen, Slabs, Toploadern, unruhigem Hintergrund und Screenshots greift sie das falsche Viereck. Nur bei „Karte flach auf Tisch“ funktioniert sie.
-2. **Die Nummer ist das stärkste Merkmal.** Sie ist sprachunabhängig (lateinische Ziffern) und wurde gelesen, wann immer sie sichtbar und scharf war (3 von 4 Fällen). Dazu kommt oft der Setcode (`S12`, `DR…`, `30th C`).
-3. **Namen per OCR taugen nur für DE/EN.** Das Standardmodell von RapidOCR ist Chinesisch + Englisch. Chinesisch klappt gut, **Japanisch (Katakana) nicht** („ルギアV“ → „半刀V“). Für JP/KO wären zusätzliche OCR-Modelle nötig.
-4. **Slab-Labels sind sehr gut lesbar.** PSA-Label liefert Set, Name, Nummer und Note. Grading-Erkennung ist realistisch.
-5. **Ohne Bildabgleich geht es nicht:** alte Karten ohne Bruchnummer (01), verdeckte Nummern, kleine Screenshots. Der Bildabgleich gegen Katalogbilder ist der zweite Pfeiler. Er ist **noch nicht testbar**, weil die Katalogbilder (TCGdex) hier gesperrt sind.
-6. Geschwindigkeit ist unkritisch (≈ 0,5 s pro Foto auf CPU).
+1. **OCR auf dem ganzen Foto schlägt die Konturerkennung.** Sie ist robust gegen Hände, Slabs, Hüllen und Screenshots. Für den Live-Scan begrenzt ein Kartenrahmen in der App den Ausschnitt.
+2. **Nummer + Setcode sind die stärksten Merkmale**, sprachunabhängig.
+3. **Namen:** DE/EN/JP/ZH werden mit PP-OCRv6 gelesen. Logos wie „ex“, „V“ und „VMAX“ fehlen oft, das muss der Abgleich unscharf auffangen.
+4. **Slab-Labels** (PSA) sind komplett lesbar, inklusive Note.
+5. **Grenzen:** Sehr kleine Bilder (05) und Namen auf Glitzerfolie (07). Hier muss der Bildabgleich gegen Katalogbilder helfen. Er ist noch nicht testbar (TCGdex hier gesperrt).
+6. **Koreanisch:** Dafür gibt es ein eigenes Modell (`korean_PP-OCRv5_rec_mobile`), das heruntergeladen werden muss. Der Download wird auf dem VPS geprüft. Es gibt noch kein koreanisches Testfoto.
 
-## Vorschlag für die Scanner-Strategie (Entscheidung durch den Nutzer)
+## Entscheidung (Nutzer, 17.10.2026)
 
-- **Live-Scan:** Die App zeigt einen Kartenrahmen (wie im Original). Erkannt wird nur im Rahmenausschnitt, das ersetzt die fehleranfällige Konturerkennung.
-- **Galerie-Fotos:** zuerst Kontur, und wenn diese unplausibel ist, OCR auf dem ganzen Bild.
-- **Identifikation in dieser Reihenfolge:**
-  1. Setcode + Nummer (sprachunabhängig).
-  2. Bildabgleich gegen die Katalogbilder der Kandidaten.
-  3. Name nur als Zusatzsignal.
-- **Slab:** Label-OCR (PSA/BGS/CGC) als eigener Pfad, liefert auch die Note.
-- **JP/KO-OCR-Modelle** erst ergänzen, wenn Setcode + Nummer + Bild nicht reichen.
-
-**Go/No-Go:** **Go mit Anpassung.** Der OCR-Pfad über Nummer und Setcode ist tragfähig. Die Konturerkennung als alleiniger Einstieg ist es nicht. Der Bildabgleich muss noch nachgewiesen werden, sobald Katalogbilder erreichbar sind.
+**Go mit angepasster Strategie inkl. JP/KO-OCR**, siehe Plan-Abschnitt 5.6.

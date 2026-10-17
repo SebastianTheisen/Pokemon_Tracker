@@ -27,11 +27,16 @@ dev = [
 ]
 spike = [
     "numpy>=2.5.4",
+    "onnxruntime>=1.31.0",
     "opencv-python-headless>=5.0.0.93",
     "pillow>=13.0.0",
     "pillow-heif>=1.8.1",
-    "rapidocr-onnxruntime>=1.4.4",
+    "rapidocr>=3.10.0",
 ]
+
+[tool.uv]
+# Spike-Werkzeuge (Scanner) gehören in Phase 0 zur Standardinstallation.
+default-groups = ["dev", "spike"]
 
 [build-system]
 requires = ["hatchling"]
@@ -64,7 +69,7 @@ files = ["app", "tests", "scripts"]
 
 [[tool.mypy.overrides]]
 # Ohne Typ-Stubs; wird über eine typisierte Hülle (scripts/spike_scanner.Ocr) genutzt.
-module = ["rapidocr_onnxruntime", "pillow_heif"]
+module = ["pillow_heif"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

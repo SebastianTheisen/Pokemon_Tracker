@@ -10,7 +10,7 @@ Stand: 17.10.2026 · Status: **Phase 0 läuft**
 
 | Phase | Status | Notiz |
 |---|---|---|
-| 0 – Spikes und Fundament | 🟡 in Arbeit | Scanner ausgewertet. **Wartet auf:** Freigabe Scanner-Strategie + Datenquellen-Lauf (VPS oder Freigabe der Hosts) |
+| 0 – Spikes und Fundament | 🟡 in Arbeit | Scanner ausgewertet, Strategie freigegeben. **Wartet auf:** VPS-Lauf (Datenquellen, KO-Modell, Docker) |
 | 1 – Backend-Kern | ⚪ offen | |
 | 2 – Preise | ⚪ offen | |
 | 3 – Sammlung, Merkliste, Dashboard | ⚪ offen | |
@@ -34,8 +34,10 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 - [x] VPS-Skript `deploy/phase0_vps.sh` + Anleitung `docs/VPS_PHASE0.md`. Hier einmal komplett durchgelaufen (Lint/Typen/Tests grün, Berichte erzeugt)
 - [x] Testsatz: 7 Fotos des Nutzers liegen fest im Repo unter `scanner_testset/` (mit `soll.csv` und Beschreibung)
 - [x] Spike Scanner mit echten Fotos ausgeführt und ausgewertet → [`docs/spikes/scanner_auswertung.md`](docs/spikes/scanner_auswertung.md). Ergebnis: **Go mit Anpassung.** Konturerkennung allein reicht nicht (2/7 richtige Ausschnitte). Die Nummer per OCR ist sprachunabhängig gut lesbar (3 von 4 sichtbaren Fällen). Slab-Labels sind komplett lesbar. Japanische Namen sind mit dem Standardmodell nicht lesbar
-- [ ] ❓ **Entscheidung Nutzer:** angepasste Scanner-Strategie (Rahmen im Live-Scan; Identifikation über Setcode + Nummer, dann Bildabgleich; Name nur als Zusatz). Erst nach Freigabe ändere ich Plan-Abschnitt 5.6
-- [ ] 🔴 Spike Datenquellen ausführen und auswerten. In der Cloud-Umgebung gesperrt (Proxy 403). Entweder `bash deploy/phase0_vps.sh` auf dem VPS (ohne Fotos möglich) oder die Hosts in der Umgebung freigeben
+- [x] Entscheidung Nutzer: angepasste Scanner-Strategie **inkl. JP/KO-OCR** freigegeben → Abschnitt 5.6 geändert
+- [x] Scanner-Spike Lauf 2 mit RapidOCR 3 / PP-OCRv6: Name im Text 4/7 (6/7 ohne Logo-Zusatz), Nummer 5/7, in jedem Foto mindestens ein starkes Merkmal
+- [ ] ⏳ **Nutzer führt auf dem VPS aus:** `bash deploy/phase0_vps.sh` (keine Fotos nötig). Liefert: Spike Datenquellen, Download-Test des koreanischen OCR-Modells, Docker-Test. Ergebnis `docs/spikes/zusammenfassung.md` + `docs/spikes/datenquellen.md` zurückschicken
+- [ ] Spike Datenquellen auswerten (Go/No-Go)
 - [ ] Bildabgleich gegen Katalogbilder nachweisen (braucht TCGdex-Bilder, gleiche Sperre)
 - [ ] Docker-Build verifizieren (läuft im VPS-Skript mit, falls Docker installiert ist)
 - [ ] Spike Tailscale: laut Absprache verschoben, wird beim Deployment (Phase 6) getestet
@@ -51,6 +53,7 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 | 17.10.2026 | Phase 0 gestartet: Backend-Gerüst, Tooling, CI, Docker, Spike-Skript Datenquellen |
 | 17.10.2026 | Scanner-Spike, VPS-Skript und Anleitung ergänzt. Phase 0 wartet auf den VPS-Lauf |
 | 17.10.2026 | Scanner-Spike mit 7 Nutzerfotos ausgewertet: Go mit Anpassung, Strategie-Vorschlag wartet auf Freigabe |
+| 17.10.2026 | Strategie inkl. JP/KO-OCR freigegeben, Abschnitt 5.6 angepasst. Umstieg auf RapidOCR 3 (PP-OCRv6) |
 
 ---
 
@@ -177,7 +180,7 @@ Abgrenzung: Wir bauen die **Funktionen** nach. Code, Name, Logo, Icon, Texte und
 - **argon2-cffi** (Passwort-Hashing), **PyJWT** (Access- und Refresh-Token).
 - **APScheduler** oder ein eigener Worker-Container für geplante Jobs.
 - **structlog** (strukturierte Logs), **pydantic-settings** (Konfiguration über Umgebungsvariablen).
-- Scanner: **opencv-python-headless**, **numpy**, **RapidOCR (ONNX)** oder **PaddleOCR** (unterstützt auch JP/KO/ZH), **imagehash** und optional ein kleines ONNX-Embedding-Modell.
+- Scanner: **opencv-python-headless**, **numpy**, **RapidOCR 3** (ONNX, PP-OCRv6 für DE/EN/JP/ZH, zusätzliches KO-Modell), **imagehash** und optional ein kleines ONNX-Embedding-Modell.
 - Qualität: **ruff** (Lint + Format), **mypy --strict**, **pytest** + **pytest-asyncio** + **httpx.AsyncClient**, **testcontainers** oder eine Postgres-Test-DB, **pre-commit**.
 - Paketverwaltung mit **uv** und `pyproject.toml`.
 
@@ -304,17 +307,32 @@ Technik: `httpx` mit festem User-Agent, HTML-Parsing mit `selectolax`. Die Selek
 - Zusätzlich ein Link zur Cardmarket-Produktseite. Beide sind reine Deep-Links ohne Datenabruf.
 
 ### 5.6 Scanner-Pipeline (`app/scanner/`)
-1. **Vorverarbeiten:** EXIF-Rotation korrigieren, auf max. 1280 px skalieren.
-2. **Kartenerkennung:** Kanten und Konturen, größtes Viereck mit Kartenverhältnis (63×88 mm). Danach Perspektivkorrektur auf ein Normbild (z. B. 630×880 px).
-3. **OCR gezielt auf Bereichen:** Namenszeile oben und Sammlernummer unten, bei Bedarf Set-Symbol. Die Sprache wird aus Schriftzeichen und Layout geschätzt. RapidOCR/PaddleOCR deckt DE/EN/JP/KO/ZH ab.
-4. **Katalogabgleich:** Name und Nummer über die Suchfunktion mit Fuzzy-Matching auf Kandidaten abbilden.
-5. **Bildvalidierung:** perceptual Hash (pHash/dHash) oder Embedding des normalisierten Kartenbilds gegen das Katalogbild der Kandidaten. Daraus wird ein **Confidence-Score** aus OCR-Treffer und Bildähnlichkeit.
-6. **Ergebnis:** bester Treffer plus bis zu 4 Alternativen. Bei niedriger Confidence zeigt die App „Falsche Karte? Selbst suchen“ und die Kandidatenliste.
-7. **Stapel:** mehrere Bilder nacheinander durch dieselbe Pipeline, Ergebnisliste zum Bestätigen und Korrigieren.
-8. **Binder-Seite (Beta):** Raster aus Karten erkennen (Konturen oder Gitterannahme 3×3/4×3), jede Zelle einzeln durch die Pipeline. Die Qualität schwankt, deshalb ist es als Beta markiert.
-9. **Gradete Karten:** Slab erkennen, Label per OCR lesen (PSA, BGS, CGC mit Note). Das Ergebnis wird immer zur Bestätigung angezeigt.
 
-Qualitätsmessung: Ein Testset von mindestens 200 echten Fotos (verschiedene Sprachen, Licht, Hintergründe, Sleeves) mit erwarteten Karten. Das Skript `scripts/eval_scanner.py` gibt Top-1- und Top-5-Trefferquote aus. **Ziel Top-1 ≥ 85 %** auf deutschen und englischen Karten.
+*Angepasst nach dem Scanner-Spike, freigegeben am 17.10.2026. Begründung: [`docs/spikes/scanner_auswertung.md`](docs/spikes/scanner_auswertung.md).*
+
+1. **Aufnahme:**
+   - **Live-Scan:** Die App zeigt einen Kartenrahmen und schickt nur diesen Ausschnitt.
+   - **Galerie-Fotos:** Sie werden komplett geschickt.
+2. **Vorverarbeiten:** EXIF-Rotation korrigieren, auf max. 1280 px skalieren.
+3. **OCR:** RapidOCR 3 mit PP-OCRv6 (DE/EN/JP/ZH in einem Modell) auf dem Bild bzw. Rahmenausschnitt.
+   - **Koreanisch:** eigenes Modell `korean_PP-OCRv5`. Es wird zusätzlich ausgeführt, wenn Hangul vermutet wird oder der erste Durchlauf zu wenig liefert.
+   - Konturerkennung mit Entzerrung ist nur noch ein Zusatz für Galerie-Fotos. Ihr Ausschnitt wird bevorzugt, wenn das Seitenverhältnis plausibel ist.
+4. **Merkmale extrahieren:**
+   - Kartennummer (`110/098`, `No.007`, `SWSH050`).
+   - Setcode (`S12`, `SV8a`, `DRI` …).
+   - Namenskandidaten (alle Textzeilen).
+   - Sprache aus der Schrift (Kana, Hanzi, Hangul, Latein).
+5. **Identifikation (Reihenfolge):**
+   1. **Setcode + Nummer**: in der Regel eindeutig.
+   2. **Nummer + Name unscharf** (Logos wie „ex“, „V“, „VMAX“ fehlen oft im OCR).
+   3. **Bildabgleich** (pHash/Embedding) gegen die Katalogbilder der Kandidaten. Er ist zugleich Kontrolle und Rettungsweg, wenn kein Text lesbar ist (kleine Screenshots, Glitzerfolie).
+6. **Slab-Pfad:** Wird ein Grading-Label erkannt (PSA/BGS/CGC), liest der Scanner Set, Name, Nummer und Note daraus. Die Karte wird als „gegradet“ vorgeschlagen.
+7. **Ergebnis:** bester Treffer plus bis zu 4 Alternativen mit **Confidence-Score**. Bei niedriger Confidence zeigt die App „Falsche Karte? Selbst suchen“ und die Kandidatenliste.
+8. **Stapel:** mehrere Bilder nacheinander durch dieselbe Pipeline, Ergebnisliste zum Bestätigen und Korrigieren.
+9. **Binder-Seite (Beta):** Raster aus Karten erkennen (Konturen oder Gitterannahme 3×3/4×3), jede Zelle einzeln durch die Pipeline. Die Qualität schwankt, deshalb ist es als Beta markiert.
+Gradete Karten werden immer zur Bestätigung angezeigt (siehe Schritt 6).
+
+Qualitätsmessung: Ausgangsbasis ist der Testsatz in `scanner_testset/` (7 Fotos, mit Soll-Werten). Er wird schrittweise erweitert, Ziel sind mindestens 200 echte Fotos (verschiedene Sprachen, Licht, Hintergründe, Sleeves) mit erwarteten Karten. Das Skript `scripts/eval_scanner.py` gibt Top-1- und Top-5-Trefferquote aus. **Ziel Top-1 ≥ 85 %** auf deutschen und englischen Karten.
 
 Katalog-Bildindex: Das Herunterladen von über 100.000 Kartenbildern ist teuer. Deshalb wird er **lazy** aufgebaut: Beim ersten Treffer eines Sets werden die Bilder dieses Sets in kleiner Auflösung geholt und gehasht. Ein Hintergrundjob füllt die häufigsten Sets vor.
 

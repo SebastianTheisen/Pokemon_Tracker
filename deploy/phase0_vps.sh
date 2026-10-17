@@ -67,7 +67,7 @@ shopt -u nullglob nocaseglob
 if ((${#photos[@]})); then
   expected_args=()
   [[ -f "${PHOTO_DIR}/soll.csv" ]] && expected_args=(--expected "${PHOTO_DIR}/soll.csv")
-  if uv run --group spike python scripts/spike_scanner.py \
+  if uv run python scripts/spike_scanner.py \
       --photos "${PHOTO_DIR}" --out "${SPIKE_DIR}/scanner.md" "${expected_args[@]}"; then
     echo "- Spike Scanner: ✅ ${#photos[@]} Fotos, Bericht in docs/spikes/scanner.md" >> "${SUMMARY}"
   else
@@ -76,6 +76,20 @@ if ((${#photos[@]})); then
 else
   warn "Keine Fotos in ${PHOTO_DIR} – Scanner-Spike übersprungen."
   echo "- Spike Scanner: ⏭️ übersprungen (keine Fotos in scanner_testset/)" >> "${SUMMARY}"
+fi
+
+step "Zusatz: koreanisches OCR-Modell laden (Download-Test)"
+# Echtes Foto nötig: RapidOCR lädt das Erkennungsmodell erst, wenn Text gefunden wurde.
+if uv run python -c "
+from pathlib import Path
+from scripts.spike_scanner import Ocr, load_image
+lines = Ocr('korean').read(load_image(Path('../scanner_testset/02.jpg')))
+assert lines, 'keine Textzeilen erkannt'
+print(f'Koreanisches Modell geladen und lauffähig ({len(lines)} Zeilen erkannt).')
+"; then
+  echo "- OCR-Modell Koreanisch: ✅ Download und Start ok" >> "${SUMMARY}"
+else
+  echo "- OCR-Modell Koreanisch: ❌ Download oder Start fehlgeschlagen (Ausgabe oben)" >> "${SUMMARY}"
 fi
 
 step "Zusatz: Docker-Build und Health-Check"
