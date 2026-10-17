@@ -2,7 +2,7 @@
 
 Eine private Sammel-App im Stil von SCNDX: Pokémon-Karten scannen, Sammlung verwalten, belegte Marktpreise sehen. Sie ist für den Freundeskreis gedacht und wird nicht veröffentlicht.
 
-Stand: 17.10.2026 · Status: **Phase 4 (Scanner) in Arbeit – VPS-Lauf ausgewertet, Entscheidung zur Latenz offen**
+Stand: 17.10.2026 · Status: **Phase 4 abgeschlossen, Phase 5 (Flutter-App) startet**
 
 ---
 
@@ -14,7 +14,7 @@ Stand: 17.10.2026 · Status: **Phase 4 (Scanner) in Arbeit – VPS-Lauf ausgewer
 | 1 – Backend-Kern | ✅ erledigt | 65.561 Karten importiert, Abnahme-Suchen ✅, Nachtest 0 Fehler, 111 Tests (96 % Coverage) |
 | 2 – Preise | ✅ erledigt | Echte Preise mit Beleg (DE/EN/JA/ZH), Worker läuft, NM-Basis = Median, 163 Tests (95 % Coverage) |
 | 3 – Sammlung, Merkliste, Dashboard | ✅ erledigt | VPS-Probe mit echten Preisen = Handrechnung (4.894,67 €), Zugriffsschutz ✅, 204 Tests (95 % Coverage) |
-| 4 – Scanner | 🟡 in Arbeit | VPS-Lauf ✅: Top-1 5/6, 0× sicher-aber-falsch, Ø 2,7 s (max 4,6 s). Binder-Scan als Beta; Abnahme Top-1 ≥ 85 % wartet auf weitere Testfotos |
+| 4 – Scanner | ✅ erledigt | VPS-Lauf ✅: Top-1 5/6, 0× sicher-aber-falsch, Ø 2,7 s (max 4,6 s). Latenz-Tuning und Abnahme 85 % → Phase 7. Binder-Scan als Beta; Abnahme Top-1 ≥ 85 % wartet auf weitere Testfotos |
 | 5 – Flutter-App | ⚪ offen | |
 | 6 – Deployment und Härtung | ⚪ offen | |
 | 7 – Nachbesserung | ⚪ offen | |
@@ -175,7 +175,8 @@ Umsetzungsdetails (im Rahmen von 5.6, keine Änderung am Konzept):
   - **07 Karpador (ZH):** falsch, aber als *unsicher* gemeldet. Die Karte fehlt in TCGdex zh-cn (bekannte Lücke aus Phase 1) → Fall für „Karte selbst anlegen“ + eigenes Referenzbild
   - **Latenz:** Ø 2,71 s (warm), max 4,57 s (01, Website-Screenshot mit viel Text) → Ziel ≤ 3 s pro Karte noch nicht bei allen Fotos erfüllt; kalt (erste Bild-Downloads) Ø 3,92 s
   - Kleiner Fehler im VPS-Skript: Testfotos im Container konnten nicht gelöscht werden (gehörten root) → behoben, harmlos
-- [ ] Abnahme Top-1 ≥ 85 % (DE/EN) – **wartet auf weitere Testfotos** (Entscheidung Nutzer)
+- [x] **Entscheidung Nutzer (17.10.2026):** Latenz bleibt vorerst so (Ø 2,7 s, max 4,6 s), weiter mit Phase 5. Verbesserung in Phase 7
+- [x] **Abschluss Phase 4** ✅ – nach Phase 7 verschoben: Latenz ≤ 3 s bei textreichen Fotos (weniger Bildabgleich-Kandidaten, kein KO-Durchlauf bei chinesischen Karten) und Abnahme Top-1 ≥ 85 % (DE/EN) mit weiteren Testfotos
 
 ### Änderungsprotokoll
 
@@ -202,6 +203,7 @@ Umsetzungsdetails (im Rahmen von 5.6, keine Änderung am Konzept):
 | 17.10.2026 | Phase 4 gestartet: Binder-Scan als Beta, weitere Testfotos später (Abnahme 85 % wird nachgeholt) |
 | 17.10.2026 | Phase 4: Scanner-Modul, Identifikation, API (Einzel/Stapel/Binder, Bestätigen, Referenzbilder), Evaluation, Docker und VPS-Skript fertig. VPS-Lauf offen |
 | 17.10.2026 | VPS-Lauf Phase 4: Top-1 5/6, 0× sicher-aber-falsch, Latenz Ø 2,7 s / max 4,6 s. Aufräum-Fehler im Skript behoben |
+| 17.10.2026 | Entscheidung: Latenz-Tuning nach Phase 7. **Phase 4 abgeschlossen** |
 
 ---
 
@@ -608,7 +610,7 @@ Alle Aufwandsangaben sind grobe Schätzungen für einen Entwickler mit KI-Unters
 - Last- und Sicherheitstests, Dokumentation für Freunde („So kommst du rein“).
 
 ### Phase 7: Nachbesserung (laufend)
-- Scanner-Qualität verbessern (mehr Testfotos, besseres Matching).
+- Scanner-Qualität verbessern (mehr Testfotos, besseres Matching). Aus Phase 4: Latenz ≤ 3 s auch bei Screenshots/ZH-Karten, Abnahme Top-1 ≥ 85 % DE/EN nachholen.
 - Highlights (größter Gewinner und Verlierer), Zustandsfaktoren pro Nutzer, Feinschliff am UI.
 
 **Gesamt:** ca. 7–9 Wochen Kalenderzeit bei Teilzeit, deutlich weniger bei Vollzeit.
