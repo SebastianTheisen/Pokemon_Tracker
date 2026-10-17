@@ -78,6 +78,15 @@ else
   echo "- Spike Scanner: ⏭️ übersprungen (keine Fotos in scanner_testset/)" >> "${SUMMARY}"
 fi
 
+step "Zusatz: Bildabgleich gegen TCGdex-Katalogbilder"
+if [[ -f "${PHOTO_DIR}/soll.csv" ]] && uv run python scripts/spike_image_match.py \
+    --photos "${PHOTO_DIR}" --expected "${PHOTO_DIR}/soll.csv" \
+    --out "${SPIKE_DIR}/bildabgleich.md"; then
+  echo "- Spike Bildabgleich: ✅ Bericht in docs/spikes/bildabgleich.md" >> "${SUMMARY}"
+else
+  echo "- Spike Bildabgleich: ❌ Skript abgebrochen oder keine soll.csv (Ausgabe oben)" >> "${SUMMARY}"
+fi
+
 step "Zusatz: koreanisches OCR-Modell laden (Download-Test)"
 # Echtes Foto nötig: RapidOCR lädt das Erkennungsmodell erst, wenn Text gefunden wurde.
 if uv run python -c "
@@ -97,7 +106,8 @@ cd "${REPO_ROOT}"
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   created_env=false
   if [[ ! -f .env ]]; then cp .env.example .env; created_env=true; fi
-  if docker compose up --build -d; then
+  docker_log="${SPIKE_DIR}/docker_build.log"
+  if docker compose up --build -d >"${docker_log}" 2>&1; then
     health="❌ keine Antwort"
     for _ in $(seq 1 30); do
       if curl -fsS http://127.0.0.1:8000/api/v1/health >/dev/null 2>&1; then
@@ -109,8 +119,11 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
     echo "- Docker: Build ok, Health-Check ${health}" >> "${SUMMARY}"
     docker compose down
   else
-    echo "- Docker: ❌ Build/Start fehlgeschlagen" >> "${SUMMARY}"
+    tail -n 40 "${docker_log}"
+    echo "- Docker: ❌ Build/Start fehlgeschlagen – siehe docs/spikes/docker_build.log" >> "${SUMMARY}"
   fi
+  # Nur die letzten Zeilen behalten, damit das Log klein bleibt.
+  tail -n 150 "${docker_log}" > "${docker_log}.tmp" && mv "${docker_log}.tmp" "${docker_log}"
   if [[ "${created_env}" == true ]]; then rm -f .env; fi
 else
   warn "Docker nicht installiert – Docker-Test übersprungen (kommt in Phase 6)."
@@ -122,3 +135,6 @@ step "Fertig"
 cat "${SUMMARY}"
 echo
 echo "Ergebnis-Archiv: ${REPO_ROOT}/docs/spikes_ergebnisse.tar.gz"
+echo
+echo "Ergebnisse zurückschicken:"
+echo "  git add docs/spikes && git commit -m 'Phase 0: Ergebnisse vom VPS' && git push"

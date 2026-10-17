@@ -10,7 +10,7 @@ Stand: 17.10.2026 · Status: **Phase 0 läuft**
 
 | Phase | Status | Notiz |
 |---|---|---|
-| 0 – Spikes und Fundament | 🟡 in Arbeit | Scanner ausgewertet, Strategie freigegeben. **Wartet auf:** VPS-Lauf (Datenquellen, KO-Modell, Docker) |
+| 0 – Spikes und Fundament | 🟡 in Arbeit | VPS-Lauf 1 ausgewertet. **Wartet auf:** VPS-Lauf 2 (asiatische Preise, Bildabgleich, Docker) + Entscheidung Cardmarket |
 | 1 – Backend-Kern | ⚪ offen | |
 | 2 – Preise | ⚪ offen | |
 | 3 – Sammlung, Merkliste, Dashboard | ⚪ offen | |
@@ -28,7 +28,6 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 - [x] CI: `.github/workflows/backend.yml` (ruff, mypy, pytest)
 - [x] pre-commit-Konfiguration, `.gitignore`, `.env.example`
 - [x] `Dockerfile` (Backend) und `docker-compose.yml` (Postgres + API)
-- [ ] Docker-Build verifizieren. **Nicht geprüft:** Docker Hub hat hier mit „429 Too Many Requests“ geantwortet. Wird beim nächsten Versuch oder auf dem VPS geprüft
 - [x] Spike-Skript Datenquellen: `backend/scripts/spike_datasources.py` (TCGdex-Sprachabdeckung und Felder, pokemontcg.io, eine einzelne Cardmarket-Anfrage)
 - [x] Spike-Skript Scanner: `backend/scripts/spike_scanner.py` (Kartenerkennung, Entzerrung, RapidOCR, Name/Nummer, Trefferquote gegen `soll.csv`, Debug-Bilder). Rauchtest mit synthetischem Kartenfoto grün: Karte gefunden, Name und Nummer korrekt, ca. 330 ms
 - [x] VPS-Skript `deploy/phase0_vps.sh` + Anleitung `docs/VPS_PHASE0.md`. Hier einmal komplett durchgelaufen (Lint/Typen/Tests grün, Berichte erzeugt)
@@ -36,10 +35,16 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 - [x] Spike Scanner mit echten Fotos ausgeführt und ausgewertet → [`docs/spikes/scanner_auswertung.md`](docs/spikes/scanner_auswertung.md). Ergebnis: **Go mit Anpassung.** Konturerkennung allein reicht nicht (2/7 richtige Ausschnitte). Die Nummer per OCR ist sprachunabhängig gut lesbar (3 von 4 sichtbaren Fällen). Slab-Labels sind komplett lesbar. Japanische Namen sind mit dem Standardmodell nicht lesbar
 - [x] Entscheidung Nutzer: angepasste Scanner-Strategie **inkl. JP/KO-OCR** freigegeben → Abschnitt 5.6 geändert
 - [x] Scanner-Spike Lauf 2 mit RapidOCR 3 / PP-OCRv6: Name im Text 4/7 (6/7 ohne Logo-Zusatz), Nummer 5/7, in jedem Foto mindestens ein starkes Merkmal
-- [ ] ⏳ **Nutzer führt auf dem VPS aus:** `bash deploy/phase0_vps.sh` (keine Fotos nötig). Liefert: Spike Datenquellen, Download-Test des koreanischen OCR-Modells, Docker-Test. Ergebnis `docs/spikes/zusammenfassung.md` + `docs/spikes/datenquellen.md` zurückschicken
-- [ ] Spike Datenquellen auswerten (Go/No-Go)
-- [ ] Bildabgleich gegen Katalogbilder nachweisen (braucht TCGdex-Bilder, gleiche Sperre)
-- [ ] Docker-Build verifizieren (läuft im VPS-Skript mit, falls Docker installiert ist)
+- [x] VPS-Lauf 1 (Ubuntu 20.04, 6 CPU, 11 GB RAM): Tests grün, Scanner reproduziert. Auswertung Datenquellen: [`docs/spikes/datenquellen_auswertung.md`](docs/spikes/datenquellen_auswertung.md)
+  - **TCGdex: Go.** Alle Sprachen vorhanden (de 155, en 220, ja 186, ko 95, zh-tw 98, zh-cn 57 Sets). Cardmarket-Preise (avg/low/trend/avg1/7/30, `idProduct` für den Beleglink) und TCGplayer-Preise sind enthalten
+  - **pokemontcg.io:** HTTP 500, wird nicht gebraucht → Vorschlag: streichen
+  - **Cardmarket direkt:** schon die erste Anfrage wird von Cloudflare gesperrt (403 „Just a moment“). Ohne Umgehung nicht abrufbar
+  - **Docker:** fehlgeschlagen. Ursache gefunden und lokal nachgestellt (`README.md` fehlte im Image), korrigiert
+  - **KO-Modell:** Der Test in Lauf 1 war wegen eines Testfehlers nicht aussagekräftig (Modell wird erst bei erkanntem Text geladen). Korrigiert, wird in Lauf 2 wiederholt
+- [x] Bildabgleich (SIFT + RANSAC) offline geprüft: gleiche Karte auf verschiedenen Fotos 184–192 Übereinstimmungen, andere Karten ≤ 20, ca. 60 ms pro Vergleich. Spike-Skript gegen TCGdex-Katalog geschrieben (`backend/scripts/spike_image_match.py`), offline mit simuliertem TCGdex getestet
+- [ ] ⏳ **VPS-Lauf 2 durch den Nutzer:** `git pull && bash deploy/phase0_vps.sh`, danach `git add docs/spikes && git commit -m "Phase 0: Ergebnisse Lauf 2" && git push`. Liefert: Preise und Bilder asiatischer Karten, Bildabgleich gegen den echten Katalog, KO-Modell, Docker
+- [ ] ❓ **Entscheidung Nutzer:** Cardmarket-Angebots-Provider streichen (Cloudflare-Sperre)? pokemontcg.io streichen?
+- [ ] Abschluss Phase 0: Ergebnisse Lauf 2 auswerten, Go/No-Go je Spike
 - [ ] Spike Tailscale: laut Absprache verschoben, wird beim Deployment (Phase 6) getestet
 
 **Regel:** Phase 1 beginnt erst, wenn alle Spike-Ergebnisse vorliegen und ausgewertet sind.
@@ -54,6 +59,7 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 | 17.10.2026 | Scanner-Spike, VPS-Skript und Anleitung ergänzt. Phase 0 wartet auf den VPS-Lauf |
 | 17.10.2026 | Scanner-Spike mit 7 Nutzerfotos ausgewertet: Go mit Anpassung, Strategie-Vorschlag wartet auf Freigabe |
 | 17.10.2026 | Strategie inkl. JP/KO-OCR freigegeben, Abschnitt 5.6 angepasst. Umstieg auf RapidOCR 3 (PP-OCRv6) |
+| 17.10.2026 | VPS-Lauf 1 ausgewertet (TCGdex Go, Cardmarket gesperrt, pokemontcg.io 500). Docker-Fehler behoben, Spike Bildabgleich + asiatische Preise ergänzt |
 
 ---
 

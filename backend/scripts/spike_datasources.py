@@ -31,6 +31,10 @@ CARDMARKET_PROBE_URL = "https://www.cardmarket.com/de/Pokemon/Products/Singles"
 
 TCGDEX_LANGUAGES = ("de", "en", "ja", "ko", "zh-cn", "zh-tw")
 SAMPLE_CARD_ID = "swsh7-215"  # Nachtara VMAX, Drachenwandel/Evolving Skies 215
+SAMPLE_IMAGE_BASE = "https://assets.tcgdex.net/de/swsh/swsh7/215"
+ASIAN_LANGUAGES = ("ja", "ko", "zh-tw", "zh-cn")
+ASIAN_SETS_PER_LANGUAGE = 2
+ASIAN_CARDS_PER_SET = 2
 USER_AGENT = "PokemonTracker-Spike/0.1 (private Sammel-App, geringe Last)"
 BOT_WALL_MARKERS = ("cf-chl", "Just a moment", "captcha", "Attention Required")
 
@@ -49,9 +53,9 @@ class SpikeReport:
         parts = ["# Spike: Datenquellen\n"]
         for title, lines in self.sections:
             parts.append(f"## {title}\n")
-            parts.extend(f"{line}\n" for line in lines)
+            parts.extend(lines)
             parts.append("")
-        return "\n".join(parts)
+        return "\n".join(parts) + "\n"
 
 
 def _describe_keys(data: dict[str, Any], prefix: str = "") -> list[str]:
@@ -105,6 +109,57 @@ async def probe_tcgdex(client: httpx.AsyncClient, report: SpikeReport) -> None:
     )
 
 
+async def probe_tcgdex_asian(client: httpx.AsyncClient, report: SpikeReport) -> None:
+    """Haben JP/KO/ZH-Karten Preise und Bilder? Stichprobe: je Sprache die ersten Karten
+    der zuletzt gelisteten Sets (asiatische Sets haben eigene IDs, z. B. ``S12``)."""
+    rows = [
+        "| Sprache | Set | Karte | Bild | Cardmarket-Preis | TCGplayer-Preis |",
+        "|---|---|---|---|---|---|",
+    ]
+    for lang in ASIAN_LANGUAGES:
+        sets_resp = await client.get(f"{TCGDEX_BASE}/{lang}/sets")
+        if not sets_resp.is_success:
+            rows.append(f"| {lang} | HTTP {sets_resp.status_code} | – | – | – | – |")
+            continue
+        for set_brief in sets_resp.json()[-ASIAN_SETS_PER_LANGUAGE:]:
+            set_resp = await client.get(f"{TCGDEX_BASE}/{lang}/sets/{set_brief['id']}")
+            cards = set_resp.json().get("cards", []) if set_resp.is_success else []
+            for card_brief in cards[:ASIAN_CARDS_PER_SET]:
+                card_resp = await client.get(f"{TCGDEX_BASE}/{lang}/cards/{card_brief['id']}")
+                card = card_resp.json() if card_resp.is_success else {}
+                pricing = card.get("pricing") or {}
+                rows.append(
+                    f"| {lang} | {set_brief['id']} ({set_brief.get('name', '')}) "
+                    f"| {card.get('name', '–')} · {card.get('localId', '–')} "
+                    f"| {'ja' if card.get('image') else 'nein'} "
+                    f"| {_price_summary(pricing.get('cardmarket'))} "
+                    f"| {_price_summary(pricing.get('tcgplayer'))} |"
+                )
+    report.add("TCGdex – asiatische Karten: Preise und Bilder (Stichprobe)", rows)
+
+
+def _price_summary(block: dict[str, Any] | None) -> str:
+    """Kurzfassung eines Preisblocks, z. B. ``trend 12.5 EUR``."""
+    if not block:
+        return "nein"
+    for key in ("trend", "avg", "low"):
+        if block.get(key) not in (None, 0):
+            return f"{key} {block[key]} {block.get('unit', '')}".strip()
+    return "leer"
+
+
+async def probe_images(client: httpx.AsyncClient, report: SpikeReport) -> None:
+    """Sind Katalogbilder abrufbar, und wie groß sind sie?"""
+    rows = ["| Variante | HTTP | Größe | Typ |", "|---|---|---|---|"]
+    for variant in ("low.webp", "high.webp", "high.png"):
+        resp = await client.get(f"{SAMPLE_IMAGE_BASE}/{variant}")
+        rows.append(
+            f"| `{variant}` | {resp.status_code} | {len(resp.content) / 1024:.0f} KB "
+            f"| {resp.headers.get('content-type', '-')} |"
+        )
+    report.add(f"TCGdex – Bildabruf (`{SAMPLE_IMAGE_BASE}`)", rows)
+
+
 async def probe_pokemontcg(client: httpx.AsyncClient, report: SpikeReport) -> None:
     """Felder und Cardmarket-Preise von pokemontcg.io ermitteln."""
     resp = await client.get(f"{POKEMONTCG_BASE}/cards/{SAMPLE_CARD_ID}")
@@ -148,7 +203,13 @@ async def run() -> SpikeReport:
     report = SpikeReport()
     headers = {"User-Agent": USER_AGENT}
     async with httpx.AsyncClient(headers=headers, timeout=30, follow_redirects=True) as client:
-        for probe in (probe_tcgdex, probe_pokemontcg, probe_cardmarket):
+        for probe in (
+            probe_tcgdex,
+            probe_tcgdex_asian,
+            probe_images,
+            probe_pokemontcg,
+            probe_cardmarket,
+        ):
             try:
                 await probe(client, report)
             except httpx.HTTPError as exc:

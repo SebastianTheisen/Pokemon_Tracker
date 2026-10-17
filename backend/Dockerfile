@@ -9,11 +9,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
 
 WORKDIR /srv
+# Nur Laufzeit-Abhängigkeiten: keine Dev- und Spike-Gruppen (siehe [tool.uv] default-groups).
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-default-groups --no-install-project
 
+# README.md wird beim Bauen des Projekts benötigt (pyproject: readme = "README.md").
+COPY README.md ./
 COPY app ./app
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-default-groups
 
 RUN useradd --create-home --uid 1000 tracker
 USER tracker

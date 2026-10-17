@@ -15,6 +15,7 @@ build/
 
 # Scanner-Debug-Bilder (werden bei jedem Lauf neu erzeugt)
 docs/spikes/scanner_debug/
+docs/spikes/katalog_cache/
 docs/spikes_ergebnisse.tar.gz
 
 # Editor / OS

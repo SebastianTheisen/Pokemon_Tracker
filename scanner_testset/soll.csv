@@ -1,8 +1,8 @@
-datei;name;nummer
-01.jpg;ゼニガメ;007
-02.jpg;Team Rockets Mewtu ex;231/182
-03.jpg;ルギアV;110/098
-04.jpg;ルギアV;110/098
-05.jpg;ブラッキーex;217/187
-06.jpg;ルギア;142/103
-07.jpg;鲤鱼王;165/103
+datei;name;nummer;sprache
+01.jpg;ゼニガメ;007;ja
+02.jpg;Team Rockets Mewtu ex;231/182;de
+03.jpg;ルギアV;110/098;ja
+04.jpg;ルギアV;110/098;ja
+05.jpg;ブラッキーex;217/187;ja
+06.jpg;ルギア;142/103;ja
+07.jpg;鲤鱼王;165/103;zh-cn
