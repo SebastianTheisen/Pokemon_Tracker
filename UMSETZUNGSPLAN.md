@@ -2,7 +2,45 @@
 
 Eine private Sammel-App im Stil von SCNDX: Pokémon-Karten scannen, Sammlung verwalten, belegte Marktpreise sehen. Sie ist für den Freundeskreis gedacht und wird nicht veröffentlicht.
 
-Stand: 17.10.2026 · Status: Planung (noch kein Code)
+Stand: 17.10.2026 · Status: **Phase 0 läuft**
+
+---
+
+## 0. Projektstatus (wird laufend gepflegt)
+
+| Phase | Status | Notiz |
+|---|---|---|
+| 0 – Spikes und Fundament | 🟡 in Arbeit | Gerüst steht, Spikes blockiert (siehe unten) |
+| 1 – Backend-Kern | ⚪ offen | |
+| 2 – Preise | ⚪ offen | |
+| 3 – Sammlung, Merkliste, Dashboard | ⚪ offen | |
+| 4 – Scanner | ⚪ offen | |
+| 5 – Flutter-App | ⚪ offen | |
+| 6 – Deployment und Härtung | ⚪ offen | |
+| 7 – Nachbesserung | ⚪ offen | |
+
+Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
+
+### Phase 0 – Aufgaben
+
+- [x] Repo-Grundgerüst: `backend/` mit `pyproject.toml` (uv), FastAPI-App-Factory, Konfiguration (`pydantic-settings`, Präfix `PT_`), structlog-Logging, Health-Endpoint `GET /api/v1/health`
+- [x] Qualitäts-Tooling: ruff (Lint + Format), mypy `--strict`, pytest + pytest-asyncio + Coverage. Lokal alles grün (2 Tests, 97 % Coverage)
+- [x] CI: `.github/workflows/backend.yml` (ruff, mypy, pytest)
+- [x] pre-commit-Konfiguration, `.gitignore`, `.env.example`
+- [x] `Dockerfile` (Backend) und `docker-compose.yml` (Postgres + API)
+- [ ] Docker-Build verifizieren. **Nicht geprüft:** Docker Hub hat hier mit „429 Too Many Requests“ geantwortet. Wird beim nächsten Versuch oder auf dem VPS geprüft
+- [x] Spike-Skript Datenquellen: `backend/scripts/spike_datasources.py` (TCGdex-Sprachabdeckung und Felder, pokemontcg.io, eine einzelne Cardmarket-Anfrage)
+- [ ] 🔴 Spike Datenquellen **ausführen**. Blockiert: Die Cloud-Umgebung sperrt `api.tcgdex.net`, `assets.tcgdex.net`, `api.pokemontcg.io` und `www.cardmarket.com` (Proxy 403). Lösung: Hosts in den Umgebungseinstellungen freigeben oder das Skript auf dem VPS ausführen
+- [ ] 🔴 Spike Scanner. Blockiert: braucht Kartenbilder (TCGdex, gesperrt) und echte Testfotos (vom Nutzer)
+- [ ] Spike Tailscale: laut Absprache verschoben, wird beim Deployment (Phase 6) getestet
+
+### Änderungsprotokoll
+
+| Datum | Änderung |
+|---|---|
+| 17.10.2026 | Plan erstellt |
+| 17.10.2026 | Vorhandener Ubuntu-VPS, 5–10 Nutzer, optionaler `CardmarketListingProvider` (ohne Tor/IP-Rotation) |
+| 17.10.2026 | Phase 0 gestartet: Backend-Gerüst, Tooling, CI, Docker, Spike-Skript Datenquellen |
 
 ---
 

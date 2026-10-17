@@ -1,0 +1,1 @@
+"""Querschnittsfunktionen: Konfiguration, Logging, Sicherheit."""

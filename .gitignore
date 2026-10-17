@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Secrets
+.env
+
+# Scanner-Testfotos (privat)
+backend/scanner_testset/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
