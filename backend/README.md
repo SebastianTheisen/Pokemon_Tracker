@@ -24,6 +24,10 @@ uv run python -m app.cli create-admin --email ich@example.com --name "Ich"
 uv run python -m app.cli create-invite --note "für Max"
 uv run python -m app.cli sync-catalog [--languages de en] [--full]
 uv run python -m app.cli search "nachtara 215"
+uv run python -m app.cli scan foto.jpg --email ich@example.com          # Foto erkennen (Probe)
+uv run python -m app.cli scan-eval --photos ../scanner_testset \
+    --expected ../scanner_testset/soll.csv --email ich@example.com      # Top-1/Top-5 messen
+uv run python -m app.cli scanner-warmup --korean                         # OCR-Modelle laden
 ```
 
 Im Container stellst du jedem Befehl `docker compose exec api` voran.
@@ -36,7 +40,8 @@ Im Container stellst du jedem Befehl `docker compose exec api` voran.
 | `app/db` | Engine, Sitzungen, deklarative Basis |
 | `app/models` | ORM-Modelle |
 | `app/schemas` | Pydantic-Schemas der API |
-| `app/services` | Fachlogik (Auth, Admin, Katalog-Import, Suche); kennt kein HTTP |
+| `app/services` | Fachlogik (Auth, Admin, Katalog, Preise, Sammlung, Scan); kennt kein HTTP |
+| `app/scanner` | Bild- und Textverarbeitung des Scanners (OCR, Merkmale, Bildabgleich), ohne Datenbank |
 | `app/providers` | Externe Quellen (TCGdex) |
 | `app/api/v1` | Router; nur Ein- und Ausgabe, keine Fachlogik |
 | `alembic/` | Datenbank-Migrationen |

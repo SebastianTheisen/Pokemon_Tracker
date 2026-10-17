@@ -17,6 +17,7 @@ from app.services.auth import AuthService
 from app.services.errors import AuthenticationError, PermissionDeniedError
 from app.services.pricing import PriceService
 from app.services.rate_limit import FailureLimiter
+from app.services.scan import ScanService
 
 _bearer = HTTPBearer(auto_error=False, description="Access-Token aus /auth/login")
 
@@ -94,6 +95,11 @@ def get_price_service(request: Request, session: SessionDep, settings: SettingsD
     )
 
 
+def get_scan_service(request: Request, session: SessionDep, user: CurrentUser) -> ScanService:
+    return ScanService(session, request.app.state.scanner, user)
+
+
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 PriceServiceDep = Annotated[PriceService, Depends(get_price_service)]
 AdminServiceDep = Annotated[AdminService, Depends(get_admin_service)]
+ScanServiceDep = Annotated[ScanService, Depends(get_scan_service)]

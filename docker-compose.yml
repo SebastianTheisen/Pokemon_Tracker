@@ -21,6 +21,8 @@ services:
     env_file: .env
     environment:
       PT_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-tracker}:${POSTGRES_PASSWORD:-tracker}@db:5432/${POSTGRES_DB:-tracker}
+    volumes:
+      - scanner-data:/data/scanner
     depends_on:
       db:
         condition: service_healthy
@@ -34,6 +36,8 @@ services:
     env_file: .env
     environment:
       PT_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-tracker}:${POSTGRES_PASSWORD:-tracker}@db:5432/${POSTGRES_DB:-tracker}
+    volumes:
+      - scanner-data:/data/scanner  # Aufräumen verwaister Referenzbilder
     depends_on:
       api:
         condition: service_healthy  # API führt beim Start die Migrationen aus
@@ -43,3 +47,4 @@ services:
 
 volumes:
   db-data:
+  scanner-data:

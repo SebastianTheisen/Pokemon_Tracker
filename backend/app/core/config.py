@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, SecretStr, model_validator
@@ -94,6 +95,40 @@ class Settings(BaseSettings):
             "Importpfade zusätzlicher Preisquellen (Plug-ins), z. B. "
             "'meine_quelle.provider:MeinProvider' (siehe Plan 5.3)."
         ),
+    )
+
+    # --- Scanner ------------------------------------------------------------
+    scanner_data_dir: Path = Field(
+        default=Path("data/scanner"),
+        description="Volume für Merkmal-Cache und eigene Referenzbilder (keine Fotos).",
+    )
+    scan_max_upload_mb: int = Field(default=15, ge=1, le=50)
+    scan_max_pixels: int = Field(default=40_000_000, ge=1_000_000)
+    scan_batch_max: int = Field(default=20, ge=1, le=50)
+    scan_rate_limit_per_hour: int = Field(
+        default=600, ge=1, description="Bilder pro Nutzer und Stunde (Schutz vor Missbrauch)."
+    )
+    scan_pending_minutes: int = Field(
+        default=30, ge=1, le=240, description="So lange kann ein Scan bestätigt werden."
+    )
+    scan_log_retention_days: int = Field(default=90, ge=1)
+    scanner_concurrency: int = Field(
+        default=1, ge=1, le=8, description="Gleichzeitige CPU-Arbeiten (OCR, Bildabgleich)."
+    )
+    scanner_max_image_candidates: int = Field(default=20, ge=1, le=60)
+    scanner_rescue_references: int = Field(
+        default=40,
+        ge=0,
+        le=500,
+        description="Ohne lesbaren Text: mit so vielen eigenen Referenzbildern vergleichen.",
+    )
+    scanner_references_per_card: int = Field(default=5, ge=1, le=20)
+    scanner_korean_ocr: bool = Field(
+        default=True, description="Koreanisches OCR-Modell bei Bedarf zusätzlich nutzen."
+    )
+    scanner_image_hosts: list[str] = Field(
+        default_factory=lambda: ["assets.tcgdex.net"],
+        description="Nur von diesen Hosts werden Katalogbilder geladen (Schutz vor SSRF).",
     )
 
     @model_validator(mode="after")

@@ -2,7 +2,7 @@
 
 Eine private Sammel-App im Stil von SCNDX: Pokémon-Karten scannen, Sammlung verwalten, belegte Marktpreise sehen. Sie ist für den Freundeskreis gedacht und wird nicht veröffentlicht.
 
-Stand: 17.10.2026 · Status: **Phase 3 abgeschlossen, Phase 4 (Scanner) wartet auf Freigabe**
+Stand: 17.10.2026 · Status: **Phase 4 (Scanner) in Arbeit – Code fertig, VPS-Lauf offen**
 
 ---
 
@@ -14,7 +14,7 @@ Stand: 17.10.2026 · Status: **Phase 3 abgeschlossen, Phase 4 (Scanner) wartet a
 | 1 – Backend-Kern | ✅ erledigt | 65.561 Karten importiert, Abnahme-Suchen ✅, Nachtest 0 Fehler, 111 Tests (96 % Coverage) |
 | 2 – Preise | ✅ erledigt | Echte Preise mit Beleg (DE/EN/JA/ZH), Worker läuft, NM-Basis = Median, 163 Tests (95 % Coverage) |
 | 3 – Sammlung, Merkliste, Dashboard | ✅ erledigt | VPS-Probe mit echten Preisen = Handrechnung (4.894,67 €), Zugriffsschutz ✅, 204 Tests (95 % Coverage) |
-| 4 – Scanner | ⚪ offen | |
+| 4 – Scanner | 🟡 in Arbeit | Code fertig (314 Tests, 96 % Coverage), VPS-Lauf offen. Binder-Scan als Beta; Abnahme Top-1 ≥ 85 % wartet auf weitere Testfotos |
 | 5 – Flutter-App | ⚪ offen | |
 | 6 – Deployment und Härtung | ⚪ offen | |
 | 7 – Nachbesserung | ⚪ offen | |
@@ -151,6 +151,28 @@ Entscheidungen (17.10.2026):
 - [x] VPS-Lauf ([`docs/phase3/ergebnis.md`](docs/phase3/ergebnis.md)): Migration `0003_collection`, Worker läuft, Probe mit **echten Preisen**: 2× Nachtara VMAX NM 3.611,80 € (2 × 1.805,90), Glurak LP 232,87 € (423,40 × 0,55), PSA 10 900 €, Display 150 € → **4.894,67 €** = Handrechnung; Probe vollständig zurückgerollt (0 Reste); alle neuen Endpunkte ohne Anmeldung 401
 - [x] **Abnahme Phase 3** ✅
 
+### Phase 4 – Aufgaben
+
+Entscheidungen (17.10.2026):
+- **Weitere Testfotos später.** Phase 4 wird mit dem vorhandenen Testsatz (7 Fotos) fertig gebaut. Die Abnahme „Top-1 ≥ 85 % (DE/EN)“ wird nachgeholt, sobald mehr Fotos da sind
+- **Binder-Scan** kommt als **Beta** in Phase 4
+
+Umsetzungsdetails (im Rahmen von 5.6, keine Änderung am Konzept):
+- **Katalogbilder lazy je Karte** statt je Set: Ein Bild wird erst geladen, wenn die Karte Kandidat eines Scans ist. Gespeichert werden nur die Merkmale (≈ 200 KB), nicht das Bild. Nur von `assets.tcgdex.net` (Schutz davor, dass eigene Karten mit fremder Bild-URL den Server beliebige Adressen abrufen lassen)
+- **Bestätigen:** Der Kartenausschnitt liegt bis zu 30 min nur im Arbeitsspeicher. Bestätigt der Nutzer (oder wählt eine andere Karte), wird er sein Referenzbild (max. 5 je Karte). Das Foto selbst wird nie gespeichert
+- **Koreanisch:** zweiter OCR-Durchlauf, wenn das Ergebnis unsicher ist und das Standardmodell weder Japanisch noch Latein erkannt hat (oder Sprache „ko“ gewählt). Er wird nur übernommen, wenn er das Ergebnis verbessert
+
+- [x] Scanner-Modul `app/scanner/`: Bilder sicher laden (JPEG/PNG/WebP/HEIC, Pixel-Grenze, EXIF-Drehung), OCR-Hülle (PP-OCRv6 + koreanisches Modell), Textmerkmale (Nummer mit Setgröße, Setcode inkl. OCR-Verwechslung „5“/„S“, Namen, Sprache aus der Schrift), Slab-Labels (PSA/BGS/CGC, Note, Name, Sprache), Bildabgleich (SIFT + RANSAC, Merkmale kompakt gespeichert), Binder-Zerlegung (Konturen oder Raster 3×3/4×3/2×2)
+- [x] Migration `0004_scanner`: `scan_log` (nur Merkmale und Ergebnis, kein Bild), `card_reference_images`; hoch/runter getestet, `alembic check` ohne Abweichungen
+- [x] Identifikation (`app/services/scan.py`, `scan_scoring.py`): Kandidaten über Nummer (+ Setgröße/Setcode) und unscharfen Namen, Bildabgleich gegen Katalogbilder **und eigene Referenzbilder**, ohne Text Rettungsweg über eigene Referenzbilder. Punkte mit Begründung je Kandidat, **sicher** nur bei starkem Beleg und klarem Abstand zur nächsten anderen Karte (gleiche Karte in anderer Sprache zählt nicht als Konkurrenz)
+- [x] API: `POST /scan`, `POST /scan/batch`, `POST /scan/binder` (Beta), `POST /scan/{id}/confirm`, `GET /scan/references`, `GET /scan/references/{id}/image`, `DELETE /scan/references/{id}`. Ergebnis: bester Treffer + bis zu 4 Alternativen, Confidence, Hinweis („Erkannt als …“ / „Falsche Karte? Selbst suchen“), Slab-Vorschlag
+- [x] Schutz: Rate-Limit (600 Bilder/Stunde je Nutzer, 429 + Retry-After), Upload-Grenze **vor** dem Einlesen (413), Dateityp über den Inhalt geprüft, Referenzbilder nur für den Eigentümer, Worker löscht altes Scan-Protokoll (90 Tage) und verwaiste Dateien
+- [x] Evaluation: `cli scan-eval` (Top-1, Top-5, „sicher, aber falsch“, Latenz, Abnahme-Status), `soll.csv` um erwartete TCGdex-ID ergänzt (`-` = nicht im Katalog, richtig ist dann „unsicher“). Außerdem `cli scan` und `cli scanner-warmup`
+- [x] Docker: Scanner-Bibliotheken im Image, OCR-Modelle inkl. Koreanisch beim Bauen geladen, Volume `scanner-data`
+- [x] Qualität: ruff, mypy strict, **314 Tests grün, 96 % Coverage**. Tests mit den echten Testfotos (Bildabgleich echt, OCR als Attrappe mit den Spike-Texten) und ein Ende-zu-Ende-Test mit echter OCR (Slab-Foto 04 → S12-110, PSA 10)
+- [ ] VPS-Lauf: Build mit KO-Modell, Evaluation mit echtem Katalog (kalt/warm), Latenz, Speicherbedarf
+- [ ] Abnahme Top-1 ≥ 85 % (DE/EN) – **wartet auf weitere Testfotos** (Entscheidung Nutzer)
+
 ### Änderungsprotokoll
 
 | Datum | Änderung |
@@ -173,6 +195,8 @@ Entscheidungen (17.10.2026):
 | 17.10.2026 | Nachtest Median ✅. **Phase 2 abgeschlossen** |
 | 17.10.2026 | Phase 3 gestartet (Zustandspreis als Wert, eine Merkliste, neue Position je Hinzufügen). Code, Tests, Worker-Erweiterung, VPS-Skript fertig |
 | 17.10.2026 | VPS-Lauf Phase 3 ✅ (echte Werte = Handrechnung). **Phase 3 abgeschlossen** |
+| 17.10.2026 | Phase 4 gestartet: Binder-Scan als Beta, weitere Testfotos später (Abnahme 85 % wird nachgeholt) |
+| 17.10.2026 | Phase 4: Scanner-Modul, Identifikation, API (Einzel/Stapel/Binder, Bestätigen, Referenzbilder), Evaluation, Docker und VPS-Skript fertig. VPS-Lauf offen |
 
 ---
 
@@ -470,7 +494,7 @@ Gradete Karten werden immer zur Bestätigung angezeigt (siehe Schritt 6).
 
 Qualitätsmessung: Ausgangsbasis ist der Testsatz in `scanner_testset/` (7 Fotos, mit Soll-Werten). Er wird schrittweise erweitert, Ziel sind mindestens 200 echte Fotos (verschiedene Sprachen, Licht, Hintergründe, Sleeves) mit erwarteten Karten. Das Skript `scripts/eval_scanner.py` gibt Top-1- und Top-5-Trefferquote aus. **Ziel Top-1 ≥ 85 %** auf deutschen und englischen Karten.
 
-Katalog-Bildindex: Das Herunterladen von über 100.000 Kartenbildern ist teuer. Deshalb wird er **lazy** aufgebaut: Beim ersten Treffer eines Sets werden die Bilder dieses Sets in kleiner Auflösung geholt und gehasht. Ein Hintergrundjob füllt die häufigsten Sets vor.
+Katalog-Bildindex: Das Herunterladen von über 100.000 Kartenbildern ist teuer. Deshalb wird er **lazy** aufgebaut: Ist eine Karte zum ersten Mal Kandidat eines Scans, wird ihr Bild geholt und nur dessen Merkmale werden gespeichert (umgesetzt in Phase 4, je Karte statt je Set – sparsamer). Ein Vorbefüllen häufiger Sets ist bei Bedarf in Phase 7 möglich.
 
 ---
 
@@ -480,7 +504,7 @@ Katalog-Bildindex: Das Herunterladen von über 100.000 Kartenbildern ist teuer. 
 |---|---|
 | Auth | `POST /auth/register` (mit Einladungscode), `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/reset-password` (Code vom Admin) |
 | Katalog | `GET /cards/search?q=&lang=`, `GET /cards/{id}`, `GET /cards/{id}/prices`, `GET /cards/{id}/price-history?source=&variant=&metric=&days=`, `GET /sets`, `GET /products/search` |
-| Scan | `POST /scan` (Bild), `POST /scan/batch`, `POST /scan/binder` |
+| Scan | `POST /scan` (Bild), `POST /scan/batch`, `POST /scan/binder` (Beta), `POST /scan/{id}/confirm`, `GET /scan/references`, `GET /scan/references/{id}/image`, `DELETE /scan/references/{id}` |
 | Sammlung | `GET/POST /collection/items` (Filter, Sortierung), `GET/PATCH/DELETE /collection/items/{id}`, `GET /collection/summary`, `GET /collection/sets`, `GET /collection/history`, `GET /collection/export.csv` |
 | Eigene Karten/Produkte | `POST /cards`, `GET/POST /products`, Admin: `PATCH/DELETE /admin/cards/{id}`, `PATCH/DELETE /admin/products/{id}` |
 | Ordner | `GET/POST /folders`, `PATCH/DELETE /folders/{id}` (`?move_to=`) |

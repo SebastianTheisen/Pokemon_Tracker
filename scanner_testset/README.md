@@ -1,6 +1,11 @@
 # Scanner-Testsatz
 
-Fester Testsatz für `backend/scripts/spike_scanner.py`. Die Soll-Werte stehen in `soll.csv`.
+Fester Testsatz für den Scanner (`python -m app.cli scan-eval`, Phase-0-Spikes in `backend/scripts/`). Die Soll-Werte stehen in `soll.csv`:
+
+- `karte` (optional): erwartete TCGdex-ID. Leer = Treffer mit gleicher Nummer und Sprache zählt als richtig.
+- `karte = -`: Karte ist nicht im Katalog. Richtig ist dann, dass der Scanner **unsicher** meldet.
+
+Neue Fotos einfach in den Ordner legen und eine Zeile in `soll.csv` ergänzen.
 
 | Datei | Karte | Sprache | Besonderheit |
 |---|---|---|---|

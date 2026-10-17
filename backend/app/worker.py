@@ -1,4 +1,4 @@
-"""Hintergrund-Worker: tägliche Preisaktualisierung.
+"""Hintergrund-Worker: tägliche Preisaktualisierung und Scanner-Pflege.
 
 Start (im Container eigener Dienst ``worker``)::
 
@@ -8,6 +8,9 @@ Zur eingestellten Uhrzeit (``PT_PRICE_REFRESH_TIME``, Ortszeit ``PT_TIMEZONE``) 
 Preise aller vorgemerkten Karten neu geholt (Sammlungen, Merklisten, angesehene Karten) und
 danach der Tageswert jeder Sammlung gespeichert. Daraus entstehen die Kurven.
 Fehler einzelner Karten oder Quellen brechen die Runde nicht ab.
+
+Danach räumt der Worker auf: alte Einträge im Scan-Protokoll (``PT_SCAN_LOG_RETENTION_DAYS``)
+und Referenzbild-Dateien, deren Karte oder Nutzer gelöscht wurde.
 """
 
 from __future__ import annotations
@@ -29,9 +32,11 @@ from app.models import Card
 from app.providers.pricing import PriceProvider
 from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
+from app.scanner.storage import ReferenceStore
 from app.services.collection import CollectionService, users_with_items
 from app.services.price_health import SourceHealth
 from app.services.pricing import PriceService, tracked_card_ids
+from app.services.scan import prune_reference_files, purge_scan_logs
 
 log = structlog.get_logger(__name__)
 
@@ -105,6 +110,34 @@ async def refresh_tracked_prices(
     return summary
 
 
+@dataclass
+class HousekeepingSummary:
+    scan_logs_deleted: int = 0
+    reference_files_deleted: int = 0
+
+
+async def scanner_housekeeping(
+    session_factory: async_sessionmaker[AsyncSession], settings: Settings
+) -> HousekeepingSummary:
+    """Altes Scan-Protokoll löschen und verwaiste Referenzbild-Dateien entfernen."""
+    async with session_factory() as session:
+        summary = HousekeepingSummary(
+            scan_logs_deleted=await purge_scan_logs(
+                session, retention_days=settings.scan_log_retention_days
+            )
+        )
+        await session.commit()
+        summary.reference_files_deleted = await prune_reference_files(
+            session, ReferenceStore(settings.scanner_data_dir)
+        )
+    log.info(
+        "scanner.housekeeping_done",
+        scan_logs_deleted=summary.scan_logs_deleted,
+        reference_files_deleted=summary.reference_files_deleted,
+    )
+    return summary
+
+
 async def run_forever(settings: Settings) -> None:
     """Endlosschleife: bis zur nächsten Uhrzeit schlafen, Runde ausführen, wiederholen."""
     engine = create_engine(settings.database_url)
@@ -128,6 +161,10 @@ async def run_forever(settings: Settings) -> None:
                     await refresh_tracked_prices(session_factory, settings, providers, health)
                 except Exception:
                     log.exception("worker.refresh_failed")  # nächste Runde versucht es erneut
+                try:
+                    await scanner_housekeeping(session_factory, settings)
+                except Exception:
+                    log.exception("worker.housekeeping_failed")
     finally:
         await engine.dispose()
 

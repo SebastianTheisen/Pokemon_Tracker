@@ -22,3 +22,6 @@ docs/spikes_ergebnisse.tar.gz
 .idea/
 .vscode/
 .DS_Store
+
+# Scanner-Daten bei lokaler Entwicklung (Merkmal-Cache, Referenzbilder)
+backend/data/

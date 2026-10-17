@@ -15,12 +15,14 @@ from app.models.collection import (
     WishlistItem,
 )
 from app.models.pricing import PriceCheck, PricePoint
+from app.models.scanner import CardReferenceImage, ScanLog, ScanMode
 from app.models.settings import UserSettings
 from app.models.user import Role, User
 
 __all__ = [
     "AuditLog",
     "Card",
+    "CardReferenceImage",
     "CardSet",
     "CardSource",
     "CollectionEvent",
@@ -37,6 +39,8 @@ __all__ = [
     "ProductKind",
     "RefreshToken",
     "Role",
+    "ScanLog",
+    "ScanMode",
     "User",
     "UserSettings",
     "WishlistItem",

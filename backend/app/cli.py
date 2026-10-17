@@ -10,6 +10,9 @@ Beispiele (im Container: ``docker compose exec api python -m app.cli ...``)::
     python -m app.cli refresh-prices               # Preis-Runde sofort ausführen
     python -m app.cli prices "nachtara 215" --language de
     python -m app.cli collection-check --email ich@example.com   # Probe, speichert nichts
+    python -m app.cli scan foto.jpg --email ich@example.com     # ein Foto erkennen
+    python -m app.cli scan-eval --photos testset --expected testset/soll.csv --email ich@…
+    python -m app.cli scanner-warmup --korean     # OCR-Modelle laden (KO wird heruntergeladen)
 """
 
 from __future__ import annotations
@@ -19,10 +22,13 @@ import asyncio
 import getpass
 import os
 import sys
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from decimal import Decimal
+from pathlib import Path
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -32,6 +38,8 @@ from app.db.session import create_engine, create_session_factory
 from app.models import GradingCompany, Product, ProductKind, Role, User
 from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
+from app.scanner.ocr import RapidOcrReader
+from app.scanner.runtime import ScannerRuntime
 from app.services.admin import AdminService
 from app.services.catalog_search import search_cards
 from app.services.catalog_sync import sync_catalog
@@ -39,6 +47,8 @@ from app.services.collection import CollectionService, ItemFilter, ItemInput
 from app.services.errors import ServiceError
 from app.services.price_health import SourceHealth
 from app.services.pricing import PriceService
+from app.services.scan import ScanOutcome, ScanService
+from app.services.scan_eval import evaluate, load_expected, render_report
 from app.worker import refresh_tracked_prices
 
 MIN_PASSWORD_LENGTH = 10
@@ -260,6 +270,86 @@ async def _collection_check(
             print("Probe zurückgerollt – keine Daten gespeichert.")
 
 
+@asynccontextmanager
+async def _scanner(settings: Settings) -> AsyncIterator[ScannerRuntime]:
+    async with httpx.AsyncClient(
+        timeout=15.0, follow_redirects=True, headers={"User-Agent": settings.http_user_agent}
+    ) as client:
+        yield ScannerRuntime(settings, RapidOcrReader(), client)
+
+
+async def _user_by_email(session: AsyncSession, email: str) -> User:
+    user = await session.scalar(select(User).where(User.email == email.strip().lower()))
+    if user is None:
+        raise SystemExit(f"Kein Nutzer mit E-Mail {email}.")
+    return user
+
+
+def _print_outcome(outcome: ScanOutcome) -> None:
+    if outcome.best is None:
+        print("Keine Karte erkannt.")
+    else:
+        state = "sicher" if outcome.confident else "unsicher – bitte prüfen"
+        print(f"Erkannt als {outcome.best.card.name} ({state})")
+    for index, match in enumerate(
+        [m for m in (outcome.best, *outcome.alternatives) if m is not None], start=1
+    ):
+        card = match.card
+        print(
+            f"  {index}. {card.name} · {card.card_set.name} · {card.number} [{card.language}] "
+            f"({card.external_id}) · {match.confidence:.2f} · {'; '.join(match.reasons) or '–'}"
+        )
+    if outcome.grading:
+        print(f"Slab: {outcome.grading.company} {outcome.grading.grade or '?'}")
+    print(f"Merkmale: {outcome.detected}")
+    print(f"Dauer: {outcome.duration_ms} ms")
+
+
+async def _scan_photo(
+    factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
+) -> None:
+    """Ein Foto erkennen (Probe: das Scan-Protokoll wird zurückgerollt)."""
+    async with _scanner(settings) as runtime, factory() as session:
+        user = await _user_by_email(session, args.email)
+        try:
+            data = await asyncio.to_thread(Path(args.file).read_bytes)
+            outcome = await ScanService(session, runtime, user).scan(
+                data, language_hint=args.language
+            )
+            _print_outcome(outcome)
+        finally:
+            await session.rollback()
+
+
+async def _scan_eval(
+    factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
+) -> None:
+    """Testsatz auswerten (Top-1/Top-5, Latenz) – speichert nichts."""
+    expected = load_expected(Path(args.expected))
+    async with _scanner(settings) as runtime, factory() as session:
+        user = await _user_by_email(session, args.email)
+        try:
+            rows = await evaluate(ScanService(session, runtime, user), Path(args.photos), expected)
+            report = render_report(rows)  # vor dem Zurückrollen – danach sind Karten abgelaufen
+        finally:
+            await session.rollback()
+    if args.out:
+        await asyncio.to_thread(Path(args.out).write_text, report, encoding="utf-8")
+        print(f"Bericht geschrieben: {args.out}")
+    else:
+        print(report)
+
+
+async def _scanner_warmup(
+    _factory: async_sessionmaker[AsyncSession], _settings: Settings, args: argparse.Namespace
+) -> None:
+    """Lädt die OCR-Modelle einmal (das koreanische wird dabei heruntergeladen)."""
+    reader = RapidOcrReader()
+    print(f"Standardmodell (PP-OCRv6): {reader.warm_up()} Zeilen erkannt")
+    if args.korean:
+        print(f"Koreanisches Modell: {reader.warm_up(korean=True)} Zeilen erkannt")
+
+
 Command = Callable[
     [async_sessionmaker[AsyncSession], Settings, argparse.Namespace], Awaitable[None]
 ]
@@ -300,6 +390,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     check.add_argument("--email", required=True, help="E-Mail des Nutzers für die Probe")
     check.set_defaults(handler=_collection_check)
+
+    scan = commands.add_parser("scan", help="Ein Foto erkennen (speichert nichts)")
+    scan.add_argument("file", help="Pfad zum Foto")
+    scan.add_argument("--email", required=True, help="Nutzer (für eigene Referenzbilder)")
+    scan.add_argument("--language", help="Sprache vorgeben, z. B. ja")
+    scan.set_defaults(handler=_scan_photo)
+
+    evaluation = commands.add_parser("scan-eval", help="Scanner mit einem Testsatz messen")
+    evaluation.add_argument("--photos", required=True, help="Ordner mit Testfotos")
+    evaluation.add_argument("--expected", required=True, help="soll.csv")
+    evaluation.add_argument("--email", required=True, help="Nutzer (für eigene Referenzbilder)")
+    evaluation.add_argument("--out", help="Bericht als Markdown-Datei (sonst Ausgabe)")
+    evaluation.set_defaults(handler=_scan_eval)
+
+    warmup = commands.add_parser("scanner-warmup", help="OCR-Modelle laden bzw. herunterladen")
+    warmup.add_argument("--korean", action="store_true", help="auch das koreanische Modell")
+    warmup.set_defaults(handler=_scanner_warmup)
 
     search = commands.add_parser("search", help="Katalog durchsuchen")
     search.add_argument("query")

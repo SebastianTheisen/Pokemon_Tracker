@@ -2,7 +2,17 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import admin, auth, catalog, collection, contributions, health, me, pricing
+from app.api.v1 import (
+    admin,
+    auth,
+    catalog,
+    collection,
+    contributions,
+    health,
+    me,
+    pricing,
+    scan,
+)
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health.router)
@@ -13,3 +23,4 @@ api_router.include_router(catalog.router)
 api_router.include_router(pricing.router)
 api_router.include_router(collection.router)
 api_router.include_router(contributions.router)
+api_router.include_router(scan.router)

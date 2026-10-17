@@ -6,20 +6,25 @@ Die CLI startet ihre eigene Event-Loop (``asyncio.run``), deshalb sind diese Tes
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from functools import partial
+from pathlib import Path
 
+import httpx
 import pytest
 from sqlalchemy import func, select, text
 
 from app import cli
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.db.base import Base
-from app.db.session import create_engine
-from app.models import CollectionItem, Folder, Product
+from app.db.session import create_engine, create_session_factory
+from app.models import CollectionItem, Folder, Product, ScanLog
 from app.providers.tcgdex import TcgdexClient
+from app.scanner.runtime import ScannerRuntime
 from tests.fake_tcgdex import FakeTcgdex
 from tests.pricing_helpers import FakeProvider, cardmarket
+from tests.scan_helpers import TESTSET, FakeImages, ScriptedReader, build_scan_catalog, lines
 
 
 async def _truncate(database_url: str) -> None:
@@ -164,3 +169,136 @@ def test_collection_check_leaves_no_data(
         return counts
 
     assert asyncio.run(count_rows()) == [0, 0, 0]
+
+
+# ------------------------------------------------------------------ Scanner
+
+
+@pytest.fixture
+def scanner_env(
+    cli_env: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> tuple[ScriptedReader, FakeImages]:
+    """Scanner-CLI mit OCR-Attrappe, simuliertem Bild-Server und Testkatalog."""
+    monkeypatch.setenv("PT_SCANNER_DATA_DIR", str(tmp_path / "scanner"))
+    get_settings.cache_clear()
+    reader, images = ScriptedReader(), FakeImages()
+
+    @asynccontextmanager
+    async def fake_scanner(settings: Settings) -> AsyncIterator[ScannerRuntime]:
+        async with httpx.AsyncClient(transport=images.transport()) as client:
+            yield ScannerRuntime(settings, reader, client)
+
+    monkeypatch.setattr(cli, "_scanner", fake_scanner)
+
+    async def prepare() -> None:
+        engine = create_engine(get_settings().database_url)
+        await build_scan_catalog(create_session_factory(engine), images)
+        await engine.dispose()
+
+    asyncio.run(prepare())
+    monkeypatch.setenv("PT_ADMIN_PASSWORD", "admin-passwort-123")
+    cli.main(["create-admin", "--email", "chef@example.com", "--name", "Chef"])
+    return reader, images
+
+
+def _scan_log_count() -> int:
+    async def count() -> int:
+        engine = create_engine(get_settings().database_url)
+        async with engine.connect() as connection:
+            value = int(await connection.scalar(select(func.count()).select_from(ScanLog)) or 0)
+        await engine.dispose()
+        return value
+
+    return asyncio.run(count())
+
+
+def test_scan_command(
+    scanner_env: tuple[ScriptedReader, FakeImages], capsys: pytest.CaptureFixture[str]
+) -> None:
+    reader, _ = scanner_env
+    reader.script("06.jpg", lines("ルギア", "142/103"))
+
+    cli.main(["scan", str(TESTSET / "06.jpg"), "--email", "chef@example.com"])
+    cli.main(["scan", str(TESTSET / "07.jpg"), "--email", "chef@example.com"])
+    cli.main(["scan", str(TESTSET / "01.jpg"), "--email", "chef@example.com", "--language", "ja"])
+
+    output = capsys.readouterr().out
+    assert "Erkannt als ルギア (sicher)" in output
+    assert "1. ルギア · Lugia-Set · 142 [ja] (PCG10-142) · 0.85" in output
+    assert "Keine Karte erkannt." in output
+    assert _scan_log_count() == 0  # Probe wird zurückgerollt
+
+    with pytest.raises(SystemExit, match="Kein Nutzer"):
+        cli.main(["scan", str(TESTSET / "06.jpg"), "--email", "niemand@example.com"])
+
+
+def test_scan_command_shows_slab(
+    scanner_env: tuple[ScriptedReader, FakeImages], capsys: pytest.CaptureFixture[str]
+) -> None:
+    reader, _ = scanner_env
+    reader.script("04.jpg", lines("ルギアV", "#110", "GEM MT", "10", "PSA"))
+    cli.main(["scan", str(TESTSET / "04.jpg"), "--email", "chef@example.com"])
+    assert "Slab: PSA 10" in capsys.readouterr().out
+
+
+def test_scan_eval_command(
+    scanner_env: tuple[ScriptedReader, FakeImages],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    reader, _ = scanner_env
+    reader.script("02.jpg", lines("Team Rockets MewtuX", "Fähigkeit", "DR231/182"))
+    reader.script("03.jpg", lines("ルギアV", "512 F 110/098 SR"))
+    reader.script("01.jpg", lines("ゼニガメ", "No.007"))
+    expected = tmp_path / "soll.csv"
+    expected.write_text(
+        (TESTSET / "soll.csv").read_text(encoding="utf-8") + "fehlt.jpg;X;1;de;\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "bericht.md"
+
+    cli.main(
+        [
+            "scan-eval",
+            "--photos",
+            str(TESTSET),
+            "--expected",
+            str(expected),
+            "--email",
+            "chef@example.com",
+            "--out",
+            str(out),
+        ]
+    )
+
+    report = out.read_text(encoding="utf-8")
+    assert "Bericht geschrieben" in capsys.readouterr().out
+    assert "- Fotos: 8 (davon 1 nicht im Katalog)" in report
+    assert "- Nicht im Katalog, richtig als unsicher erkannt: 1/1 (100 %)" in report
+    assert "- Top-1 DE/EN: 1/2 (50 %) – Ziel ≥ 85 % ❌ (zu wenige Fotos" in report
+    assert "| 02.jpg | Team Rockets Mewtu ex · 231/182 [de] (sv10-231) | ✅" in report
+    assert "| 03.jpg | ルギアV · 110/098 [ja] (S12-110) | ✅" in report
+    assert "| fehlt.jpg | X · 1 [de] | Fehler:" in report
+    assert "- **02.jpg:** Nummern DR231/182 · Namen Team Rockets MewtuX" in report
+    assert _scan_log_count() == 0
+
+    # Ohne --out: Bericht auf der Konsole.
+    cli.main(
+        ["scan-eval", "--photos", str(TESTSET), "--expected", str(TESTSET / "soll.csv"),
+         "--email", "chef@example.com"]
+    )  # fmt: skip
+    assert "# Scanner-Evaluation" in capsys.readouterr().out
+
+
+def test_scanner_warmup(
+    cli_env: None, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    class FakeReader:
+        def warm_up(self, *, korean: bool = False) -> int:
+            return 2 if korean else 1
+
+    monkeypatch.setattr(cli, "RapidOcrReader", FakeReader)
+    cli.main(["scanner-warmup", "--korean"])
+    output = capsys.readouterr().out
+    assert "Standardmodell (PP-OCRv6): 1 Zeilen erkannt" in output
+    assert "Koreanisches Modell: 2 Zeilen erkannt" in output
