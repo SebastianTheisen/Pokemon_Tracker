@@ -2,7 +2,7 @@
 
 Eine private Sammel-App im Stil von SCNDX: Pokémon-Karten scannen, Sammlung verwalten, belegte Marktpreise sehen. Sie ist für den Freundeskreis gedacht und wird nicht veröffentlicht.
 
-Stand: 17.10.2026 · Status: **Phase 3 – Code fertig, wartet auf VPS-Lauf**
+Stand: 17.10.2026 · Status: **Phase 3 abgeschlossen, Phase 4 (Scanner) wartet auf Freigabe**
 
 ---
 
@@ -13,7 +13,7 @@ Stand: 17.10.2026 · Status: **Phase 3 – Code fertig, wartet auf VPS-Lauf**
 | 0 – Spikes und Fundament | ✅ erledigt | Alle Spikes ausgewertet, alle Entscheidungen getroffen (Ergebnis unten) |
 | 1 – Backend-Kern | ✅ erledigt | 65.561 Karten importiert, Abnahme-Suchen ✅, Nachtest 0 Fehler, 111 Tests (96 % Coverage) |
 | 2 – Preise | ✅ erledigt | Echte Preise mit Beleg (DE/EN/JA/ZH), Worker läuft, NM-Basis = Median, 163 Tests (95 % Coverage) |
-| 3 – Sammlung, Merkliste, Dashboard | 🟡 in Arbeit | Code + 204 Tests fertig (95 % Coverage), Abnahme mit Handrechnung ✅. **Wartet auf:** VPS-Lauf (`deploy/phase3_vps.sh`) |
+| 3 – Sammlung, Merkliste, Dashboard | ✅ erledigt | VPS-Probe mit echten Preisen = Handrechnung (4.894,67 €), Zugriffsschutz ✅, 204 Tests (95 % Coverage) |
 | 4 – Scanner | ⚪ offen | |
 | 5 – Flutter-App | ⚪ offen | |
 | 6 – Deployment und Härtung | ⚪ offen | |
@@ -148,8 +148,8 @@ Entscheidungen (17.10.2026):
 - [x] CLI `collection-check` (Probe mit echten Preisen, wird zurückgerollt)
 - [x] **Abnahmetest mit Handrechnung:** gemischte Sammlung = 1.055,00 € (geschätzt 255,00 €; roh 255 / gegradet 500 / versiegelt 300); nach Preisanstieg 1.106,00 €, Veränderung +51,00 €, Tageswert gespeichert
 - [x] Selbst-Review: `PATCH {"quantity": null}` hätte 500 ergeben, Note bei Rohkarten war setzbar, CSV-Formel-Injection über fremde Produktnamen möglich → alle behoben und getestet. **204 Tests, 95 % Coverage**
-- [ ] ⏳ **VPS-Lauf durch den Nutzer:** `bash deploy/phase3_vps.sh`
-- [ ] Abnahme Phase 3
+- [x] VPS-Lauf ([`docs/phase3/ergebnis.md`](docs/phase3/ergebnis.md)): Migration `0003_collection`, Worker läuft, Probe mit **echten Preisen**: 2× Nachtara VMAX NM 3.611,80 € (2 × 1.805,90), Glurak LP 232,87 € (423,40 × 0,55), PSA 10 900 €, Display 150 € → **4.894,67 €** = Handrechnung; Probe vollständig zurückgerollt (0 Reste); alle neuen Endpunkte ohne Anmeldung 401
+- [x] **Abnahme Phase 3** ✅
 
 ### Änderungsprotokoll
 
@@ -172,6 +172,7 @@ Entscheidungen (17.10.2026):
 | 17.10.2026 | VPS-Lauf Phase 2 ✅. NM-Basis auf Median aus Trend/Ø7/Ø30 umgestellt (Ausreißer beim Glurak Grundset) |
 | 17.10.2026 | Nachtest Median ✅. **Phase 2 abgeschlossen** |
 | 17.10.2026 | Phase 3 gestartet (Zustandspreis als Wert, eine Merkliste, neue Position je Hinzufügen). Code, Tests, Worker-Erweiterung, VPS-Skript fertig |
+| 17.10.2026 | VPS-Lauf Phase 3 ✅ (echte Werte = Handrechnung). **Phase 3 abgeschlossen** |
 
 ---
 
