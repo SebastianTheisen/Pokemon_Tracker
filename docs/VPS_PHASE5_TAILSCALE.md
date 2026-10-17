@@ -1,14 +1,16 @@
-# Phase 5, Schritt 1: Tailscale auf dem VPS
+# Phase 5, Schritt 1: Tailscale-Gerät „kartenkiste“ (Container)
 
-Danach ist die API **nur in deinem Tailnet** per HTTPS erreichbar, unter `https://kartenkiste.<dein-tailnet>.ts.net`. Das braucht später die App. Das iPhone erlaubt die Kamera nur über HTTPS.
+Kartenkiste bekommt ein **eigenes Tailscale-Gerät** in einem Docker-Container. Dadurch ist die App unter `https://kartenkiste.<dein-tailnet>.ts.net` erreichbar. Das Tailscale, das direkt auf dem VPS für deine andere App läuft, wird **nicht verändert**. Teilst du später „kartenkiste“ mit Freunden, sehen sie nur diese App.
 
-## Vorher (einmalig, am Handy)
+## Vorher
 
-1. Kostenloses Tailscale-Konto anlegen: <https://login.tailscale.com> (z. B. mit Google- oder Apple-Konto).
-2. Die **Tailscale-App** installieren (App Store / Play Store) und mit demselben Konto anmelden.
-3. Im Tailscale-Admin unter **DNS** prüfen, dass **MagicDNS** und **HTTPS Certificates** aktiv sind. Fehlt HTTPS, zeigt das Skript einen Link zum Freischalten.
+Das VPS-Gerät muss wieder seinen alten Namen haben (falls noch nicht geschehen):
 
-## Befehle auf dem VPS
+```bash
+tailscale set --hostname=gtcha
+```
+
+## Befehle
 
 ```bash
 cd ~/Pokemon_Tracker/Pokemon_Tracker
@@ -22,9 +24,11 @@ git pull
 bash deploy/phase5_tailscale.sh
 ```
 
-Während des Laufs erscheint beim ersten Mal ein **Login-Link**. Öffne ihn am Handy und bestätige ihn. Erscheint ein zweiter Link zum Freischalten von HTTPS/Serve, bestätige auch diesen. Das Skript wartet und läuft dann allein weiter.
+Beim ersten Start erscheint ein **Login-Link**. Öffne ihn am Handy und bestätige mit deinem Tailscale-Konto. Das Skript wartet bis zu 10 Minuten und läuft dann allein weiter.
 
-Am Ende steht eine Adresse, die du **am Handy mit verbundener Tailscale-App** im Browser öffnest:
+**Danach im Tailscale-Admin** (<https://login.tailscale.com/admin/machines>) beim Gerät „kartenkiste“ über das Menü **„Disable key expiry“** wählen. Sonst muss es sich nach 180 Tagen neu anmelden.
+
+Am Handy, mit verbundener Tailscale-App, im Browser öffnen:
 
 ```
 https://kartenkiste.<dein-tailnet>.ts.net/api/v1/health
@@ -39,11 +43,11 @@ git add docs/phase5
 ```
 
 ```bash
-git commit -m "Phase 5: Tailscale auf dem VPS"
+git commit -m "Phase 5: Tailscale-Container"
 ```
 
 ```bash
 git push
 ```
 
-Hinweis: Der vollständige Tailnet-Name wird nicht ins Repo geschrieben.
+Hinweis: In der Weiterleitungsliste des VPS-Tailscale steht evtl. noch ein alter Eintrag „kartenkiste“ vom ersten Versuch. Er ist ohne Wirkung, weil das VPS-Gerät wieder anders heißt.

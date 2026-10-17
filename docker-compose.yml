@@ -1,5 +1,6 @@
 # Lokale Entwicklung und Basis für den VPS.
-# Tailscale-Sidecar kommt in Phase 6 dazu (siehe UMSETZUNGSPLAN.md).
+# Tailscale läuft als eigenes Gerät „kartenkiste“ im Container (Plan 8.1) – getrennt von
+# einem Tailscale, das evtl. schon direkt auf dem VPS für andere Apps läuft.
 services:
   db:
     image: postgres:16-alpine
@@ -45,6 +46,26 @@ services:
       disable: true
     restart: unless-stopped
 
+  tailscale:
+    image: tailscale/tailscale:stable
+    hostname: kartenkiste
+    environment:
+      TS_HOSTNAME: kartenkiste
+      # Optional: Auth-Key aus dem Tailscale-Admin. Ohne Key steht beim ersten Start ein
+      # Login-Link im Log (deploy/phase5_tailscale.sh zeigt ihn an).
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"  # kein /dev/net/tun und keine Extra-Rechte nötig
+      TS_SERVE_CONFIG: /config/serve.json  # HTTPS (*.ts.net) → api:8000
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - ./deploy/tailscale/serve.json:/config/serve.json:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   db-data:
   scanner-data:
+  tailscale-state:
