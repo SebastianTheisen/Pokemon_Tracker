@@ -32,6 +32,23 @@
 
   <title>Kartenkiste</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    /* Ladeanzeige bis zum ersten Bild der App – statt einer weißen Seite. */
+    html, body { margin: 0; height: 100%; background: #0B1426; }
+    #splash {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px;
+      color: #93A3C4; font: 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      text-align: center; padding: 24px; box-sizing: border-box;
+    }
+    #splash img { width: 96px; height: 96px; border-radius: 22px; }
+    #splash .spinner {
+      width: 28px; height: 28px; border-radius: 50%;
+      border: 3px solid #2A3B5E; border-top-color: #4C7DFF; animation: spin 0.9s linear infinite;
+    }
+    #splash .error { color: #EF4444; font-size: 14px; max-width: 360px; word-break: break-word; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
 <body>
   <!--
@@ -42,6 +59,31 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <div id="splash">
+    <img src="icons/Icon-192.png" alt="">
+    <div class="spinner"></div>
+    <div id="splash-text">Kartenkiste wird geladen …</div>
+    <div id="splash-error" class="error"></div>
+  </div>
+  <script>
+    (function () {
+      var splash = document.getElementById('splash');
+      var text = document.getElementById('splash-text');
+      var error = document.getElementById('splash-error');
+      // Die App meldet ihr erstes Bild → Ladeanzeige entfernen.
+      window.addEventListener('flutter-first-frame', function () { splash.remove(); });
+      // Fehler sichtbar machen (am Handy gibt es keine Entwicklerkonsole).
+      function show(message) { if (document.body.contains(splash)) error.textContent = 'Fehler: ' + message; }
+      window.addEventListener('error', function (e) { show(e.message || String(e)); });
+      window.addEventListener('unhandledrejection', function (e) { show(String(e.reason)); });
+      setTimeout(function () {
+        if (document.body.contains(splash)) {
+          text.textContent = 'Lädt noch … Beim ersten Start werden ca. 4 MB geladen. ' +
+            'Ist Tailscale verbunden?';
+        }
+      }, 15000);
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

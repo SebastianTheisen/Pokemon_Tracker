@@ -19,7 +19,7 @@ def web_dir(tmp_path: Path) -> Path:
     web = tmp_path / "web"
     (web / "assets").mkdir(parents=True)
     (web / "index.html").write_text("<html>Kartenkiste</html>", encoding="utf-8")
-    (web / "main.dart.js").write_text("console.log(1)", encoding="utf-8")
+    (web / "main.dart.js").write_text("console.log(1);" * 200, encoding="utf-8")
     (web / "flutter_service_worker.js").write_text("// sw", encoding="utf-8")
     (web / "assets" / "logo.png").write_bytes(b"png")
     return web
@@ -53,8 +53,13 @@ async def test_web_app_is_served_with_spa_fallback(
         assert deep_link.status_code == 200
         assert "Kartenkiste" in deep_link.text
 
+        big = await client.get("/main.dart.js", headers={"Accept-Encoding": "gzip"})
+        assert big.headers.get("content-encoding") == "gzip"  # Web-App komprimiert
+        logo = await client.get("/assets/logo.png", headers={"Accept-Encoding": "gzip"})
+        assert "content-encoding" not in logo.headers  # Bilder nicht
+
         script = await client.get("/main.dart.js")
-        assert script.text == "console.log(1)"
+        assert script.text == "console.log(1);" * 200
         assert "cache-control" not in script.headers
         assert (await client.get("/flutter_service_worker.js")).headers["cache-control"] == (
             "no-cache"

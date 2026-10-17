@@ -147,7 +147,7 @@ class _SummaryContent extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              _Stat('${summary.items}', 'Karten & Produkte'),
+              _Stat('${summary.items}', 'Karten'),
               const SizedBox(width: 8),
               _Stat('${summary.sets}', 'Sets'),
               const SizedBox(width: 8),
