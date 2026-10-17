@@ -14,7 +14,8 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-default-groups --no-install-project
 
 # README.md wird beim Bauen des Projekts benötigt (pyproject: readme = "README.md").
-COPY README.md ./
+COPY README.md alembic.ini ./
+COPY alembic ./alembic
 COPY app ./app
 RUN uv sync --frozen --no-default-groups
 
@@ -25,4 +26,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"
 
-CMD ["/srv/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENV PATH="/srv/.venv/bin:${PATH}"
+# Beim Start zuerst Datenbank-Migrationen, dann die API.
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers"]

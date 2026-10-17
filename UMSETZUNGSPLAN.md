@@ -2,7 +2,7 @@
 
 Eine private Sammel-App im Stil von SCNDX: Pokémon-Karten scannen, Sammlung verwalten, belegte Marktpreise sehen. Sie ist für den Freundeskreis gedacht und wird nicht veröffentlicht.
 
-Stand: 17.10.2026 · Status: **Phase 0 abgeschlossen, Phase 1 wartet auf Freigabe**
+Stand: 17.10.2026 · Status: **Phase 1 – Code fertig, wartet auf VPS-Lauf**
 
 ---
 
@@ -11,7 +11,7 @@ Stand: 17.10.2026 · Status: **Phase 0 abgeschlossen, Phase 1 wartet auf Freigab
 | Phase | Status | Notiz |
 |---|---|---|
 | 0 – Spikes und Fundament | ✅ erledigt | Alle Spikes ausgewertet, alle Entscheidungen getroffen (Ergebnis unten) |
-| 1 – Backend-Kern | ⚪ offen | |
+| 1 – Backend-Kern | 🟡 in Arbeit | Code + 109 Tests fertig (96 % Coverage). **Wartet auf:** VPS-Lauf (echter Katalog-Import, `deploy/phase1_vps.sh`) |
 | 2 – Preise | ⚪ offen | |
 | 3 – Sammlung, Merkliste, Dashboard | ⚪ offen | |
 | 4 – Scanner | ⚪ offen | |
@@ -65,9 +65,27 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 | Scanner-OCR (PP-OCRv6 + KO) | ✅ Go | Nummer in 5/7, Name in 6/7 Fotos; Slab-Labels komplett lesbar; KO-Modell lädt |
 | Bildabgleich (SIFT) | ✅ Go | Sicher, wenn Katalogbild vorhanden (Score 214–370 vs. ≤ 219); Lücken → eigene Referenzbilder + Karten anlegen |
 | Tailscale | ⏭️ verschoben | Test in Phase 6 (laut Absprache) |
-- [ ] Spike Tailscale: laut Absprache verschoben, wird beim Deployment (Phase 6) getestet
 
-**Regel:** Phase 1 beginnt erst, wenn alle Spike-Ergebnisse vorliegen und ausgewertet sind.
+### Phase 1 – Aufgaben
+
+Entscheidungen (17.10.2026): Passwort-Reset **durch den Admin** (Einmal-Code, kein Mailserver); Katalog-Import in **allen 6 Sprachen**.
+
+- [x] Datenbank: Modelle `users`, `invite_codes`, `refresh_tokens`, `password_reset_tokens`, `audit_log`, `card_sets`, `cards` + Alembic-Migration `0001_initial` (inkl. `pg_trgm`). Hoch-/Runtermigrieren getestet, `alembic check` ohne Abweichungen. Tabellen für Sammlung/Preise folgen in ihren Phasen
+- [x] Sicherheit (`app/core/security.py`): Argon2id, JWT-Access-Tokens (15 min, HS256), Refresh-Tokens/Codes nur als SHA-256-Hash, gut abtippbare Codes ohne Verwechslungszeichen
+- [x] Auth (`/auth/register|login|refresh|logout|reset-password`): Registrierung nur mit Einladungscode (einmalig, mit Ablauf, gegen Doppelnutzung gesperrt), Login ohne Hinweis ob E-Mail existiert (gleiche Meldung + Rechenzeit), Rate-Limit nach Fehlversuchen (429 + Retry-After), Refresh-Rotation mit **Diebstahlerkennung** (Wiederverwendung sperrt die ganze Sitzungsfamilie)
+- [x] Eigenes Konto (`/me`, `/me/password`, `/me/sessions`): Profil, Passwortwechsel (beendet alle Sitzungen), Sitzungen ansehen/beenden
+- [x] Admin (`/admin/users|invites`, `/admin/users/{id}/password-reset`): Nutzer sperren/entsperren, Rolle ändern (wirkt sofort), Einladungen erzeugen/auflisten/widerrufen, Reset-Code erzeugen. Schutz: keine Selbstsperre, letzter Admin bleibt. Alles im Audit-Log
+- [x] Mandantentrennung: Sperren/Rollen wirken ohne neuen Login (Nutzer wird pro Anfrage frisch geladen); fremde Objekte → 404; Tests für alle Admin-Endpunkte (403/401) und IDOR (fremde Sitzung)
+- [x] Katalog: TCGdex-Client, Import aller Sets/Karten je Sprache (parallel abrufen, je Set speichern, inkrementell, Fehler je Set isoliert, eigene Karten unangetastet)
+- [x] Suche (`/cards/search`, `/cards/{id}`, `/sets`): Name + Nummer zerlegen („nachtara 215“), tippfehlertolerant (pg_trgm), DE/EN über gemeinsame TCGdex-ID verknüpft („umbreon 215“ findet „Nachtara VMAX“), Nummer allein, Sprachfilter
+- [x] CLI (`python -m app.cli`): `create-admin`, `create-invite`, `sync-catalog`, `search`
+- [x] Docker: Migrationen beim Start; CI mit PostgreSQL-Service
+- [x] Härtung nach Selbst-Review: App startet in Produktion nicht mit Platzhalter- oder zu kurzem JWT-Schlüssel; Login-Limiter räumt alte Einträge auf (kein Speicherleck)
+- [x] Qualität: ruff, mypy strict, **109 Tests grün, 96 % Coverage** (lokal gegen PostgreSQL 16)
+- [ ] ⏳ **VPS-Lauf durch den Nutzer:** `bash deploy/phase1_vps.sh` – startet das Backend, legt den ersten Admin an, importiert den echten Katalog, prüft Suchen. Ergebnis `docs/phase1/ergebnis.md` zurückschicken
+- [ ] Abnahme Phase 1: echter Import ohne Fehler, „nachtara 215“ findet „Nachtara VMAX · Drachenwandel · 215“
+
+**Nicht prüfbar in der Cloud-Umgebung:** echter TCGdex-Import (Host gesperrt) und Docker-Build (GHCR gesperrt) – beides übernimmt der VPS-Lauf.
 
 ### Änderungsprotokoll
 
@@ -83,6 +101,7 @@ Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 | 17.10.2026 | Preisstrategie entschieden: TCGdex + Schätzung + Plug-in-Schnittstelle. `CardmarketListingProvider` entfällt |
 | 17.10.2026 | VPS-Lauf 2 ausgewertet: Docker ok, KO-Modell ok, Bildabgleich Top-1 4/7 (Fehlschläge nur durch Katalog-Lücken) |
 | 17.10.2026 | Entscheidungen: pokemontcg.io als Reserve, Referenzbilder pro Nutzer, Karten anlegen für alle. **Phase 0 abgeschlossen** |
+| 17.10.2026 | Phase 1 gestartet. Entscheidungen: Passwort-Reset durch Admin, Katalog in allen 6 Sprachen. Code, Tests, CLI, Docker-Start mit Migrationen und VPS-Skript fertig |
 
 ---
 
@@ -256,8 +275,9 @@ Pokemon_Tracker/
 | Tabelle | Wichtige Spalten |
 |---|---|
 | `users` | id (UUID), email (unique), password_hash, role (`user`/`admin`), is_active, created_at |
-| `invite_codes` | code_hash, created_by, expires_at, used_by, used_at, revoked_at |
-| `refresh_tokens` | id, user_id, token_hash, expires_at, revoked_at, replaced_by (Rotation) |
+| `invite_codes` | code_hash, note, created_by, expires_at, used_by, used_at, revoked_at |
+| `password_reset_tokens` | user_id, token_hash, created_by (Admin), expires_at, used_at |
+| `refresh_tokens` | id, user_id, token_hash, family_id (Diebstahlerkennung), expires_at, revoked_at, replaced_by (Rotation), user_agent |
 | `sets` | id, external_id, name_de/en/…, series, release_date, total_cards, logo_url |
 | `cards` | id, external_id, set_id, number, language, name, name_de/en, rarity, image_url, search_vector (tsvector), source (`tcgdex`/`user`), created_by, updated_by |
 | `card_reference_images` | id, card_id, user_id (Eigentümer, Referenz wirkt nur für ihn), image_path, features (vorberechnete Merkmale), source_scan_id, created_at |
@@ -384,15 +404,15 @@ Katalog-Bildindex: Das Herunterladen von über 100.000 Kartenbildern ist teuer. 
 
 | Bereich | Endpunkte |
 |---|---|
-| Auth | `POST /auth/register` (mit Einladungscode), `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/change-password` |
+| Auth | `POST /auth/register` (mit Einladungscode), `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/reset-password` (Code vom Admin) |
 | Katalog | `GET /cards/search?q=&lang=`, `GET /cards/{id}`, `GET /cards/{id}/prices?condition=`, `GET /cards/{id}/price-history`, `GET /sets`, `GET /products/search` |
 | Scan | `POST /scan` (Bild), `POST /scan/batch`, `POST /scan/binder` |
 | Sammlung | `GET /collection` (Filter, Sortierung, Gruppierung), `POST /collection/items`, `PATCH /collection/items/{id}`, `DELETE /collection/items/{id}`, `GET /collection/summary`, `GET /collection/history`, `GET /collection/export.csv` |
 | Ordner | `GET/POST/PATCH/DELETE /folders` |
 | Merkliste | `GET/POST/DELETE /wishlist` |
 | Dashboard | `GET /dashboard` (Wert, Veränderung, Kennzahlen, Highlights) |
-| Einstellungen | `GET/PATCH /me`, `GET/PATCH /me/settings` |
-| Admin | `GET /admin/users`, `PATCH /admin/users/{id}` (sperren), `GET /admin/users/{id}/collection` (nur lesend), `POST /admin/invites`, `DELETE /admin/invites/{id}` |
+| Eigenes Konto | `GET/PATCH /me`, `POST /me/password`, `GET /me/sessions`, `DELETE /me/sessions/{id}`, später `GET/PATCH /me/settings` |
+| Admin | `GET /admin/users`, `PATCH /admin/users/{id}` (sperren, Rolle), `POST /admin/users/{id}/password-reset`, `GET/POST /admin/invites`, `DELETE /admin/invites/{id}`, später `GET /admin/users/{id}/collection` (nur lesend) |
 
 Konventionen: OpenAPI-Schema aus FastAPI, Pagination per Cursor, einheitliches Fehlerformat, Geldbeträge als `Decimal`/Integer-Cent, Zeitstempel in UTC.
 
