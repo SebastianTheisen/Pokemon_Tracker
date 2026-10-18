@@ -1,8 +1,10 @@
 """Höflicher HTTP-Client für fremde Server: höchstens eine Anfrage je Intervall und Host.
 
 Die offiziellen Kartendatenbanken sind keine APIs für Dritte. Wir fragen deshalb sanft an
-(Standard: eine Anfrage pro Sekunde und Server), mit erkennbarem User-Agent, und laden nie
-Bilder herunter – geprüft wird nur, ob es sie gibt.
+(Standard: eine Anfrage pro Sekunde und Server, einstellbar), mit erkennbarem User-Agent, und
+laden nie Bilder herunter – geprüft wird nur, ob es sie gibt. Meldet ein Server „zu viel“
+(429, 403, 503), verdoppelt sich der Abstand für diesen Server automatisch (höchstens 30 s);
+nach 200 Erfolgen in Folge wird er schrittweise wieder kleiner.
 """
 
 from __future__ import annotations
@@ -15,8 +17,16 @@ from typing import Any, Self
 from urllib.parse import urlsplit
 
 import httpx
+import structlog
+
+log = structlog.get_logger(__name__)
 
 _IMAGE_PROBE_TIMEOUT = 20.0
+# Antworten, mit denen ein Server „zu schnell“ signalisiert → automatisch bremsen.
+_SLOW_DOWN_STATUS = frozenset({403, 429, 503})
+MAX_INTERVAL = 30.0
+# Nach so vielen erfolgreichen Anfragen in Folge wieder etwas schneller werden.
+_RECOVER_AFTER = 200
 
 
 class SourceError(Exception):
@@ -43,6 +53,40 @@ class PoliteClient:
         self._min_interval = min_interval
         self._locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._last_request: dict[str, float] = {}
+        # Aktueller Abstand je Host: startet beim eingestellten Wert, wächst bei 429/403/503.
+        self._interval: dict[str, float] = {}
+        self._successes: defaultdict[str, int] = defaultdict(int)
+
+    def interval(self, host: str) -> float:
+        return self._interval.get(host, self._min_interval)
+
+    def _slow_down(self, url: str, response: httpx.Response) -> None:
+        """Server meldet Überlastung/Sperre: Abstand verdoppeln (bzw. ``Retry-After``)."""
+        host = urlsplit(url).hostname or ""
+        retry_after = response.headers.get("retry-after", "")
+        wanted = float(retry_after) if retry_after.isdigit() else self.interval(host) * 2
+        self._interval[host] = min(max(wanted, 1.0), MAX_INTERVAL)
+        self._successes[host] = 0
+        log.warning(
+            "polite_client.slow_down",
+            host=host,
+            status=response.status_code,
+            interval=self._interval[host],
+        )
+
+    def _succeeded(self, url: str) -> None:
+        """Nach vielen Erfolgen in Folge den Abstand schrittweise wieder verkleinern."""
+        host = urlsplit(url).hostname or ""
+        if host not in self._interval:
+            return
+        self._successes[host] += 1
+        if self._successes[host] >= _RECOVER_AFTER:
+            self._successes[host] = 0
+            relaxed = self._interval[host] * 0.75
+            if relaxed <= self._min_interval:
+                del self._interval[host]
+            else:
+                self._interval[host] = relaxed
 
     async def __aenter__(self) -> Self:
         return self
@@ -60,7 +104,7 @@ class PoliteClient:
         host = urlsplit(url).hostname or ""
         last = self._last_request.get(host)
         if last is not None:
-            delay = self._min_interval - (time.monotonic() - last)
+            delay = self.interval(host) - (time.monotonic() - last)
             if delay > 0:
                 await asyncio.sleep(delay)
         self._last_request[host] = time.monotonic()
@@ -80,9 +124,12 @@ class PoliteClient:
             response = await self._client.get(url, **kwargs)
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in _SLOW_DOWN_STATUS:
+                self._slow_down(url, exc.response)
             raise SourceError(f"GET {url}: HTTP {exc.response.status_code}") from exc
         except httpx.HTTPError as exc:
             raise SourceError(f"GET {url}: {type(exc).__name__}: {exc}") from exc
+        self._succeeded(url)
         return response
 
     async def get_json(self, url: str, **kwargs: Any) -> Any:
@@ -101,15 +148,19 @@ class PoliteClient:
         """
         async with self._lock(url):
             await self._wait_turn(url)
-            try:
-                async with self._client.stream(
-                    "GET", url, timeout=_IMAGE_PROBE_TIMEOUT
-                ) as response:
-                    if response.status_code in (httpx.codes.NOT_FOUND, httpx.codes.GONE):
-                        return False
-                    if response.status_code >= httpx.codes.INTERNAL_SERVER_ERROR:
-                        raise SourceError(f"GET {url}: HTTP {response.status_code}")
-                    content_type = response.headers.get("content-type", "")
-                    return response.is_success and content_type.startswith("image/")
-            except httpx.HTTPError as exc:
-                raise SourceError(f"GET {url}: {type(exc).__name__}: {exc}") from exc
+        try:
+            async with self._client.stream("GET", url, timeout=_IMAGE_PROBE_TIMEOUT) as response:
+                if response.status_code in (httpx.codes.NOT_FOUND, httpx.codes.GONE):
+                    self._succeeded(url)
+                    return False
+                if response.status_code in _SLOW_DOWN_STATUS:
+                    # Gesperrt/überlastet ist nicht „kein Bild“ – nichts speichern, bremsen.
+                    self._slow_down(url, response)
+                    raise SourceError(f"GET {url}: HTTP {response.status_code}")
+                if response.status_code >= httpx.codes.INTERNAL_SERVER_ERROR:
+                    raise SourceError(f"GET {url}: HTTP {response.status_code}")
+                content_type = response.headers.get("content-type", "")
+                self._succeeded(url)
+                return response.is_success and content_type.startswith("image/")
+        except httpx.HTTPError as exc:
+            raise SourceError(f"GET {url}: {type(exc).__name__}: {exc}") from exc

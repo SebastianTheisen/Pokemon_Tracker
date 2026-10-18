@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     image_import_request_interval_seconds: float = Field(
         default=1.0, ge=0, le=30, description="Mindestabstand zweier Anfragen je Server."
     )
+    image_import_concurrency: int = Field(
+        default=4,
+        ge=1,
+        le=32,
+        description="Detailseiten gleichzeitig unterwegs (Starts begrenzt der Abstand).",
+    )
     image_import_user_agent: str = (
         "Kartenkiste/0.1 (private Sammel-App, 1 Anfrage/s, Bilder werden nicht kopiert)"
     )

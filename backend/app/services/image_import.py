@@ -68,7 +68,6 @@ DETAIL_SANITY_SAMPLE = 20
 _COMMIT_EVERY = 100
 _DETAIL_CHUNK = 20
 MATCH_EVERY = 2000
-DETAIL_CONCURRENCY = 4
 MAX_CONSECUTIVE_ERRORS = 30
 MAX_ERRORS_KEPT = 20
 DRY_RUN_PROBES = 40
@@ -479,6 +478,7 @@ async def import_official(
     *,
     max_pages: int | None = None,
     max_details: int | None = None,
+    concurrency: int = 4,
     dry_run: bool = False,
 ) -> SourceReport:
     """Liste lesen, neue Detailseiten abrufen, Karten zuordnen und Bilder setzen."""
@@ -497,7 +497,12 @@ async def import_official(
 
     if not report.errors or report.listed:
         await _fetch_details(
-            session_factory, database, report, max_details=max_details, on_progress=match_so_far
+            session_factory,
+            database,
+            report,
+            max_details=max_details,
+            concurrency=concurrency,
+            on_progress=match_so_far,
         )
     await _match_official(session_factory, database, report)
     return report
@@ -576,6 +581,7 @@ async def _fetch_details(
     report: SourceReport,
     *,
     max_details: int | None,
+    concurrency: int = 4,
     on_progress: Callable[[], Awaitable[None]] | None = None,
 ) -> None:
     """Detailseiten der Karten, deren Nummer noch fehlt (einmalig je Karte).
@@ -600,7 +606,7 @@ async def _fetch_details(
 
     # Mehrere Seiten gleichzeitig unterwegs, gestartet wird trotzdem höchstens eine pro
     # Intervall (PoliteClient) – so bremst eine langsame Antwort nicht den ganzen Lauf.
-    semaphore = asyncio.Semaphore(DETAIL_CONCURRENCY)
+    semaphore = asyncio.Semaphore(concurrency)
     consecutive_errors = 0
 
     async def fetch(official_id: str) -> OfficialDetail | SourceError:
@@ -612,8 +618,9 @@ async def _fetch_details(
             return detail
 
     batch: list[tuple[Any, OfficialDetail]] = []
-    for offset in range(0, len(pending), _DETAIL_CHUNK):
-        chunk = pending[offset : offset + _DETAIL_CHUNK]
+    chunk_size = max(_DETAIL_CHUNK, concurrency * 4)
+    for offset in range(0, len(pending), chunk_size):
+        chunk = pending[offset : offset + chunk_size]
         results = await asyncio.gather(*(fetch(official_id) for _, official_id in chunk))
         for (row_id, official_id), result in zip(chunk, results, strict=True):
             report.requests += 1
@@ -656,7 +663,7 @@ async def _fetch_details(
         if len(batch) >= _COMMIT_EVERY:
             await _store_details(session_factory, batch)
             batch = []
-            if on_progress is not None and report.details_fetched % MATCH_EVERY < _DETAIL_CHUNK:
+            if on_progress is not None and report.details_fetched % MATCH_EVERY < chunk_size:
                 await on_progress()
             log.info(
                 "image_import.details_progress",
@@ -962,6 +969,7 @@ async def run_image_import(
                 database,
                 max_pages=max_pages,
                 max_details=max_details,
+                concurrency=settings.image_import_concurrency,
                 dry_run=dry_run,
             )
             for database in databases

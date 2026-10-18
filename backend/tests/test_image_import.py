@@ -569,3 +569,37 @@ async def test_dry_run_saves_nothing(
         assert card is not None and card.image_url is None
         assert await session.scalar(select(func.count()).select_from(OfficialCard)) == 0
         assert await session.scalar(select(func.count()).select_from(ImageImportRun)) == 0
+
+
+async def test_polite_client_slows_down_on_429_and_recovers() -> None:
+    from app.providers.card_images import http as polite  # noqa: PLC0415
+
+    responses = iter([429, 200])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(next(responses), headers={"retry-after": "5"})
+
+    async with polite.PoliteClient(
+        user_agent="t", min_interval=0.1, transport=httpx.MockTransport(handler)
+    ) as client:
+        with pytest.raises(polite.SourceError):
+            await client.get("https://example.org/a")
+        assert client.interval("example.org") == 5.0  # Retry-After befolgt
+        client._interval["example.org"] = 0.12  # Test: Warten abkürzen
+        client._successes["example.org"] = polite._RECOVER_AFTER - 1
+        await client.get("https://example.org/b")
+        assert client.interval("example.org") == 0.1  # wieder beim eingestellten Wert
+
+
+async def test_image_probe_treats_block_as_error_not_missing() -> None:
+    from app.providers.card_images import http as polite  # noqa: PLC0415
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429)
+
+    async with polite.PoliteClient(
+        user_agent="t", min_interval=0, transport=httpx.MockTransport(handler)
+    ) as client:
+        with pytest.raises(polite.SourceError):
+            await client.image_exists("https://assets.pokemon.com/x.png")
+        assert client.interval("assets.pokemon.com") == 1.0
