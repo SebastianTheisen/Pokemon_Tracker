@@ -4,8 +4,10 @@ Regeln (Plan 5.3):
 
 * **Kein Beleg, kein Preis.** Angezeigt werden nur Werte, die eine Quelle mit Datum (und
   wenn möglich Link) geliefert hat.
-* **Schätzungen sind markiert.** Zustandspreise = NM-Basis × Zustandsfaktor des Nutzers;
-  NM-Basis ist der Median aus Cardmarket-Trend, Ø 7 und Ø 30 Tagen (Ersatz: Durchschnitt).
+* **Schätzungen sind markiert.** Zustandspreise = NM-Basis × Zustandsfaktor × Sprachfaktor
+  des Nutzers; NM-Basis ist der Median aus Cardmarket-Trend, Ø 7 und Ø 30 Tagen (Ersatz:
+  Durchschnitt). Der Sprachfaktor (Standard 1,00) gilt für die Sprache der Karte, weil
+  Cardmarket westliche Karten aller Sprachen als ein Produkt führt.
   Liefert eine externe Quelle einen echten Zustandspreis, hat dieser Vorrang.
 * **Quellen sind isoliert.** Zeitlimit je Abruf; Fehler einer Quelle stören weder andere
   Quellen noch die Anzeige; nach Fehlern in Folge pausiert die Quelle (``SourceHealth``).
@@ -39,7 +41,11 @@ from app.providers.pricing import (
 )
 from app.providers.pricing.tcgdex_prices import CARDMARKET, TCGPLAYER
 from app.services.price_health import SourceHealth
-from app.services.user_settings import effective_factors, get_user_settings
+from app.services.user_settings import (
+    effective_factors,
+    effective_language_factors,
+    get_user_settings,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -90,6 +96,7 @@ class ConditionPrice:
     basis_metric: str | None = None
     basis_value: Decimal | None = None
     factor: Decimal | None = None
+    language_factor: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -342,6 +349,11 @@ class PriceService:
 
         user_settings = await get_user_settings(self._session, user) if user else None
         factors = effective_factors(user_settings)
+        language_factors = effective_language_factors(user_settings)
+        language_rows = await self._session.execute(
+            select(Card.id, Card.language).where(Card.id.in_(ids))
+        )
+        languages = {row.id: row.language for row in language_rows}
         checked_rows = await self._session.execute(
             select(PriceCheck.card_id, func.max(PriceCheck.checked_at))
             .where(PriceCheck.card_id.in_(ids), PriceCheck.ok.is_(True))
@@ -355,7 +367,11 @@ class PriceService:
                 card_id=card_id,
                 last_checked_at=checked.get(card_id),
                 offers=offers,
-                conditions=_condition_prices(offers, factors),
+                conditions=_condition_prices(
+                    offers,
+                    factors,
+                    language_factors.get(languages.get(card_id, ""), Decimal("1.00")),
+                ),
             )
         return result
 
@@ -459,27 +475,36 @@ def nm_basis(metrics: dict[str, Decimal]) -> tuple[str, Decimal] | None:
     return f"median({', '.join(used)})", value
 
 
-def _condition_prices(offers: Sequence[Offer], factors: dict[str, Decimal]) -> list[ConditionPrice]:
-    """Zustandspreise je Cardmarket-Variante: externer Beleg vor Schätzung."""
+def _condition_prices(
+    offers: Sequence[Offer], factors: dict[str, Decimal], language_factor: Decimal
+) -> list[ConditionPrice]:
+    """Zustandspreise je Variante: externer Beleg vor Schätzung.
+
+    Geschätzt wird nur für Varianten mit Cardmarket-Referenz; belegte Zustandspreise einer
+    externen Quelle (z. B. ausgelesene Cardmarket-Angebote) zählen auch ohne Referenz.
+    """
     result: list[ConditionPrice] = []
-    references = [o for o in offers if o.source == CARDMARKET and o.condition is None]
-    for reference in references:
-        basis = nm_basis(reference.metrics)
+    references = {o.variant: o for o in offers if o.source == CARDMARKET and o.condition is None}
+    external_variants = [o.variant for o in offers if o.kind == "external" and o.condition]
+    variants = list(dict.fromkeys([*references, *external_variants]))
+    for variant in variants:
+        reference = references.get(variant)
+        basis = nm_basis(reference.metrics) if reference is not None else None
         for condition in CONDITIONS:
             external = [
                 o
                 for o in offers
                 if o.kind == "external"
-                and o.variant == reference.variant
+                and o.variant == variant
                 and o.condition == condition
-                and o.currency == reference.currency
+                and (reference is None or o.currency == reference.currency)
                 and o.metrics
             ]
             if external:
                 best = min(external, key=lambda o: min(o.metrics.values()))
                 result.append(
                     ConditionPrice(
-                        variant=reference.variant,
+                        variant=variant,
                         condition=condition,
                         value=min(best.metrics.values()),
                         currency=best.currency,
@@ -489,14 +514,14 @@ def _condition_prices(offers: Sequence[Offer], factors: dict[str, Decimal]) -> l
                         url=best.url,
                     )
                 )
-            elif basis is not None:
+            elif reference is not None and basis is not None:
                 basis_label, basis_value = basis
                 factor = factors[condition]
                 result.append(
                     ConditionPrice(
-                        variant=reference.variant,
+                        variant=variant,
                         condition=condition,
-                        value=(basis_value * factor).quantize(CENT),
+                        value=(basis_value * factor * language_factor).quantize(CENT),
                         currency=reference.currency,
                         kind="estimated",
                         source=reference.source,
@@ -505,6 +530,7 @@ def _condition_prices(offers: Sequence[Offer], factors: dict[str, Decimal]) -> l
                         basis_metric=basis_label,
                         basis_value=basis_value,
                         factor=factor,
+                        language_factor=language_factor,
                     )
                 )
     return result

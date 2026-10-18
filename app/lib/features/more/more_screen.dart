@@ -252,6 +252,49 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   onTap: () => _editFactor(context, ref, condition, factor),
                 ),
+            SectionTitle(
+              'Sprachfaktoren',
+              trailing: TextButton(
+                onPressed: () async {
+                  await runAction(
+                    context,
+                    () => ref.read(apiProvider).updateSettings(resetLanguageFactors: true),
+                  );
+                  ref.invalidate(userSettingsProvider);
+                },
+                child: const Text('Zurücksetzen'),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                'Cardmarket führt westliche Karten aller Sprachen als ein Produkt. Der Faktor '
+                'passt die Schätzung an die Sprache der Karte an, z. B. 0,80 für deutsche '
+                'Karten. Belegte Angebotspreise (Lesezeichen) bleiben unverändert.',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+              ),
+            ),
+            for (final entry in languageLabels.entries)
+              if (data.languageFactors[entry.key] case final factor?)
+                ListTile(
+                  title: Text(entry.value),
+                  subtitle: data.customLanguageFactors.contains(entry.key)
+                      ? const Text('eigener Wert')
+                      : null,
+                  trailing: Text(
+                    factor.toStringAsFixed(2).replaceAll('.', ','),
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  onTap: () => _editLanguageFactor(context, ref, entry.key, entry.value, factor),
+                ),
+            const SectionTitle('Cardmarket-Angebote übernehmen'),
+            ListTile(
+              leading: const Icon(Icons.bookmark_add_outlined),
+              title: const Text('Lesezeichen einrichten'),
+              subtitle: const Text('Echte Angebote nach Sprache und Zustand als Preis speichern'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/settings/bookmarklet'),
+            ),
           ],
         ),
       ),
@@ -280,6 +323,30 @@ class SettingsScreen extends ConsumerWidget {
     );
     ref.invalidate(userSettingsProvider);
   }
+}
+
+Future<void> _editLanguageFactor(
+  BuildContext context,
+  WidgetRef ref,
+  String language,
+  String label,
+  double current,
+) async {
+  final value = await showTextInput(
+    context,
+    title: 'Faktor für $label',
+    initial: current.toStringAsFixed(2).replaceAll('.', ','),
+    helper: 'größer als 0, höchstens 3 (1,00 = Cardmarket-Preis unverändert)',
+    confirm: 'Speichern',
+    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+  );
+  final factor = double.tryParse((value ?? '').replaceAll(',', '.'));
+  if (factor == null || !context.mounted) return;
+  await runAction(
+    context,
+    () => ref.read(apiProvider).updateSettings(languageFactors: {language: factor}),
+  );
+  ref.invalidate(userSettingsProvider);
 }
 
 class SessionsScreen extends ConsumerWidget {

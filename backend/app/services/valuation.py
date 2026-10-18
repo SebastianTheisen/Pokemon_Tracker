@@ -71,11 +71,11 @@ def unit_value(item: CollectionItem, prices: CardPrices | None) -> ItemValue:
     )
     if match is None:
         return NO_VALUE
-    basis = (
-        f"{match.basis_metric} = {match.basis_value} × {match.factor}"
-        if match.kind == "estimated"
-        else None
-    )
+    basis = None
+    if match.kind == "estimated":
+        basis = f"{match.basis_metric} = {match.basis_value} × {match.factor}"
+        if match.language_factor is not None and match.language_factor != 1:
+            basis += f" × Sprache {match.language_factor}"
     return ItemValue(match.kind, match.value, match.value, source=match.source, basis=basis)
 
 

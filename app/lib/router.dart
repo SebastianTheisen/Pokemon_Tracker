@@ -8,6 +8,7 @@ import 'core/providers.dart';
 import 'features/admin/admin_screens.dart';
 import 'features/auth/auth_screens.dart';
 import 'features/card/card_detail_screen.dart';
+import 'features/cardmarket/cardmarket_import.dart';
 import 'features/collection/collection_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/more/more_screen.dart';
@@ -17,6 +18,10 @@ import 'features/shell/home_shell.dart';
 import 'features/wishlist/wishlist_screen.dart';
 
 const _publicPaths = {'/login', '/register', '/reset'};
+
+/// Nur interne Ziele (`/…`), nie fremde Adressen.
+String? _safeTarget(String? target) =>
+    target != null && target.startsWith('/') && !target.startsWith('//') ? target : null;
 
 final routerProvider = Provider<GoRouter>((ref) {
   // Router nur einmal bauen; Sitzungswechsel lösen ein erneutes Prüfen der Weiterleitung aus.
@@ -30,12 +35,23 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: refresh,
     redirect: (context, state) {
       final session = ref.read(sessionProvider);
-      if (session.isLoading && !session.hasValue) return '/splash';
-      final loggedIn = session.value != null;
       final path = state.matchedLocation;
-      final public = _publicPaths.contains(path);
-      if (!loggedIn) return public ? null : '/login';
-      if (public || path == '/splash') return '/home';
+      final public = _publicPaths.contains(path) || path == '/splash';
+      // Ziel merken (z. B. Import vom Cardmarket-Lesezeichen), damit es Laden und
+      // Anmeldung übersteht.
+      final from = public ? _safeTarget(state.uri.queryParameters['from']) : state.uri.toString();
+      String withTarget(String page) => from == null || from == '/home'
+          ? page
+          : Uri(path: page, queryParameters: {'from': from}).toString();
+
+      if (session.isLoading && !session.hasValue) {
+        return path == '/splash' ? null : withTarget('/splash');
+      }
+      final loggedIn = session.value != null;
+      if (!loggedIn) {
+        return _publicPaths.contains(path) ? null : withTarget('/login');
+      }
+      if (public) return from ?? '/home';
       if (path.startsWith('/admin') && !(session.value?.isAdmin ?? false)) return '/home';
       return null;
     },
@@ -73,6 +89,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/scan/binder', builder: (_, _) => const BinderScanScreen()),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
       GoRoute(path: '/sessions', builder: (_, _) => const SessionsScreen()),
+      GoRoute(
+        path: '/cardmarket-import',
+        builder: (_, state) => CardmarketImportScreen(data: state.uri.queryParameters['d']),
+      ),
+      GoRoute(path: '/settings/bookmarklet', builder: (_, _) => const BookmarkletSetupScreen()),
       GoRoute(path: '/sets', builder: (_, _) => const SetOverviewScreen()),
       GoRoute(path: '/admin/users', builder: (_, _) => const AdminUsersScreen()),
       GoRoute(path: '/admin/invites', builder: (_, _) => const AdminInvitesScreen()),

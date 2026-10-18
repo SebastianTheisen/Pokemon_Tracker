@@ -147,6 +147,32 @@ async def test_settings_roundtrip_validation_and_reset(
     assert reset.json()["custom_condition_factors"] == []
 
 
+async def test_language_factors_roundtrip(client: AsyncClient, register_user: RegisterUser) -> None:
+    user = await register_user("max@example.com")
+
+    initial = (await client.get(f"{API}/me/settings", headers=user.headers)).json()
+    assert initial["language_factors"]["de"] == "1.00"
+    assert initial["custom_language_factors"] == []
+
+    changed = await client.patch(
+        f"{API}/me/settings",
+        json={"language_factors": {"de": "0.8", "en": "1.00"}},
+        headers=user.headers,
+    )
+    assert changed.json()["language_factors"]["de"] == "0.80"
+    assert changed.json()["custom_language_factors"] == ["de"]
+    invalid = await client.patch(
+        f"{API}/me/settings", json={"language_factors": {"fr": "0.9"}}, headers=user.headers
+    )
+    assert invalid.status_code == 422
+
+    reset = await client.patch(
+        f"{API}/me/settings", json={"reset_language_factors": True}, headers=user.headers
+    )
+    assert reset.json()["custom_language_factors"] == []
+    assert reset.json()["language_factors"]["de"] == "1.00"
+
+
 async def test_settings_are_per_user(client: AsyncClient, register_user: RegisterUser) -> None:
     alice = await register_user("alice@example.com")
     bob = await register_user("bob@example.com")

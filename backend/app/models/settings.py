@@ -22,4 +22,8 @@ class UserSettings(TimestampMixin, Base):
     )
     # Zustand → Faktor relativ zu Near Mint, z. B. {"EX": 0.85}. Nur Abweichungen vom Standard.
     condition_factors: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    # Kartensprache → Faktor auf den Cardmarket-Preis, z. B. {"de": 0.85}. Cardmarket führt
+    # eine westliche Karte als *ein* Produkt für alle Sprachen; der Faktor bildet ab, dass
+    # z. B. deutsche Karten günstiger gehandelt werden. Nur Abweichungen von 1,00.
+    language_factors: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     default_language: Mapped[str | None] = mapped_column(String(8))

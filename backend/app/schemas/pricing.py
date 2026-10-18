@@ -49,7 +49,10 @@ class ConditionPriceOut(BaseModel):
     url: str | None
     basis_metric: str | None = Field(description="z. B. „median(trend, avg7, avg30)“.")
     basis_value: Decimal | None
-    factor: Decimal | None
+    factor: Decimal | None = Field(description="Zustandsfaktor.")
+    language_factor: Decimal | None = Field(
+        default=None, description="Sprachfaktor der Karte (1,00 = keiner)."
+    )
 
     @classmethod
     def build(cls, price: ConditionPrice) -> ConditionPriceOut:
@@ -106,12 +109,18 @@ class PriceHistoryOut(BaseModel):
 class UserSettingsOut(BaseModel):
     condition_factors: dict[str, Decimal] = Field(description="Wirksame Faktoren (inkl. Standard).")
     custom_condition_factors: list[str] = Field(description="Zustände mit eigenem Faktor.")
+    language_factors: dict[str, Decimal] = Field(
+        description="Faktor je Kartensprache auf den Cardmarket-Preis (Standard 1,00)."
+    )
+    custom_language_factors: list[str] = Field(description="Sprachen mit eigenem Faktor.")
     default_language: str | None
 
 
 class UserSettingsUpdate(BaseModel):
     condition_factors: dict[Condition, Factor] | None = None
     reset_condition_factors: bool = False
+    language_factors: dict[CatalogLanguage, Factor] | None = None
+    reset_language_factors: bool = False
     default_language: CatalogLanguage | None = None
 
 
@@ -130,3 +139,40 @@ class PriceSourceOut(BaseModel):
         cls, status: SourceStatus, kind: Literal["verified", "external"], paused: bool
     ) -> PriceSourceOut:
         return cls(kind=kind, paused=paused, **status.__dict__)
+
+
+class CardmarketOfferRowIn(BaseModel):
+    """Ein vom Lesezeichen ausgelesenes Angebot (Rohtexte der Seite)."""
+
+    condition: str = Field(max_length=8, description="z. B. „NM“")
+    price: str = Field(max_length=40, description="z. B. „1.234,56 €“")
+    labels: list[Annotated[str, Field(max_length=80)]] = Field(
+        default_factory=list,
+        max_length=12,
+        description="Beschriftungen der Symbole: Sprache, Reverse Holo, signiert …",
+    )
+
+
+class CardmarketOffersIn(BaseModel):
+    page_url: str = Field(max_length=2000, description="Ausgelesene Cardmarket-Seite.")
+    rows: list[CardmarketOfferRowIn] = Field(max_length=200)
+    save: bool = Field(default=False, description="false = nur Vorschau.")
+
+
+class CardmarketConditionOut(BaseModel):
+    variant: str
+    condition: str
+    low: Decimal = Field(description="Günstigstes Angebot (Zustand oder besser).")
+    low3: Decimal = Field(description="Durchschnitt der drei günstigsten.")
+    offers: int
+
+
+class CardmarketOffersOut(BaseModel):
+    card_id: uuid.UUID
+    card_language: str
+    page_url: str
+    accepted: int
+    skipped: int
+    prices: list[CardmarketConditionOut]
+    warnings: list[str]
+    saved: int

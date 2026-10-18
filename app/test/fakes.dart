@@ -205,6 +205,25 @@ class FakeApi extends Api {
   Future<CardPrices> prices(String cardId) async => CardPrices.fromJson(pricesJson);
 
   @override
+  Future<CardmarketOffersResult> cardmarketOffers(
+    String cardId, {
+    required String pageUrl,
+    required List<CardmarketOfferRow> rows,
+    bool save = false,
+  }) async {
+    calls.add('cardmarketOffers:$cardId:${rows.length}:$save');
+    return CardmarketOffersResult.fromJson({
+      'accepted': rows.length,
+      'skipped': 0,
+      'prices': [
+        {'variant': 'normal', 'condition': 'NM', 'low': '180.00', 'low3': '188.33', 'offers': 3},
+      ],
+      'warnings': <String>[],
+      'saved': save ? 2 : 0,
+    });
+  }
+
+  @override
   Future<PriceHistory> priceHistory(
     String cardId, {
     String source = 'cardmarket',

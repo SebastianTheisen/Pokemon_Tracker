@@ -122,6 +122,8 @@ class UserSettings {
   const UserSettings({
     required this.conditionFactors,
     required this.customFactors,
+    this.languageFactors = const {},
+    this.customLanguageFactors = const {},
     this.defaultLanguage,
   });
 
@@ -131,11 +133,24 @@ class UserSettings {
         entry.key: double.parse('${entry.value}'),
     },
     customFactors: json.strings('custom_condition_factors').toSet(),
+    languageFactors: {
+      for (final entry in (json.objOrNull('language_factors') ?? const {}).entries)
+        entry.key: double.parse('${entry.value}'),
+    },
+    customLanguageFactors:
+        (json['custom_language_factors'] == null
+                ? const <String>[]
+                : json.strings('custom_language_factors'))
+            .toSet(),
     defaultLanguage: json.strOrNull('default_language'),
   );
 
   final Map<String, double> conditionFactors;
   final Set<String> customFactors;
+
+  /// Faktor je Kartensprache auf den Cardmarket-Preis (Standard 1,00).
+  final Map<String, double> languageFactors;
+  final Set<String> customLanguageFactors;
   final String? defaultLanguage;
 }
 
@@ -330,6 +345,7 @@ class ConditionPrice {
     this.basisMetric,
     this.basisValue,
     this.factor,
+    this.languageFactor,
   });
 
   factory ConditionPrice.fromJson(Json json) => ConditionPrice(
@@ -344,6 +360,7 @@ class ConditionPrice {
     basisMetric: json.strOrNull('basis_metric'),
     basisValue: json.strOrNull('basis_value'),
     factor: json.strOrNull('factor'),
+    languageFactor: json.strOrNull('language_factor'),
   );
 
   final String variant;
@@ -357,6 +374,9 @@ class ConditionPrice {
   final String? basisMetric;
   final String? basisValue;
   final String? factor;
+
+  /// Sprachfaktor der Karte bei Schätzungen (`"1.00"` = keiner).
+  final String? languageFactor;
 
   bool get isEstimate => kind == 'estimated';
 }
@@ -829,4 +849,96 @@ class ConfirmResult {
 
   final bool referenceSaved;
   final String? note;
+}
+
+// ------------------------------------------------------------ Cardmarket-Angebote
+
+/// Ein vom Lesezeichen ausgelesenes Angebot (Rohtexte der Cardmarket-Seite).
+class CardmarketOfferRow {
+  const CardmarketOfferRow({required this.condition, required this.price, this.labels = const []});
+
+  factory CardmarketOfferRow.fromJson(Json json) => CardmarketOfferRow(
+    condition: '${json['condition'] ?? ''}',
+    price: '${json['price'] ?? ''}',
+    labels: [for (final label in (json['labels'] as List<Object?>? ?? const [])) '$label'],
+  );
+
+  final String condition;
+  final String price;
+  final List<String> labels;
+
+  Json toJson() => {'condition': condition, 'price': price, 'labels': labels};
+}
+
+class CardmarketConditionOffer {
+  const CardmarketConditionOffer({
+    required this.variant,
+    required this.condition,
+    required this.low,
+    required this.low3,
+    required this.offers,
+  });
+
+  factory CardmarketConditionOffer.fromJson(Json json) => CardmarketConditionOffer(
+    variant: json.str('variant'),
+    condition: json.str('condition'),
+    low: json.str('low'),
+    low3: json.str('low3'),
+    offers: json.integer('offers'),
+  );
+
+  final String variant;
+  final String condition;
+  final String low;
+  final String low3;
+  final int offers;
+}
+
+class CardmarketOffersResult {
+  const CardmarketOffersResult({
+    required this.accepted,
+    required this.skipped,
+    required this.prices,
+    required this.warnings,
+    required this.saved,
+  });
+
+  factory CardmarketOffersResult.fromJson(Json json) => CardmarketOffersResult(
+    accepted: json.integer('accepted'),
+    skipped: json.integer('skipped'),
+    prices: parseList(json['prices'], CardmarketConditionOffer.fromJson),
+    warnings: json.strings('warnings'),
+    saved: json.integer('saved'),
+  );
+
+  final int accepted;
+  final int skipped;
+  final List<CardmarketConditionOffer> prices;
+  final List<String> warnings;
+  final int saved;
+}
+
+/// Sprach-IDs der Cardmarket-Filter (`?language=3` = Deutsch).
+const cardmarketLanguageIds = {'en': 1, 'de': 3, 'zh-cn': 6, 'ja': 7, 'ko': 10, 'zh-tw': 11};
+
+/// Zustands-IDs der Cardmarket-Filter (`?minCondition=2` = ab Near Mint).
+const cardmarketConditionIds = {'MT': 1, 'NM': 2, 'EX': 3, 'GD': 4, 'LP': 5, 'PL': 6, 'PO': 7};
+
+/// Angebotsseite einer Karte auf Cardmarket, gefiltert nach Sprache und Mindestzustand.
+///
+/// Nur mit Produkt-ID (Link aus dem Cardmarket-Preis); die Sprungmarke `#kartenkiste=<id>`
+/// sagt dem Lesezeichen, zu welcher Karte die Angebote gehören.
+String? cardmarketOffersUrl({
+  required String? productUrl,
+  required String cardId,
+  required String language,
+  String condition = 'NM',
+}) {
+  if (productUrl == null || !productUrl.contains('idProduct=')) return null;
+  final params = [
+    if (cardmarketLanguageIds[language] case final id?) 'language=$id',
+    if (cardmarketConditionIds[condition] case final id?) 'minCondition=$id',
+  ];
+  final separator = productUrl.contains('?') ? '&' : '?';
+  return '$productUrl$separator${params.join('&')}#kartenkiste=$cardId';
 }

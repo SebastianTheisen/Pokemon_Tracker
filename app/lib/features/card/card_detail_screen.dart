@@ -38,12 +38,14 @@ const metricLabels = {
   'mid': 'Mitte',
   'high': 'höchstes',
   'direct_low': 'Direkt ab',
+  'low3': 'Ø 3 günstigste',
 };
 
 String sourceLabel(String source) => switch (source) {
   'cardmarket' => 'Cardmarket',
   'tcgplayer' => 'TCGplayer',
   'pokemontcg' => 'pokemontcg.io',
+  'cardmarket_offers' => 'Cardmarket-Angebote',
   _ => source,
 };
 
@@ -210,6 +212,14 @@ class _CardBodyState extends ConsumerState<_CardBody> {
     );
   }
 
+  /// Angebotsseite auf Cardmarket, gefiltert nach Kartensprache und gewähltem Zustand.
+  String? _cardmarketLink(CardPrices prices) => cardmarketOffersUrl(
+    productUrl: prices.offers.where((o) => o.source == 'cardmarket').firstOrNull?.url,
+    cardId: widget.card.id,
+    language: widget.card.language,
+    condition: _condition,
+  );
+
   Widget _priceSection(CardPrices prices) {
     final variants = {for (final c in prices.conditions) c.variant}.toList()..sort();
     final variant = variants.contains(_variant) ? _variant : (variants.firstOrNull ?? 'normal');
@@ -265,6 +275,19 @@ class _CardBodyState extends ConsumerState<_CardBody> {
             ),
           ),
         ),
+        if (_cardmarketLink(prices) case final link?)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: OutlinedButton.icon(
+              key: const Key('cardmarket-offers'),
+              onPressed: () => openLink(context, link),
+              icon: const Icon(Icons.storefront),
+              label: Text(
+                'Cardmarket-Angebote: ${languageLabels[widget.card.language] ?? widget.card.language}, '
+                'ab $_condition',
+              ),
+            ),
+          ),
         if (byCondition.length > 1) ...[
           const SectionTitle('Andere Zustände'),
           for (final condition in conditions)
@@ -311,8 +334,14 @@ class _ConditionValue extends StatelessWidget {
   Widget build(BuildContext context) {
     // Verständlich statt technisch: nur den Zustandsfaktor nennen, wenn er nicht 1 ist.
     final factor = double.tryParse(price.factor ?? '');
-    final basis = price.isEstimate && factor != null && factor != 1
-        ? 'Near-Mint-Preis × ${price.factor!.replaceAll('.', ',')}'
+    final languageFactor = double.tryParse(price.languageFactor ?? '');
+    final parts = [
+      if (factor != null && factor != 1) 'Zustand ${price.factor!.replaceAll('.', ',')}',
+      if (languageFactor != null && languageFactor != 1)
+        'Sprache ${price.languageFactor!.replaceAll('.', ',')}',
+    ];
+    final basis = price.isEstimate && parts.isNotEmpty
+        ? 'Near-Mint-Preis × ${parts.join(' × ')}'
         : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

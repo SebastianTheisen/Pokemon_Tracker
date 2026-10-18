@@ -275,6 +275,59 @@ async def test_custom_factors_and_external_condition_prices_take_precedence(
     assert (by_condition["EX"].kind, by_condition["EX"].value) == ("estimated", Decimal("90.00"))
 
 
+async def test_language_factor_applies_to_estimates_only(
+    session_factory: async_sessionmaker[AsyncSession],
+    make_service: ServiceFactory,
+    card: Card,
+    user: User,
+) -> None:
+    builtin = FakeProvider(quotes=[cardmarket("trend", "100")])
+    plugin = FakeProvider(
+        name="meine_quelle",
+        kind="external",
+        quotes=[cardmarket("lowest", "93.50", condition="NM")],
+    )
+    await _refresh(session_factory, make_service, card, [builtin, plugin])
+    async with session_factory() as session:
+        await update_user_settings(
+            session,
+            await session.get_one(User, user.id),
+            language_factors={card.language: Decimal("0.8")},  # type: ignore[dict-item]
+        )
+        await session.commit()
+
+    prices = await _prices(session_factory, make_service, card, user)
+
+    by_condition = {c.condition: c for c in prices.conditions if c.variant == "normal"}
+    assert by_condition["NM"].value == Decimal("93.50")  # Beleg bleibt unverändert
+    ex = by_condition["EX"]
+    assert (ex.value, ex.factor, ex.language_factor) == (
+        Decimal("68.00"),  # 100 × 0,85 × 0,8
+        Decimal("0.85"),
+        Decimal("0.80"),
+    )
+
+
+async def test_external_condition_prices_without_cardmarket_reference(
+    session_factory: async_sessionmaker[AsyncSession],
+    make_service: ServiceFactory,
+    card: Card,
+    user: User,
+) -> None:
+    plugin = FakeProvider(
+        name="meine_quelle",
+        kind="external",
+        quotes=[cardmarket("lowest", "12.00", condition="EX")],
+    )
+    await _refresh(session_factory, make_service, card, [plugin])
+
+    prices = await _prices(session_factory, make_service, card, user)
+
+    assert [(c.condition, c.kind, c.value) for c in prices.conditions] == [
+        ("EX", "external", Decimal("12.00"))
+    ]
+
+
 async def test_no_verified_price_means_no_estimate(
     session_factory: async_sessionmaker[AsyncSession],
     make_service: ServiceFactory,

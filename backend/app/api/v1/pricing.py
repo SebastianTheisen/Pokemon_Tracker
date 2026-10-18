@@ -9,6 +9,9 @@ from fastapi import APIRouter, Query
 
 from app.api.deps import AdminUser, CurrentUser, PriceServiceDep, SessionDep
 from app.schemas.pricing import (
+    CardmarketConditionOut,
+    CardmarketOffersIn,
+    CardmarketOffersOut,
     CardPricesOut,
     PriceHistoryOut,
     PriceSourceOut,
@@ -16,8 +19,10 @@ from app.schemas.pricing import (
     UserSettingsUpdate,
 )
 from app.services import catalog_search
+from app.services.cardmarket_offers import OfferRow, evaluate_offers, save_offers
 from app.services.user_settings import (
     effective_factors,
+    effective_language_factors,
     get_user_settings,
     update_user_settings,
 )
@@ -57,12 +62,44 @@ async def card_price_history(
     return PriceHistoryOut.build(history)
 
 
+@router.post("/cards/{card_id}/cardmarket-offers")
+async def cardmarket_offers(
+    card_id: uuid.UUID, body: CardmarketOffersIn, session: SessionDep, _user: CurrentUser
+) -> CardmarketOffersOut:
+    """Selbst ausgelesene Cardmarket-Angebote auswerten (Vorschau) und mit ``save`` speichern.
+
+    Die Angebote stammen aus dem Browser des Nutzers (Lesezeichen); der Server ruft
+    Cardmarket nicht ab. Gespeichert wird je Variante und Zustand das günstigste Angebot
+    und der Durchschnitt der drei günstigsten – mit Datum und Link auf die Seite.
+    """
+    card = await catalog_search.get_card(session, card_id)
+    result = evaluate_offers(
+        card,
+        body.page_url,
+        [OfferRow(row.condition, row.price, tuple(row.labels)) for row in body.rows],
+    )
+    if body.save:
+        await save_offers(session, card, result)
+    return CardmarketOffersOut(
+        card_id=card.id,
+        card_language=result.card_language,
+        page_url=result.page_url,
+        accepted=result.accepted,
+        skipped=result.skipped,
+        prices=[CardmarketConditionOut(**price.__dict__) for price in result.prices],
+        warnings=result.warnings,
+        saved=result.saved,
+    )
+
+
 @router.get("/me/settings", tags=["me"])
 async def read_settings(session: SessionDep, user: CurrentUser) -> UserSettingsOut:
     settings = await get_user_settings(session, user)
     return UserSettingsOut(
         condition_factors=effective_factors(settings),
         custom_condition_factors=sorted(settings.condition_factors) if settings else [],
+        language_factors=effective_language_factors(settings),
+        custom_language_factors=sorted(settings.language_factors or {}) if settings else [],
         default_language=settings.default_language if settings else None,
     )
 
@@ -71,12 +108,14 @@ async def read_settings(session: SessionDep, user: CurrentUser) -> UserSettingsO
 async def change_settings(
     body: UserSettingsUpdate, session: SessionDep, user: CurrentUser
 ) -> UserSettingsOut:
-    """Eigene Zustandsfaktoren (relativ zu Near Mint) und Standardsprache setzen."""
+    """Eigene Zustandsfaktoren (relativ zu Near Mint), Sprachfaktoren und Standardsprache."""
     await update_user_settings(
         session,
         user,
         condition_factors=body.condition_factors,
         reset_condition_factors=body.reset_condition_factors,
+        language_factors=body.language_factors,
+        reset_language_factors=body.reset_language_factors,
         default_language=body.default_language,
     )
     return await read_settings(session, user)

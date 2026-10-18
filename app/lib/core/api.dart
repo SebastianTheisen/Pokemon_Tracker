@@ -273,6 +273,8 @@ class Api {
   Future<UserSettings> updateSettings({
     Map<String, double>? factors,
     bool resetFactors = false,
+    Map<String, double>? languageFactors,
+    bool resetLanguageFactors = false,
     String? defaultLanguage,
   }) async => UserSettings.fromJson(
     (await _send(
@@ -281,7 +283,28 @@ class Api {
           body: {
             'condition_factors': ?factors,
             if (resetFactors) 'reset_condition_factors': true,
+            'language_factors': ?languageFactors,
+            if (resetLanguageFactors) 'reset_language_factors': true,
             'default_language': ?defaultLanguage,
+          },
+        ))!
+        as Json,
+  );
+
+  /// Ausgelesene Cardmarket-Angebote auswerten (`save: false` = Vorschau) bzw. speichern.
+  Future<CardmarketOffersResult> cardmarketOffers(
+    String cardId, {
+    required String pageUrl,
+    required List<CardmarketOfferRow> rows,
+    bool save = false,
+  }) async => CardmarketOffersResult.fromJson(
+    (await _send(
+          'POST',
+          '/cards/$cardId/cardmarket-offers',
+          body: {
+            'page_url': pageUrl,
+            'rows': [for (final row in rows) row.toJson()],
+            'save': save,
           },
         ))!
         as Json,
