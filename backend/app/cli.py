@@ -33,13 +33,21 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import create_engine, create_session_factory
-from app.models import GradingCompany, ImageImportRun, Product, ProductKind, Role, User
+from app.models import (
+    GradingCompany,
+    ImageImportRun,
+    OfficialCard,
+    Product,
+    ProductKind,
+    Role,
+    User,
+)
 from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
 from app.scanner.ocr import RapidOcrReader
@@ -170,6 +178,18 @@ async def _image_status(
             select(ImageImportRun).order_by(ImageImportRun.started_at.desc()).limit(1)
         )
         coverage = await catalog_coverage(session)
+        progress = (
+            await session.execute(
+                select(
+                    OfficialCard.source,
+                    func.count(),
+                    func.count(OfficialCard.detail_fetched_at),
+                    func.count(OfficialCard.card_id),
+                )
+                .group_by(OfficialCard.source)
+                .order_by(OfficialCard.source)
+            )
+        ).all()
     if run is None:
         print("Noch kein Bild-Import gelaufen.")
     else:
@@ -181,6 +201,12 @@ async def _image_status(
                     f"  {item.get('source')}: {item.get('images_set')} Bilder, "
                     f"{item.get('cards_created')} angelegt, {len(item.get('errors', []))} Fehler"
                 )
+    if progress:
+        print("Offizielle Datenbanken (Karten / Details geladen / zugeordnet):")
+        for source, total, detailed, matched in progress:
+            percent = 100 * detailed // total if total else 0
+            print(f"  {source}: {total} / {detailed} ({percent} %) / {matched}")
+        print("  Zuordnung und Bilder folgen, sobald alle Details geladen sind.")
     print("Abdeckung (mit Bild / gesamt):")
     for language, value in coverage.items():
         print(f"  {language}: {value}")
