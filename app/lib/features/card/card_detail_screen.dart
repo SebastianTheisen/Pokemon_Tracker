@@ -173,6 +173,11 @@ class _CardBodyState extends ConsumerState<_CardBody> {
                         runSpacing: 6,
                         children: [
                           Tag(languageLabels[card.language] ?? card.language),
+                          if (card.imageLanguage != null)
+                            Tag(
+                              'Bild ${languageLabels[card.imageLanguage] ?? card.imageLanguage}',
+                              color: AppColors.textMuted,
+                            ),
                           if (card.rarity != null) Tag(card.rarity!, color: AppColors.accent),
                           if (card.source == 'user')
                             const Tag('selbst angelegt', color: AppColors.warning),

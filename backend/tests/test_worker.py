@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import Settings
 from app.models import PriceCheck, PricePoint
 from app.services.price_health import SourceHealth
-from app.worker import next_run_after, refresh_tracked_prices
+from app.worker import next_image_import, next_run_after, refresh_tracked_prices
 from tests.pricing_helpers import FakeProvider, cardmarket, make_card
 
 
@@ -76,3 +76,12 @@ async def test_refresh_round_counts_failures_and_continues(
     summary = await refresh_tracked_prices(session_factory, settings, [provider], health)
 
     assert (summary.cards, summary.failed_cards) == (3, 3)
+
+
+def test_next_image_import() -> None:
+    now = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
+    soon = now + timedelta(minutes=5)
+    assert next_image_import(now, None, 7) == soon  # noch nie gelaufen → gleich
+    assert next_image_import(now, now - timedelta(days=2), 7) == now + timedelta(days=5)
+    assert next_image_import(now, now - timedelta(days=30), 7) == soon  # überfällig
+    assert next_image_import(now, None, 0) is None  # abgeschaltet

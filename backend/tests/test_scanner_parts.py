@@ -226,6 +226,9 @@ def test_download_url() -> None:
         "https://assets.tcgdex.net/ja/S12/110/high.webp"
     )
     assert download_url("https://assets.tcgdex.net/x.png") == "https://assets.tcgdex.net/x.png"
+    # Andere Quellen: Adresse unverändert (z. B. ohne Endung bei scrydex).
+    scrydex = "https://images.scrydex.com/pokemon/me2pt5-1/large"
+    assert download_url(scrydex) == scrydex
 
 
 async def test_catalog_index_downloads_caches_and_guards(tmp_path: Path) -> None:

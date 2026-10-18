@@ -33,6 +33,17 @@ class CardSource(enum.StrEnum):
 
     TCGDEX = "tcgdex"
     USER = "user"
+    OFFICIAL = "official"  # aus einer offiziellen Kartendatenbank (z. B. japanische Promos)
+
+
+class ImageSource(enum.StrEnum):
+    """Herkunft eines Kartenbilds, wenn es nicht von TCGdex selbst stammt (Spalte leer)."""
+
+    FALLBACK = "fallback"  # Bild einer anderen Sprachfassung derselben Karte
+    POKEMONTCG = "pokemontcg"  # Datensatz von pokemontcg.io (englische Bilder)
+    POKEMON_COM = "pokemon.com"  # offizielle Bilder DE/EN
+    POKEMON_CARD_JP = "pokemon-card.com"  # offizielle japanische Kartendatenbank
+    POKEMON_CARD_TW = "asia.pokemon-card.com/tw"  # offizielle Datenbank Taiwan
 
 
 class CardSet(UuidPrimaryKeyMixin, Base):
@@ -88,6 +99,8 @@ class Card(UuidPrimaryKeyMixin, TimestampMixin, Base):
     # Sprache des Bildes, wenn es von einer anderen Sprachfassung derselben Karte stammt
     # (z. B. englisches Bild für eine deutsche Karte, deren Bild bei TCGdex fehlt).
     image_language: Mapped[str | None] = mapped_column(String(8))
+    # Herkunft des Bildes (:class:`ImageSource`); leer = von TCGdex.
+    image_source: Mapped[str | None] = mapped_column(String(32))
     rarity: Mapped[str | None] = mapped_column(String(100))
     source: Mapped[CardSource] = mapped_column(
         Enum(

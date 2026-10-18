@@ -6,7 +6,7 @@ werden nur die SIFT-Merkmale (:class:`~app.scanner.storage.FeatureCache`).
 
 Sicherheit: Nutzer können eigene Karten mit Bild-URL anlegen. Damit der Server keine
 beliebigen Adressen abruft (SSRF), werden nur HTTPS-URLs der erlaubten Hosts geladen
-(Standard: ``assets.tcgdex.net``).
+(Standard: TCGdex und die Bildquellen aus :mod:`app.services.image_import`).
 """
 
 from __future__ import annotations
@@ -31,12 +31,18 @@ CpuRunner = Callable[..., Awaitable[Any]]
 
 MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024
 _IMAGE_SUFFIXES = (".webp", ".png", ".jpg", ".jpeg")
+TCGDEX_ASSET_HOST = "assets.tcgdex.net"
 
 
 def download_url(image_url: str) -> str:
-    """TCGdex liefert Bild-URLs ohne Endung – die hohe Auflösung heißt ``/high.webp``."""
-    path = urlsplit(image_url).path.lower()
-    return image_url if path.endswith(_IMAGE_SUFFIXES) else f"{image_url.rstrip('/')}/high.webp"
+    """TCGdex liefert Bild-URLs ohne Endung – die hohe Auflösung heißt ``/high.webp``.
+
+    Adressen anderer Quellen (pokemontcg.io, offizielle Datenbanken) bleiben unverändert.
+    """
+    parts = urlsplit(image_url)
+    if parts.hostname != TCGDEX_ASSET_HOST or parts.path.lower().endswith(_IMAGE_SUFFIXES):
+        return image_url
+    return f"{image_url.rstrip('/')}/high.webp"
 
 
 def _features_from_bytes(data: bytes) -> ImageFeatures:

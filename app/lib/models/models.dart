@@ -201,6 +201,7 @@ class CardInfo {
     required this.cardSet,
     this.externalId,
     this.imageUrl,
+    this.imageLanguage,
     this.rarity,
     this.translatedName,
   });
@@ -212,6 +213,7 @@ class CardInfo {
     name: json.str('name'),
     number: json.str('number'),
     imageUrl: json.strOrNull('image_url'),
+    imageLanguage: json.strOrNull('image_language'),
     rarity: json.strOrNull('rarity'),
     source: json.str('source'),
     cardSet: SetSummary.fromJson(json.obj('card_set')),
@@ -224,8 +226,11 @@ class CardInfo {
   final String name;
   final String number;
   final String? imageUrl;
+
+  /// Sprache des Bildes, wenn es aus einer anderen Sprachfassung stammt (sonst `null`).
+  final String? imageLanguage;
   final String? rarity;
-  final String source; // tcgdex | user
+  final String source; // tcgdex | user | official
   final SetSummary cardSet;
 
   /// Deutscher Name bei japanischen, koreanischen und chinesischen Karten (sonst `null`).
@@ -237,18 +242,34 @@ class CardInfo {
   /// Originalname, wenn er sich vom angezeigten Namen unterscheidet (z. B. „ピカチュウex“).
   String? get originalName => translatedName == null ? null : name;
 
-  /// TCGdex liefert Bild-URLs ohne Endung; `low` für Listen, `high` für Details.
-  String? image({bool high = false}) {
-    final url = imageUrl;
-    if (url == null) return null;
-    final lower = url.toLowerCase();
-    if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.webp')) {
-      return url;
-    }
-    return '$url/${high ? 'high' : 'low'}.webp';
-  }
+  /// Bildadresse für Listen (`high: false`) bzw. Details.
+  ///
+  /// TCGdex liefert Adressen ohne Endung (`…/low.webp`, `…/high.webp`). pokemontcg.io und
+  /// scrydex haben eine kleine Fassung neben der gespeicherten großen; alle anderen Quellen
+  /// (offizielle Datenbanken) gibt es nur in einer Größe.
+  String? image({bool high = false}) => cardImageUrl(imageUrl, high: high);
 
   String get subtitle => '${cardSet.name} · $number';
+}
+
+/// Siehe [CardInfo.image].
+String? cardImageUrl(String? url, {bool high = false}) {
+  if (url == null) return null;
+  final uri = Uri.tryParse(url);
+  switch (uri?.host) {
+    case 'assets.tcgdex.net':
+      final lower = url.toLowerCase();
+      if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.webp')) {
+        return url;
+      }
+      return '$url/${high ? 'high' : 'low'}.webp';
+    case 'images.pokemontcg.io':
+      return high ? url : url.replaceFirst(RegExp(r'_hires\.png$'), '.png');
+    case 'images.scrydex.com':
+      return high ? url : url.replaceFirst(RegExp(r'/large$'), '/small');
+    default:
+      return url;
+  }
 }
 
 class SearchHit {

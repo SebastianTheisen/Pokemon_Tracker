@@ -5,6 +5,9 @@
 * Abrufe laufen parallel (begrenzt), Schreiben seriell; Commit nach jedem Set, damit ein
   Abbruch den bisherigen Fortschritt nicht verliert.
 * Selbst angelegte Karten (``source = user``) werden nie angefasst.
+* Bilder aus anderen Quellen (:mod:`app.services.image_import`) bleiben erhalten, solange
+  TCGdex selbst kein Bild liefert. Ersatzbilder aus anderen Sprachfassungen werden nach
+  jedem Import neu bestimmt.
 """
 
 from __future__ import annotations
@@ -12,13 +15,14 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import Any
 
 import structlog
-from sqlalchemy import func, select, text
+from sqlalchemy import case, func, null, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.models import Card, CardSet, CardSource
+from app.models import Card, CardSet, CardSource, ImageSource
 from app.providers.tcgdex import SetBrief, SetDetail, TcgdexClient, TcgdexError
 from app.services.catalog_numbers import normalize_number
 
@@ -111,6 +115,14 @@ async def _store_set(session: AsyncSession, language: str, detail: SetDetail) ->
     ]
     if rows:
         card_stmt = insert(Card).values(rows)
+        new_image = card_stmt.excluded.image_url
+        # Ohne TCGdex-Bild: Bild einer anderen Quelle behalten, Ersatzbild (andere
+        # Sprachfassung) verwerfen – es wird nach dem Import neu bestimmt.
+        keep_other = Card.image_source.is_not(None) & (Card.image_source != ImageSource.FALLBACK)
+
+        def image_column(column: Any, from_tcgdex: Any) -> Any:
+            return case((new_image.is_not(None), from_tcgdex), (keep_other, column), else_=null())
+
         await session.execute(
             card_stmt.on_conflict_do_update(
                 index_elements=[Card.external_id, Card.language],
@@ -120,8 +132,11 @@ async def _store_set(session: AsyncSession, language: str, detail: SetDetail) ->
                     "number": card_stmt.excluded.number,
                     "number_norm": card_stmt.excluded.number_norm,
                     "name": card_stmt.excluded.name,
-                    "image_url": card_stmt.excluded.image_url,
-                    "image_language": None,  # Ersatzbild wird nach dem Import neu gesetzt
+                    "image_url": image_column(Card.image_url, new_image),
+                    "image_language": image_column(Card.image_language, null()),
+                    "image_source": image_column(Card.image_source, null()),
+                    # Aus einer offiziellen Datenbank angelegte Karte: jetzt kennt TCGdex sie.
+                    "source": card_stmt.excluded.source,
                     "updated_at": func.now(),
                 },
             )
@@ -197,7 +212,8 @@ async def fill_image_fallbacks(session: AsyncSession) -> int:
         text(
             f"""
             UPDATE cards AS target
-            SET image_url = source.image_url, image_language = source.language
+            SET image_url = source.image_url, image_language = source.language,
+                image_source = 'fallback'
             FROM (
                 SELECT DISTINCT ON (external_id) external_id, image_url, language
                 FROM cards
@@ -207,7 +223,7 @@ async def fill_image_fallbacks(session: AsyncSession) -> int:
             ) AS source
             WHERE target.external_id = source.external_id
               AND target.image_url IS NULL
-              AND target.source = 'tcgdex'
+              AND target.source <> 'user'
             """  # noqa: S608 – nur feste Sprachcodes, keine Nutzereingaben
         )
     )

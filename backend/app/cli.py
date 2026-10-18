@@ -13,6 +13,9 @@ Beispiele (im Container: ``docker compose exec api python -m app.cli ...``)::
     python -m app.cli scan foto.jpg --email ich@example.com     # ein Foto erkennen
     python -m app.cli scan-eval --photos testset --expected testset/soll.csv --email ich@…
     python -m app.cli scanner-warmup --korean     # OCR-Modelle laden (KO wird heruntergeladen)
+    python -m app.cli import-images --dry-run     # Bildquellen testen, nichts speichern
+    python -m app.cli import-images --sources pokemontcg pokemon.com
+    python -m app.cli image-status                # letzter Bild-Import und Abdeckung
 """
 
 from __future__ import annotations
@@ -27,6 +30,7 @@ from contextlib import asynccontextmanager
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import httpx
 from sqlalchemy import select
@@ -35,7 +39,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import create_engine, create_session_factory
-from app.models import GradingCompany, Product, ProductKind, Role, User
+from app.models import GradingCompany, ImageImportRun, Product, ProductKind, Role, User
 from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
 from app.scanner.ocr import RapidOcrReader
@@ -45,6 +49,14 @@ from app.services.catalog_search import search_cards
 from app.services.catalog_sync import fill_image_fallbacks, sync_catalog
 from app.services.collection import CollectionService, ItemFilter, ItemInput
 from app.services.errors import ServiceError
+from app.services.image_import import (
+    ALL_SOURCES,
+    catalog_coverage,
+    run_image_import,
+)
+from app.services.image_import import (
+    render_report as render_image_report,
+)
 from app.services.price_health import SourceHealth
 from app.services.pricing import PriceService
 from app.services.scan import ScanOutcome, ScanService
@@ -129,6 +141,49 @@ async def _fill_images(
         filled = await fill_image_fallbacks(session)
         await session.commit()
     print(f"Ersatzbilder gesetzt: {filled}")
+
+
+async def _import_images(
+    factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
+) -> None:
+    """Fehlende Bilder aus pokemontcg.io, pokemon.com und den offiziellen Datenbanken."""
+    report = await run_image_import(
+        factory,
+        settings,
+        sources=args.sources or settings.image_import_sources,
+        max_pages=args.max_pages,
+        max_details=args.max_details,
+        dry_run=args.dry_run,
+    )
+    text = render_image_report(report)
+    if args.out:
+        await asyncio.to_thread(Path(args.out).write_text, text, encoding="utf-8")
+    print(text)
+
+
+async def _image_status(
+    factory: async_sessionmaker[AsyncSession], _settings: Settings, _args: argparse.Namespace
+) -> None:
+    """Letzter Bild-Import und aktuelle Abdeckung."""
+    async with factory() as session:
+        run = await session.scalar(
+            select(ImageImportRun).order_by(ImageImportRun.started_at.desc()).limit(1)
+        )
+        coverage = await catalog_coverage(session)
+    if run is None:
+        print("Noch kein Bild-Import gelaufen.")
+    else:
+        state = f"fertig {run.finished_at:%d.%m.%Y %H:%M} UTC" if run.finished_at else "läuft"
+        print(f"Letzter Lauf: gestartet {run.started_at:%d.%m.%Y %H:%M} UTC, {state}")
+        for item in run.report.get("sources", []):
+            if isinstance(item, dict):
+                print(
+                    f"  {item.get('source')}: {item.get('images_set')} Bilder, "
+                    f"{item.get('cards_created')} angelegt, {len(item.get('errors', []))} Fehler"
+                )
+    print("Abdeckung (mit Bild / gesamt):")
+    for language, value in coverage.items():
+        print(f"  {language}: {value}")
 
 
 async def _search(
@@ -365,6 +420,25 @@ Command = Callable[
 ]
 
 
+def _add_image_commands(commands: Any) -> None:
+    import_images = commands.add_parser(
+        "import-images", help="Fehlende Kartenbilder aus weiteren Quellen ergänzen"
+    )
+    import_images.add_argument(
+        "--sources", nargs="+", choices=ALL_SOURCES, help="Standard: PT_IMAGE_IMPORT_SOURCES"
+    )
+    import_images.add_argument(
+        "--dry-run", action="store_true", help="nur testen: wenige Seiten lesen, nichts speichern"
+    )
+    import_images.add_argument("--max-pages", type=int, help="Listenseiten je Datenbank")
+    import_images.add_argument("--max-details", type=int, help="Detailseiten je Datenbank")
+    import_images.add_argument("--out", help="Bericht zusätzlich als Markdown-Datei")
+    import_images.set_defaults(handler=_import_images)
+
+    status = commands.add_parser("image-status", help="Letzter Bild-Import und Abdeckung")
+    status.set_defaults(handler=_image_status)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.cli", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -389,6 +463,8 @@ def build_parser() -> argparse.ArgumentParser:
         "fill-images", help="Fehlende Bilder aus anderen Sprachfassungen ergänzen"
     )
     images.set_defaults(handler=_fill_images)
+
+    _add_image_commands(commands)
 
     prices = commands.add_parser(
         "refresh-prices", help="Preise aller vorgemerkten Karten jetzt aktualisieren"

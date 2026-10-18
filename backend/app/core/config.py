@@ -64,6 +64,28 @@ class Settings(BaseSettings):
     catalog_sync_concurrency: int = Field(default=4, ge=1, le=16)
     http_user_agent: str = "PokemonTracker/0.1 (private Sammel-App)"
 
+    # --- Bildquellen (fehlende Kartenbilder ergänzen) --------------------------
+    image_import_interval_days: int = Field(
+        default=7, ge=0, description="Bild-Import im Worker alle n Tage; 0 = aus."
+    )
+    image_import_sources: list[str] = Field(
+        default_factory=lambda: ["pokemontcg", "pokemon.com", "jp", "tw"],
+        description="pokemontcg (EN-Datensatz), pokemon.com (DE/EN), jp, tw (offizielle DBs).",
+    )
+    image_import_request_interval_seconds: float = Field(
+        default=1.0, ge=0, le=30, description="Mindestabstand zweier Anfragen je Server."
+    )
+    image_import_user_agent: str = (
+        "Kartenkiste/0.1 (private Sammel-App, 1 Anfrage/s, Bilder werden nicht kopiert)"
+    )
+    pokemontcg_data_url: str = (
+        "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master"
+    )
+    image_probe_retry_days: int = Field(
+        default=30, ge=1, description="Nicht gefundene pokemon.com-Bilder erst danach erneut."
+    )
+    image_probe_max_per_run: int = Field(default=6000, ge=0)
+
     # --- Preise --------------------------------------------------------------
     price_max_age_hours: int = Field(
         default=12, ge=1, le=168, description="Ältere Preise werden beim Ansehen neu geholt."
@@ -133,7 +155,14 @@ class Settings(BaseSettings):
         default=True, description="Koreanisches OCR-Modell bei Bedarf zusätzlich nutzen."
     )
     scanner_image_hosts: list[str] = Field(
-        default_factory=lambda: ["assets.tcgdex.net"],
+        default_factory=lambda: [
+            "assets.tcgdex.net",
+            "images.pokemontcg.io",
+            "images.scrydex.com",
+            "assets.pokemon.com",
+            "www.pokemon-card.com",
+            "asia.pokemon-card.com",
+        ],
         description="Nur von diesen Hosts werden Katalogbilder geladen (Schutz vor SSRF).",
     )
 

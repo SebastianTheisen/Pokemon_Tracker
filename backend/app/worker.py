@@ -11,6 +11,10 @@ Fehler einzelner Karten oder Quellen brechen die Runde nicht ab.
 
 Danach räumt der Worker auf: alte Einträge im Scan-Protokoll (``PT_SCAN_LOG_RETENTION_DAYS``)
 und Referenzbild-Dateien, deren Karte oder Nutzer gelöscht wurde.
+
+Unabhängig davon ergänzt der Worker alle ``PT_IMAGE_IMPORT_INTERVAL_DAYS`` Tage fehlende
+Kartenbilder (:mod:`app.services.image_import`). Der erste Lauf startet kurz nach dem Start,
+wenn noch nie einer fertig wurde; er dauert wegen der sanften Abfrage einige Stunden.
 """
 
 from __future__ import annotations
@@ -34,6 +38,7 @@ from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
 from app.scanner.storage import ReferenceStore
 from app.services.collection import CollectionService, users_with_items
+from app.services.image_import import last_finished_run, run_image_import
 from app.services.price_health import SourceHealth
 from app.services.pricing import PriceService, tracked_card_ids
 from app.services.scan import prune_reference_files, purge_scan_logs
@@ -138,6 +143,46 @@ async def scanner_housekeeping(
     return summary
 
 
+IMAGE_IMPORT_START_DELAY = timedelta(minutes=5)
+
+
+def next_image_import(
+    now: datetime, last_finished: datetime | None, interval_days: int
+) -> datetime | None:
+    """Wann ist der nächste Bild-Import fällig? ``None`` = abgeschaltet."""
+    if interval_days <= 0:
+        return None
+    earliest = now + IMAGE_IMPORT_START_DELAY
+    if last_finished is None:
+        return earliest
+    return max(earliest, last_finished + timedelta(days=interval_days))
+
+
+async def image_import_forever(
+    session_factory: async_sessionmaker[AsyncSession], settings: Settings
+) -> None:
+    """Endlosschleife des Bild-Imports (läuft neben der Preisrunde)."""
+    while True:
+        try:
+            async with session_factory() as session:
+                last = await last_finished_run(session)
+        except Exception:  # z. B. Migration beim Start noch nicht durch
+            log.exception("worker.image_import_status_failed")
+            await asyncio.sleep(IMAGE_IMPORT_START_DELAY.total_seconds())
+            continue
+        due = next_image_import(datetime.now(UTC), last, settings.image_import_interval_days)
+        if due is None:
+            log.info("worker.image_import_disabled")
+            return
+        log.info("worker.image_import_scheduled", next_run=due.isoformat())
+        await asyncio.sleep(max((due - datetime.now(UTC)).total_seconds(), 0))
+        try:
+            await run_image_import(session_factory, settings, sources=settings.image_import_sources)
+        except Exception:
+            log.exception("worker.image_import_failed")
+            await asyncio.sleep(3600)  # nicht in einer Fehlerschleife hämmern
+
+
 async def run_forever(settings: Settings) -> None:
     """Endlosschleife: bis zur nächsten Uhrzeit schlafen, Runde ausführen, wiederholen."""
     engine = create_engine(settings.database_url)
@@ -151,20 +196,25 @@ async def run_forever(settings: Settings) -> None:
             base_url=settings.tcgdex_base_url, user_agent=settings.http_user_agent
         ) as client:
             providers = build_price_providers(settings, client)
-            while True:
-                next_run = next_run_after(
-                    datetime.now(UTC), settings.price_refresh_time, settings.timezone
-                )
-                log.info("worker.sleeping", next_run=next_run.isoformat())
-                await asyncio.sleep((next_run - datetime.now(UTC)).total_seconds())
-                try:
-                    await refresh_tracked_prices(session_factory, settings, providers, health)
-                except Exception:
-                    log.exception("worker.refresh_failed")  # nächste Runde versucht es erneut
-                try:
-                    await scanner_housekeeping(session_factory, settings)
-                except Exception:
-                    log.exception("worker.housekeeping_failed")
+            # Bild-Import läuft unabhängig (dauert Stunden); Referenz halten, am Ende beenden.
+            images = asyncio.create_task(image_import_forever(session_factory, settings))
+            try:
+                while True:
+                    next_run = next_run_after(
+                        datetime.now(UTC), settings.price_refresh_time, settings.timezone
+                    )
+                    log.info("worker.sleeping", next_run=next_run.isoformat())
+                    await asyncio.sleep((next_run - datetime.now(UTC)).total_seconds())
+                    try:
+                        await refresh_tracked_prices(session_factory, settings, providers, health)
+                    except Exception:
+                        log.exception("worker.refresh_failed")  # nächste Runde versucht es erneut
+                    try:
+                        await scanner_housekeeping(session_factory, settings)
+                    except Exception:
+                        log.exception("worker.housekeeping_failed")
+            finally:
+                images.cancel()
     finally:
         await engine.dispose()
 
