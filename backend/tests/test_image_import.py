@@ -425,6 +425,9 @@ async def test_full_run_fills_images_from_all_sources(
     assert by_source["pokemontcg"].images_set == 3  # EN eigene Sprache, 2× DE als Ersatz
     assert by_source["pokemon.com"].images_set == 1  # DE-Bild ersetzt englisches Ersatzbild
     assert by_source["pokemon-card.com"].cards_created == 1  # Promo 132/M-P
+    # Schnellweg: タマタマ ist im Set M6a eindeutig → ohne Detailseite zugeordnet.
+    assert by_source["pokemon-card.com"].matched_by_name == 1
+    assert not [url for url in fake.requests if url.endswith("/card/50613")]
     assert by_source["pokemon-card.com"].unmatched == 1  # Set ZZ9 unbekannt → nicht angelegt
     assert by_source["asia.pokemon-card.com/tw"].cards_created == 1  # 099/064 im bekannten Set
     async with session_factory() as session:

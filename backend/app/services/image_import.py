@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -67,6 +67,7 @@ SET_PROBE_GIVE_UP = 5
 DETAIL_SANITY_SAMPLE = 20
 _COMMIT_EVERY = 100
 _DETAIL_CHUNK = 20
+MATCH_EVERY = 2000
 DETAIL_CONCURRENCY = 4
 MAX_CONSECUTIVE_ERRORS = 30
 MAX_ERRORS_KEPT = 20
@@ -90,6 +91,7 @@ class SourceReport:
     details_without_number: int = 0
     detail_errors: int = 0
     details_unparsable: int = 0
+    matched_by_name: int = 0
     errors: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     samples: list[dict[str, Any]] = field(default_factory=list)
@@ -484,8 +486,19 @@ async def import_official(
     if dry_run:
         return await _official_dry_run(database, report, max_pages or 1, max_details or 5)
     await _read_listing(session_factory, database, report, max_pages=max_pages)
+    # Schnellweg: Karten, deren Name im Set eindeutig ist, brauchen keine Detailseite.
+    await _match_by_name(session_factory, database, report)
+
+    async def match_so_far() -> None:
+        # Zwischendurch zuordnen, damit Bilder nicht erst am Ende des Laufs erscheinen.
+        interim = SourceReport(source=database.source)
+        await _match_official(session_factory, database, interim)
+        report.images_set += interim.images_set
+
     if not report.errors or report.listed:
-        await _fetch_details(session_factory, database, report, max_details=max_details)
+        await _fetch_details(
+            session_factory, database, report, max_details=max_details, on_progress=match_so_far
+        )
     await _match_official(session_factory, database, report)
     return report
 
@@ -563,12 +576,21 @@ async def _fetch_details(
     report: SourceReport,
     *,
     max_details: int | None,
+    on_progress: Callable[[], Awaitable[None]] | None = None,
 ) -> None:
-    """Detailseiten der Karten, deren Nummer noch fehlt (einmalig je Karte)."""
+    """Detailseiten der Karten, deren Nummer noch fehlt (einmalig je Karte).
+
+    Karten, die der Schnellweg (:func:`_match_by_name`) schon zugeordnet hat, werden
+    übersprungen. Alle ``MATCH_EVERY`` Seiten wird ``on_progress`` aufgerufen.
+    """
     async with session_factory() as session:
         query = (
             select(OfficialCard.id, OfficialCard.official_id)
-            .where(OfficialCard.source == database.source, OfficialCard.detail_fetched_at.is_(None))
+            .where(
+                OfficialCard.source == database.source,
+                OfficialCard.detail_fetched_at.is_(None),
+                OfficialCard.card_id.is_(None),
+            )
             # Neueste Karten zuerst (höchste ID) – als Zahl sortiert, nicht als Text.
             .order_by(cast(OfficialCard.official_id, BigInteger).desc())
         )
@@ -634,6 +656,8 @@ async def _fetch_details(
         if len(batch) >= _COMMIT_EVERY:
             await _store_details(session_factory, batch)
             batch = []
+            if on_progress is not None and report.details_fetched % MATCH_EVERY < _DETAIL_CHUNK:
+                await on_progress()
             log.info(
                 "image_import.details_progress",
                 source=database.source,
@@ -713,6 +737,59 @@ async def _match_official(
         report.notes.append(
             "Nicht zugeordnet (Setcode: Anzahl): " + ", ".join(f"{k}: {v}" for k, v in top)
         )
+
+
+async def _match_by_name(
+    session_factory: async_sessionmaker[AsyncSession],
+    database: OfficialDatabase,
+    report: SourceReport,
+) -> None:
+    """Zuordnung ohne Detailseite: Setcode (aus der Liste) + im Set eindeutiger Name.
+
+    Nur wenn im Katalog *und* in der offiziellen Liste genau eine Karte dieses Namens im
+    Set steht – bei mehreren Fassungen (z. B. normale und Sonder-Seltenheit) entscheidet
+    später die Nummer von der Detailseite.
+    """
+    source = ImageSource(database.source)
+    async with session_factory() as session:
+        index = await _catalog_index(session, database.language)
+        catalog: defaultdict[tuple[str, str], list[_CatalogCard]] = defaultdict(list)
+        for cards in index.by_number.values():
+            for card in cards:
+                catalog[(card.set_key, compact_key(card.name))].append(card)
+        records = (
+            (
+                await session.execute(
+                    select(OfficialCard).where(
+                        OfficialCard.source == database.source,
+                        OfficialCard.card_id.is_(None),
+                        OfficialCard.set_code.is_not(None),
+                        OfficialCard.name != "",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        listed: defaultdict[tuple[str, str], list[OfficialCard]] = defaultdict(list)
+        for record in records:
+            listed[(set_code_key(record.set_code or ""), compact_key(record.name))].append(record)
+        candidates: list[ImageCandidate] = []
+        for key, group in listed.items():
+            matches = catalog.get(key, [])
+            if len(group) != 1 or len(matches) != 1:
+                continue
+            group[0].card_id = matches[0].id
+            candidates.append(
+                ImageCandidate(matches[0].id, group[0].image_url, database.language, source)
+            )
+        report.matched_by_name = len(candidates)
+        for start in range(0, len(candidates), _COMMIT_EVERY):
+            report.images_set += await _apply(
+                session, candidates[start : start + _COMMIT_EVERY], dry_run=False
+            )
+        await session.commit()
+    log.info("image_import.matched_by_name", source=database.source, matched=report.matched_by_name)
 
 
 async def _create_card(
