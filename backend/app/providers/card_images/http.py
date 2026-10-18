@@ -69,17 +69,21 @@ class PoliteClient:
         return self._locks[urlsplit(url).hostname or ""]
 
     async def get(self, url: str, **kwargs: Any) -> httpx.Response:
-        """GET mit Wartezeit. Wirft :class:`SourceError` bei Netz- oder HTTP-Fehlern."""
+        """GET mit Wartezeit. Wirft :class:`SourceError` bei Netz- oder HTTP-Fehlern.
+
+        Das Host-Lock gilt nur für den Start: höchstens eine *neue* Anfrage je Intervall;
+        langsame Antworten dürfen sich überlappen (sonst bremst die Antwortzeit den Lauf).
+        """
         async with self._lock(url):
             await self._wait_turn(url)
-            try:
-                response = await self._client.get(url, **kwargs)
-                response.raise_for_status()
-            except httpx.HTTPStatusError as exc:
-                raise SourceError(f"GET {url}: HTTP {exc.response.status_code}") from exc
-            except httpx.HTTPError as exc:
-                raise SourceError(f"GET {url}: {type(exc).__name__}: {exc}") from exc
-            return response
+        try:
+            response = await self._client.get(url, **kwargs)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise SourceError(f"GET {url}: HTTP {exc.response.status_code}") from exc
+        except httpx.HTTPError as exc:
+            raise SourceError(f"GET {url}: {type(exc).__name__}: {exc}") from exc
+        return response
 
     async def get_json(self, url: str, **kwargs: Any) -> Any:
         response = await self.get(url, **kwargs)

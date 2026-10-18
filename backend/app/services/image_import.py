@@ -65,7 +65,11 @@ WESTERN_LANGUAGES = ("en", "de")
 SET_PROBE_GIVE_UP = 5
 # Plausibilitätsprüfung der Detailseiten: nach so vielen Abrufen muss die Hälfte passen.
 DETAIL_SANITY_SAMPLE = 20
-_COMMIT_EVERY = 200
+_COMMIT_EVERY = 100
+_DETAIL_CHUNK = 20
+DETAIL_CONCURRENCY = 4
+MAX_CONSECUTIVE_ERRORS = 30
+MAX_ERRORS_KEPT = 20
 DRY_RUN_PROBES = 40
 MAX_SAMPLES = 5
 _LIST_EMPTY_PAGES_TO_STOP = 2
@@ -84,6 +88,7 @@ class SourceReport:
     listed: int = 0
     details_fetched: int = 0
     details_without_number: int = 0
+    detail_errors: int = 0
     errors: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     samples: list[dict[str, Any]] = field(default_factory=list)
@@ -495,16 +500,26 @@ async def _read_listing(
     page = 1
     seen: set[str] = set()
     empty_pages = 0
+    failures_in_row = 0
     while max_pages is None or page <= max_pages:
         try:
             listing = await database.list_page(page)
             report.requests += 1
+            failures_in_row = 0
         except SourceError as exc:
-            report.errors.append(f"Liste Seite {page}: {exc}")
-            if len(report.errors) >= SET_PROBE_GIVE_UP:
+            failures_in_row += 1
+            if len(report.errors) < MAX_ERRORS_KEPT:
+                report.errors.append(f"Liste Seite {page}: {exc}")
+            log.warning(
+                "image_import.list_failed", source=database.source, page=page, error=str(exc)
+            )
+            if failures_in_row >= SET_PROBE_GIVE_UP:
+                report.notes.append(f"Liste ab Seite {page} abgebrochen (Fehler in Folge).")
                 return
             page += 1
             continue
+        if page % 50 == 0:
+            log.info("image_import.list_progress", source=database.source, page=page)
         fresh = [entry for entry in listing.entries if entry.official_id not in seen]
         if not fresh:
             empty_pages += 1
@@ -559,35 +574,67 @@ async def _fetch_details(
             query = query.limit(max_details)
         pending = (await session.execute(query)).all()
 
+    # Mehrere Seiten gleichzeitig unterwegs, gestartet wird trotzdem höchstens eine pro
+    # Intervall (PoliteClient) – so bremst eine langsame Antwort nicht den ganzen Lauf.
+    semaphore = asyncio.Semaphore(DETAIL_CONCURRENCY)
+    consecutive_errors = 0
+
+    async def fetch(official_id: str) -> OfficialDetail | SourceError:
+        async with semaphore:
+            try:
+                detail, _ = await database.detail(official_id)
+            except SourceError as exc:
+                return exc
+            return detail
+
     batch: list[tuple[Any, OfficialDetail]] = []
-    for row_id, official_id in pending:
-        try:
-            detail, _ = await database.detail(official_id)
+    for offset in range(0, len(pending), _DETAIL_CHUNK):
+        chunk = pending[offset : offset + _DETAIL_CHUNK]
+        results = await asyncio.gather(*(fetch(official_id) for _, official_id in chunk))
+        for (row_id, official_id), result in zip(chunk, results, strict=True):
             report.requests += 1
-        except SourceError as exc:
-            report.errors.append(f"Detail {official_id}: {exc}")
-            if len(report.errors) >= 3 * SET_PROBE_GIVE_UP:
-                report.notes.append("Abbruch: zu viele Fehler bei den Detailseiten.")
-                break
-            continue
-        report.details_fetched += 1
-        if detail.number is None:
-            report.details_without_number += 1
-        if len(report.samples) < MAX_SAMPLES:
-            report.samples.append({"id": official_id, **asdict(detail)})
-        batch.append((row_id, detail))
+            if isinstance(result, SourceError):
+                consecutive_errors += 1
+                report.detail_errors += 1
+                if len(report.errors) < MAX_ERRORS_KEPT:
+                    report.errors.append(f"Detail {official_id}: {result}")
+                    log.warning(
+                        "image_import.detail_failed", source=database.source, error=str(result)
+                    )
+                continue
+            consecutive_errors = 0
+            report.details_fetched += 1
+            if result.number is None:
+                report.details_without_number += 1
+            if len(report.samples) < MAX_SAMPLES:
+                report.samples.append({"id": official_id, **asdict(result)})
+            batch.append((row_id, result))
         if (
-            report.details_fetched == DETAIL_SANITY_SAMPLE
-            and report.details_without_number > DETAIL_SANITY_SAMPLE // 2
+            report.details_fetched >= DETAIL_SANITY_SAMPLE
+            and report.details_without_number > report.details_fetched // 2
         ):
             report.errors.append(
                 "Detailseiten liefern keine Kartennummer – Seitenaufbau geändert? "
                 "Abbruch, damit nichts Falsches gespeichert wird."
             )
+            log.error("image_import.details_unparsable", source=database.source)
             return  # nichts speichern: die Zeilen bleiben „nicht abgerufen“
+        if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+            report.notes.append(
+                f"Abbruch nach {consecutive_errors} Fehlern in Folge – Rest beim nächsten Lauf."
+            )
+            log.error("image_import.details_aborted", source=database.source)
+            break
         if len(batch) >= _COMMIT_EVERY:
             await _store_details(session_factory, batch)
             batch = []
+            log.info(
+                "image_import.details_progress",
+                source=database.source,
+                fetched=report.details_fetched,
+                pending=len(pending),
+                errors=report.detail_errors,
+            )
     await _store_details(session_factory, batch)
 
 
