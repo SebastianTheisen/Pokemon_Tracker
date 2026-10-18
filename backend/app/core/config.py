@@ -73,7 +73,24 @@ class Settings(BaseSettings):
         description="pokemontcg (EN-Datensatz), pokemon.com (DE/EN), jp, tw (offizielle DBs).",
     )
     image_import_request_interval_seconds: float = Field(
-        default=1.0, ge=0, le=30, description="Mindestabstand zweier Anfragen je Server."
+        default=1.0,
+        ge=0,
+        le=30,
+        description="Kleinster Abstand zweier Anfragen je Server (schnellstes erlaubtes Tempo).",
+    )
+    image_import_start_intervals: dict[str, float] = Field(
+        default_factory=lambda: {"www.pokemon-card.com": 1.0},
+        description=(
+            "Startabstand je Server; von dort tastet sich der Import nach 100 Erfolgen in "
+            "Folge schrittweise bis zum kleinsten Abstand heran (bei Sperre: halbes Tempo)."
+        ),
+    )
+    image_import_host_concurrency: dict[str, int] = Field(
+        default_factory=lambda: {"www.pokemon-card.com": 2},
+        description="Gleichzeitige Detailseiten je Server (sonst image_import_concurrency).",
+    )
+    image_import_retry_hours: int = Field(
+        default=3, ge=1, description="Abgebrochene Quellen nach so vielen Stunden erneut."
     )
     image_import_concurrency: int = Field(
         default=4,

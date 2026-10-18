@@ -408,7 +408,9 @@ class FakeSources:
 
 @pytest.fixture
 def fast_settings(settings: Settings) -> Settings:
-    return settings.model_copy(update={"image_import_request_interval_seconds": 0})
+    return settings.model_copy(
+        update={"image_import_request_interval_seconds": 0, "image_import_start_intervals": {}}
+    )
 
 
 async def test_full_run_fills_images_from_all_sources(
@@ -603,3 +605,76 @@ async def test_image_probe_treats_block_as_error_not_missing() -> None:
         with pytest.raises(polite.SourceError):
             await client.image_exists("https://assets.pokemon.com/x.png")
         assert client.interval("assets.pokemon.com") == 1.0
+
+
+async def test_polite_client_feels_its_way_from_start_interval() -> None:
+    from app.providers.card_images import http as polite  # noqa: PLC0415
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200)
+
+    async with polite.PoliteClient(
+        user_agent="t",
+        min_interval=0.0,
+        start_intervals={"example.org": 0.004},
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        assert client.interval("example.org") == 0.004
+        for _ in range(polite._RECOVER_AFTER):
+            await client.get("https://example.org/x")
+        assert client.interval("example.org") == pytest.approx(0.003)  # × 0,75
+        assert client.interval("other.org") == 0.0
+
+
+async def test_simultaneous_blocks_slow_down_only_once() -> None:
+    import asyncio  # noqa: PLC0415
+
+    from app.providers.card_images import http as polite  # noqa: PLC0415
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        await asyncio.sleep(0.05)  # alle fünf sind unterwegs, bevor die erste Antwort kommt
+        return httpx.Response(403)
+
+    async def fetch(client: polite.PoliteClient) -> None:
+        with pytest.raises(polite.SourceError):
+            await client.get("https://example.org/x")
+
+    async with polite.PoliteClient(
+        user_agent="t", min_interval=0, transport=httpx.MockTransport(handler)
+    ) as client:
+        await asyncio.gather(*(fetch(client) for _ in range(5)))
+        assert client.interval("example.org") == 1.0  # einmal gebremst, nicht 16
+
+
+async def test_blocked_source_aborts_and_marks_run_incomplete(
+    session_factory: async_sessionmaker[AsyncSession], fast_settings: Settings
+) -> None:
+    from app.services.image_import import last_run_incomplete  # noqa: PLC0415
+
+    await _seed(session_factory)
+    many = {
+        **JP_LIST,
+        "cardList": [
+            {
+                "cardID": str(20000 + i),
+                "cardThumbFile": f"/assets/images/card_images/large/ZZ1/0{20000 + i}_X.jpg",
+                "cardNameViewText": f"X{i}",
+            }
+            for i in range(200)
+        ],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "resultAPI" in str(request.url):
+            return httpx.Response(200, json=many)
+        return httpx.Response(500)  # Server lehnt alle Detailseiten ab
+
+    report = await run_image_import(
+        session_factory, fast_settings, sources=["jp"], transport=httpx.MockTransport(handler)
+    )
+
+    jp = report.sources[0]
+    assert jp.aborted
+    assert jp.requests < 200  # nicht stur weiter bis zum Ende
+    async with session_factory() as session:
+        assert await last_run_incomplete(session)

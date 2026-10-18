@@ -68,7 +68,8 @@ DETAIL_SANITY_SAMPLE = 20
 _COMMIT_EVERY = 100
 _DETAIL_CHUNK = 20
 MATCH_EVERY = 2000
-MAX_CONSECUTIVE_ERRORS = 30
+# Abbruch, wenn so viele Pakete in Folge ganz ohne Erfolg bleiben (Sperre hält an).
+MAX_FAILED_CHUNKS = 4
 MAX_ERRORS_KEPT = 20
 DRY_RUN_PROBES = 40
 MAX_SAMPLES = 5
@@ -91,6 +92,7 @@ class SourceReport:
     detail_errors: int = 0
     details_unparsable: int = 0
     matched_by_name: int = 0
+    aborted: bool = False
     errors: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     samples: list[dict[str, Any]] = field(default_factory=list)
@@ -607,7 +609,7 @@ async def _fetch_details(
     # Mehrere Seiten gleichzeitig unterwegs, gestartet wird trotzdem höchstens eine pro
     # Intervall (PoliteClient) – so bremst eine langsame Antwort nicht den ganzen Lauf.
     semaphore = asyncio.Semaphore(concurrency)
-    consecutive_errors = 0
+    failed_chunks = 0
 
     async def fetch(official_id: str) -> OfficialDetail | SourceError:
         async with semaphore:
@@ -625,7 +627,6 @@ async def _fetch_details(
         for (row_id, official_id), result in zip(chunk, results, strict=True):
             report.requests += 1
             if isinstance(result, SourceError):
-                consecutive_errors += 1
                 report.detail_errors += 1
                 if len(report.errors) < MAX_ERRORS_KEPT:
                     report.errors.append(f"Detail {official_id}: {result}")
@@ -633,7 +634,6 @@ async def _fetch_details(
                         "image_import.detail_failed", source=database.source, error=str(result)
                     )
                 continue
-            consecutive_errors = 0
             report.details_fetched += 1
             if result.number is None:
                 report.details_without_number += 1
@@ -654,9 +654,12 @@ async def _fetch_details(
             )
             log.error("image_import.details_unparsable", source=database.source)
             return  # nichts speichern: die Zeilen bleiben „nicht abgerufen“
-        if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+        succeeded = any(not isinstance(result, SourceError) for result in results)
+        failed_chunks = 0 if succeeded else failed_chunks + 1
+        if failed_chunks >= MAX_FAILED_CHUNKS:
+            report.aborted = True
             report.notes.append(
-                f"Abbruch nach {consecutive_errors} Fehlern in Folge – Rest beim nächsten Lauf."
+                "Abbruch: Server lehnt weiter ab – neuer Versuch in einigen Stunden."
             )
             log.error("image_import.details_aborted", source=database.source)
             break
@@ -913,6 +916,18 @@ async def last_finished_run(session: AsyncSession) -> datetime | None:
     return await session.scalar(select(func.max(ImageImportRun.finished_at)))
 
 
+async def last_run_incomplete(session: AsyncSession) -> bool:
+    """Hat im letzten fertigen Lauf eine Quelle abgebrochen (z. B. wegen Sperre)?"""
+    report = await session.scalar(
+        select(ImageImportRun.report)
+        .where(ImageImportRun.finished_at.is_not(None))
+        .order_by(ImageImportRun.finished_at.desc())
+        .limit(1)
+    )
+    sources = report.get("sources", []) if isinstance(report, dict) else []
+    return any(isinstance(item, dict) and item.get("aborted") for item in sources)
+
+
 async def run_image_import(
     session_factory: async_sessionmaker[AsyncSession],
     settings: Settings,
@@ -940,6 +955,7 @@ async def run_image_import(
     async with PoliteClient(
         user_agent=settings.image_import_user_agent,
         min_interval=settings.image_import_request_interval_seconds,
+        start_intervals=settings.image_import_start_intervals,
         transport=transport,
     ) as client:
         western: list[SourceReport] = []
@@ -969,7 +985,9 @@ async def run_image_import(
                 database,
                 max_pages=max_pages,
                 max_details=max_details,
-                concurrency=settings.image_import_concurrency,
+                concurrency=settings.image_import_host_concurrency.get(
+                    database.host, settings.image_import_concurrency
+                ),
                 dry_run=dry_run,
             )
             for database in databases

@@ -38,7 +38,7 @@ from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
 from app.scanner.storage import ReferenceStore
 from app.services.collection import CollectionService, users_with_items
-from app.services.image_import import last_finished_run, run_image_import
+from app.services.image_import import last_finished_run, last_run_incomplete, run_image_import
 from app.services.price_health import SourceHealth
 from app.services.pricing import PriceService, tracked_card_ids
 from app.services.scan import prune_reference_files, purge_scan_logs
@@ -147,15 +147,23 @@ IMAGE_IMPORT_START_DELAY = timedelta(minutes=5)
 
 
 def next_image_import(
-    now: datetime, last_finished: datetime | None, interval_days: int
+    now: datetime,
+    last_finished: datetime | None,
+    interval_days: int,
+    *,
+    retry_after: timedelta | None = None,
 ) -> datetime | None:
-    """Wann ist der nächste Bild-Import fällig? ``None`` = abgeschaltet."""
+    """Wann ist der nächste Bild-Import fällig? ``None`` = abgeschaltet.
+
+    ``retry_after``: Der letzte Lauf war unvollständig (Quelle abgebrochen) – dann früher.
+    """
     if interval_days <= 0:
         return None
     earliest = now + IMAGE_IMPORT_START_DELAY
     if last_finished is None:
         return earliest
-    return max(earliest, last_finished + timedelta(days=interval_days))
+    wait = retry_after if retry_after is not None else timedelta(days=interval_days)
+    return max(earliest, last_finished + wait)
 
 
 async def image_import_forever(
@@ -166,11 +174,17 @@ async def image_import_forever(
         try:
             async with session_factory() as session:
                 last = await last_finished_run(session)
+                incomplete = await last_run_incomplete(session)
         except Exception:  # z. B. Migration beim Start noch nicht durch
             log.exception("worker.image_import_status_failed")
             await asyncio.sleep(IMAGE_IMPORT_START_DELAY.total_seconds())
             continue
-        due = next_image_import(datetime.now(UTC), last, settings.image_import_interval_days)
+        due = next_image_import(
+            datetime.now(UTC),
+            last,
+            settings.image_import_interval_days,
+            retry_after=timedelta(hours=settings.image_import_retry_hours) if incomplete else None,
+        )
         if due is None:
             log.info("worker.image_import_disabled")
             return

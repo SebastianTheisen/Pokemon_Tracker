@@ -85,3 +85,7 @@ def test_next_image_import() -> None:
     assert next_image_import(now, now - timedelta(days=2), 7) == now + timedelta(days=5)
     assert next_image_import(now, now - timedelta(days=30), 7) == soon  # überfällig
     assert next_image_import(now, None, 0) is None  # abgeschaltet
+    retry = timedelta(hours=3)
+    assert next_image_import(now, now - timedelta(hours=1), 7, retry_after=retry) == (
+        now + timedelta(hours=2)
+    )

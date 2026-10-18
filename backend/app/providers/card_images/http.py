@@ -4,7 +4,9 @@ Die offiziellen Kartendatenbanken sind keine APIs für Dritte. Wir fragen deshal
 (Standard: eine Anfrage pro Sekunde und Server, einstellbar), mit erkennbarem User-Agent, und
 laden nie Bilder herunter – geprüft wird nur, ob es sie gibt. Meldet ein Server „zu viel“
 (429, 403, 503), verdoppelt sich der Abstand für diesen Server automatisch (höchstens 30 s);
-nach 200 Erfolgen in Folge wird er schrittweise wieder kleiner.
+nach 100 Erfolgen in Folge wird er schrittweise kleiner (× 0,75) bis zum eingestellten
+kleinsten Abstand. Mit einem größeren Startabstand je Server (``start_intervals``) tastet sich
+der Import so an das Tempo heran, das ein Server verträgt.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ _IMAGE_PROBE_TIMEOUT = 20.0
 _SLOW_DOWN_STATUS = frozenset({403, 429, 503})
 MAX_INTERVAL = 30.0
 # Nach so vielen erfolgreichen Anfragen in Folge wieder etwas schneller werden.
-_RECOVER_AFTER = 200
+_RECOVER_AFTER = 100
 
 
 class SourceError(Exception):
@@ -41,6 +43,7 @@ class PoliteClient:
         *,
         user_agent: str,
         min_interval: float = 1.0,
+        start_intervals: dict[str, float] | None = None,
         timeout: float = 30.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
@@ -54,8 +57,11 @@ class PoliteClient:
         self._locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._last_request: dict[str, float] = {}
         # Aktueller Abstand je Host: startet beim eingestellten Wert, wächst bei 429/403/503.
-        self._interval: dict[str, float] = {}
+        self._interval: dict[str, float] = {
+            host: value for host, value in (start_intervals or {}).items() if value > min_interval
+        }
         self._successes: defaultdict[str, int] = defaultdict(int)
+        self._last_slow_down: dict[str, float] = {}
 
     def interval(self, host: str) -> float:
         return self._interval.get(host, self._min_interval)
@@ -63,6 +69,11 @@ class PoliteClient:
     def _slow_down(self, url: str, response: httpx.Response) -> None:
         """Server meldet Überlastung/Sperre: Abstand verdoppeln (bzw. ``Retry-After``)."""
         host = urlsplit(url).hostname or ""
+        now = time.monotonic()
+        last = self._last_slow_down.get(host)
+        if last is not None and now - last < self.interval(host):
+            return  # gleichzeitig laufende Anfragen melden dieselbe Sperre – nur einmal bremsen
+        self._last_slow_down[host] = now
         retry_after = response.headers.get("retry-after", "")
         wanted = float(retry_after) if retry_after.isdigit() else self.interval(host) * 2
         self._interval[host] = min(max(wanted, 1.0), MAX_INTERVAL)

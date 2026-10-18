@@ -49,6 +49,7 @@ class OfficialDatabase(Protocol):
 
     source: str
     language: str
+    host: str
 
     async def list_page(self, page: int) -> ListPage: ...
 

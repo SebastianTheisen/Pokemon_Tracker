@@ -76,6 +76,7 @@ class PokemonCardJp:
 
     source = ImageSource.POKEMON_CARD_JP.value
     language = "ja"
+    host = "www.pokemon-card.com"
 
     def __init__(self, client: PoliteClient) -> None:
         self._client = client

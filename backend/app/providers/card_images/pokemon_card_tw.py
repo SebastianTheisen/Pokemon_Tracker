@@ -96,6 +96,7 @@ class PokemonCardTw:
 
     source = ImageSource.POKEMON_CARD_TW.value
     language = "zh-tw"
+    host = "asia.pokemon-card.com"
 
     def __init__(self, client: PoliteClient) -> None:
         self._client = client
