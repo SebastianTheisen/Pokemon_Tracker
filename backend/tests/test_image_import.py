@@ -493,7 +493,7 @@ async def test_detail_pages_without_numbers_abort_without_saving(
     def handler(request: httpx.Request) -> httpx.Response:
         if "resultAPI" in str(request.url):
             return httpx.Response(200, json=many)
-        return httpx.Response(200, text="<h1>neues Layout</h1>")
+        return httpx.Response(200, text="<main>ganz neues Layout</main>")
 
     report = await run_image_import(
         session_factory, fast_settings, sources=["jp"], transport=httpx.MockTransport(handler)
@@ -509,6 +509,42 @@ async def test_detail_pages_without_numbers_abort_without_saving(
             .where(OfficialCard.detail_fetched_at.is_not(None))
         )
     assert fetched == 0  # beim nächsten Lauf (mit korrigiertem Parser) erneut versuchen
+
+
+async def test_old_cards_without_number_are_stored_not_aborted(
+    session_factory: async_sessionmaker[AsyncSession], fast_settings: Settings
+) -> None:
+    await _seed(session_factory)
+    old_cards = {
+        **JP_LIST,
+        "cardList": [
+            {
+                "cardID": str(900 + i),
+                "cardThumbFile": f"/assets/images/card_images/large/PMCG/000{900 + i}_X.jpg",
+                "cardNameViewText": "X",
+            }
+            for i in range(25)
+        ],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "resultAPI" in str(request.url):
+            return httpx.Response(200, json=old_cards)
+        return httpx.Response(200, text="<h1>リザードン</h1>")  # Name, aber keine Nummer
+
+    report = await run_image_import(
+        session_factory, fast_settings, sources=["jp"], transport=httpx.MockTransport(handler)
+    )
+
+    jp = report.sources[0]
+    assert (jp.details_fetched, jp.details_without_number, jp.errors) == (25, 25, [])
+    async with session_factory() as session:
+        fetched = await session.scalar(
+            select(func.count())
+            .select_from(OfficialCard)
+            .where(OfficialCard.detail_fetched_at.is_not(None))
+        )
+    assert fetched == 25
 
 
 async def test_dry_run_saves_nothing(

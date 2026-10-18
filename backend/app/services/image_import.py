@@ -33,7 +33,7 @@ from typing import Any
 
 import httpx
 import structlog
-from sqlalchemy import func, select, update
+from sqlalchemy import BigInteger, cast, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -89,6 +89,7 @@ class SourceReport:
     details_fetched: int = 0
     details_without_number: int = 0
     detail_errors: int = 0
+    details_unparsable: int = 0
     errors: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     samples: list[dict[str, Any]] = field(default_factory=list)
@@ -568,7 +569,8 @@ async def _fetch_details(
         query = (
             select(OfficialCard.id, OfficialCard.official_id)
             .where(OfficialCard.source == database.source, OfficialCard.detail_fetched_at.is_(None))
-            .order_by(OfficialCard.first_seen_at.desc(), OfficialCard.official_id.desc())
+            # Neueste Karten zuerst (höchste ID) – als Zahl sortiert, nicht als Text.
+            .order_by(cast(OfficialCard.official_id, BigInteger).desc())
         )
         if max_details is not None:
             query = query.limit(max_details)
@@ -606,12 +608,16 @@ async def _fetch_details(
             report.details_fetched += 1
             if result.number is None:
                 report.details_without_number += 1
+                if result.name is None:
+                    report.details_unparsable += 1
             if len(report.samples) < MAX_SAMPLES:
                 report.samples.append({"id": official_id, **asdict(result)})
             batch.append((row_id, result))
+        # Alte Karten haben teils keine Nummer – das ist normal. Fehlen aber Name *und*
+        # Nummer bei der Mehrheit, hat sich der Seitenaufbau geändert.
         if (
             report.details_fetched >= DETAIL_SANITY_SAMPLE
-            and report.details_without_number > report.details_fetched // 2
+            and report.details_unparsable > report.details_fetched // 2
         ):
             report.errors.append(
                 "Detailseiten liefern keine Kartennummer – Seitenaufbau geändert? "
