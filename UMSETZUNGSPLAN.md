@@ -208,7 +208,9 @@ Entscheidungen (17.10.2026):
 - [x] **Recherche weitere Quellen** ([`docs/phase5/api_recherche.md`](docs/phase5/api_recherche.md)): Freie Preis-APIs (TCGCSV, PokéWallet, PokemonPriceTracker, PokeTrace) liefern US-Preise bzw. dieselben Cardmarket-Durchschnitte wie TCGdex. Cardmarket-API geschlossen, Webseite gesperrt → keine freie Quelle für Cardmarket-Preise nach Sprache und Zustand
 - [x] **Entscheidung Nutzer (18.10.2026):** gefilterter Cardmarket-Link, Sprachfaktoren und Lesezeichen zum Auslesen der selbst geöffneten Angebotsseite
 - [x] **Deutsche Cardmarket-Preise:** (1) Knopf „Cardmarket-Angebote“ in der Karte öffnet die Angebote gefiltert nach Kartensprache und gewähltem Zustand (`language`, `minCondition`), (2) Sprachfaktoren je Kartensprache (Standard 1,00, Migration 0007) fließen in die Schätzung, (3) Lesezeichen „An Kartenkiste senden“ liest die geöffnete Cardmarket-Seite (Zustand, Preis, Sprach-/Sondersymbole) und öffnet Kartenkiste mit Vorschau; Server wertet aus (Zustand oder besser, günstigstes und Ø 3 günstigste, signiert/Erstauflage ausgeschlossen) und speichert als Beleg `cardmarket_offers` mit Link und Datum. Server ruft Cardmarket nie ab. Tests: 377 Backend, 19 Flutter, Lesezeichen in Chromium gegen Testseite geprüft
-- [ ] Auf dem VPS: Link-Filter und Lesezeichen an echten Cardmarket-Seiten prüfen (Seitenaufbau nur aus Dokumentation bekannt)
+- [x] **Recherche TCGAPI.net:** kostenlos nur Kartendaten + Basispreise; eBay-Verkäufe erst im Bezahl-Abo. eBay-Abruf über Tor abgelehnt (Umgehung von Sperren, eBay-Regeln) → **Entscheidung Nutzer:** Lesezeichen erweitern
+- [x] **eBay-Verkäufe per Lesezeichen:** Das Lesezeichen erkennt die eBay-Suche „Verkaufte Artikel“ (Knopf in der Karte, mit Sprungmarke) und liest Titel, Preis, Verkaufsdatum. Server schlägt passende Verkäufe vor (Nummer im Titel, kein Konvolut/Produkt/Fälschung, Euro, ≤ 4 Monate), Vorschau mit An-/Abwählen, Gruppen ungegradet bzw. „PSA 10“, „BGS 9.5“ …; gespeichert als `ebay_sold` (Median, ab, bis, Anzahl) mit Link. **Gegradete Sammlungspositionen** werden jetzt mit dem Median gleicher Firma und Note bewertet. Tests: 393 Backend, 21 Flutter, Lesezeichen (Cardmarket + eBay alt/neu) in Chromium geprüft
+- [ ] Auf dem VPS: Link-Filter und Lesezeichen an echten Cardmarket- und eBay-Seiten prüfen (Seitenaufbau nur aus Dokumentation bekannt)
 - [ ] Bild-Import auf dem VPS: `deploy/phase5_bilder.sh` (Probelauf prüfen, Parser ggf. nachschärfen), danach Abdeckung kontrollieren. Offen: Taiwan-Bilder sind große PNGs (~1,6 MB) – ggf. später verkleinerte Vorschau; Korea weiter ohne Quelle
 - [ ] Abnahme: Kern-Flows auf iPhone (PWA) und Android
 
@@ -241,6 +243,7 @@ Entscheidungen (17.10.2026):
 | 17.10.2026 | Phase 5 gestartet: App „Kartenkiste“, Tailscale vorgezogen und direkt auf dem VPS, APK-Build per Docker auf dem VPS |
 | 17.10.2026 | Tailscale-Fehler: erstes Skript hat das bestehende VPS-Gerät (andere App) umbenannt. Rückbau-Anleitung, Skript abgesichert; neu: eigenes Gerät „kartenkiste“ im Container |
 | 17.10.2026 | Tailscale-Container ✅. Flutter-App mit allen Kern-Screens, Tests, Web-Auslieferung durch die API, Build-Container für Web + APK |
+| 18.10.2026 | eBay-Verkäufe per Lesezeichen, Wert für gegradete Karten |
 | 18.10.2026 | Deutsche Cardmarket-Preise: gefilterter Link, Sprachfaktoren, Lesezeichen „An Kartenkiste senden“ |
 | 18.10.2026 | Bild-Import aus pokemontcg.io, pokemon.com und den offiziellen Datenbanken JP/TW (wöchentlich im Worker) |
 | 18.10.2026 | Neues, schlankeres Design (Vorschau). Übersetzung asiatischer Kartennamen (PokéAPI) + mehrsprachige Suche. Recherche Bildquellen → Spike offizielle Datenbanken |

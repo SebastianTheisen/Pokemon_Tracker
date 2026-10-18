@@ -176,3 +176,49 @@ class CardmarketOffersOut(BaseModel):
     prices: list[CardmarketConditionOut]
     warnings: list[str]
     saved: int
+
+
+class EbaySoldRowIn(BaseModel):
+    """Ein vom Lesezeichen ausgelesener eBay-Verkauf (Rohtexte)."""
+
+    title: str = Field(max_length=300)
+    price: str = Field(max_length=80)
+    sold: str = Field(default="", max_length=120, description="z. B. „Verkauft 12. Okt 2026“")
+    url: str = Field(default="", max_length=600)
+
+
+class EbaySoldIn(BaseModel):
+    page_url: str = Field(max_length=2000)
+    rows: list[EbaySoldRowIn] = Field(max_length=120)
+    selected: list[int] | None = Field(
+        default=None, description="Gewählte Zeilen; ohne Angabe gilt der Vorschlag."
+    )
+    save: bool = False
+
+
+class EbaySaleOut(BaseModel):
+    index: int
+    title: str
+    price: Decimal | None
+    sold_on: date | None
+    group: str = Field(description="„raw“ oder z. B. „PSA 10“")
+    url: str
+    issues: list[str]
+    suggested: bool
+
+
+class EbayGroupOut(BaseModel):
+    group: str
+    median: Decimal
+    low: Decimal
+    high: Decimal
+    count: int
+
+
+class EbaySoldOut(BaseModel):
+    card_id: uuid.UUID
+    page_url: str
+    sales: list[EbaySaleOut]
+    groups: list[EbayGroupOut]
+    warnings: list[str]
+    saved: int

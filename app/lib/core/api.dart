@@ -291,6 +291,22 @@ class Api {
         as Json,
   );
 
+  /// Ausgelesene eBay-Verkäufe auswerten (Vorschlag) bzw. die gewählten speichern.
+  Future<EbaySoldResult> ebaySold(
+    String cardId, {
+    required String pageUrl,
+    required List<Json> rows,
+    List<int>? selected,
+    bool save = false,
+  }) async => EbaySoldResult.fromJson(
+    (await _send(
+          'POST',
+          '/cards/$cardId/ebay-sold',
+          body: {'page_url': pageUrl, 'rows': rows, 'selected': ?selected, 'save': save},
+        ))!
+        as Json,
+  );
+
   /// Ausgelesene Cardmarket-Angebote auswerten (`save: false` = Vorschau) bzw. speichern.
   Future<CardmarketOffersResult> cardmarketOffers(
     String cardId, {

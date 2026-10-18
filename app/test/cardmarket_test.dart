@@ -38,7 +38,7 @@ void main() {
   });
 
   test('Lesezeichen-Daten werden gelesen, Unsinn ergibt null', () {
-    final payload = CardmarketPayload.decode(
+    final payload = BookmarkletPayload.decode(
       encodePayload({
         'c': 'c1',
         'u': page,
@@ -53,9 +53,9 @@ void main() {
     )!;
     expect(payload.cardId, 'c1');
     expect(payload.pageUrl, page);
-    expect(payload.rows.single.labels, ['Deutsch']);
-    expect(CardmarketPayload.decode('kein base64 !!'), isNull);
-    expect(CardmarketPayload.decode(null), isNull);
+    expect(payload.offerRows.single.labels, ['Deutsch']);
+    expect(BookmarkletPayload.decode('kein base64 !!'), isNull);
+    expect(BookmarkletPayload.decode(null), isNull);
   });
 
   test('Lesezeichen-Code enthält die App-Adresse und ist ein javascript:-Link', () {
@@ -98,5 +98,45 @@ void main() {
     expect(api.calls, contains('cardmarketOffers:c1:1:true'));
     expect(find.text('Cardmarket-Preise gespeichert.'), findsOneWidget);
     expect(find.byKey(const Key('cardmarket-offers')), findsOneWidget); // Karten-Detail
+  });
+
+  test('Median, Spanne und Anzahl der gewählten Verkäufe', () {
+    final stats = soldStats([200, 160, 180]);
+    expect((stats.median, stats.low, stats.high, stats.count), (180, 160, 200, 3));
+    expect(soldStats([100, 200]).median, 150);
+    expect(variantLabel('graded:PSA 10'), 'PSA 10');
+    expect(variantLabel('raw'), 'ungegradet');
+  });
+
+  testWidgets('eBay-Import: Vorschlag, abwählen, speichern', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    final container = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)));
+    final data = encodePayload({
+      'c': 'c1',
+      'u': 'https://www.ebay.de/sch/i.html?_nkw=x&LH_Sold=1',
+      'r': [
+        {'title': 'Nachtara VMAX 215/203', 'price': '180,00 €', 'sold': 'Verkauft 12. Okt 2026'},
+        {'title': 'Nachtara VMAX 215/203 PSA 10', 'price': '650,00 €', 'sold': ''},
+        {'title': 'Konvolut 50 Karten', 'price': '40,00 €', 'sold': ''},
+      ],
+    });
+
+    container.read(routerProvider).go('/ebay-import?d=$data');
+    await tester.pumpAndSettle();
+
+    expect(find.text('eBay-Verkäufe'), findsOneWidget);
+    expect(find.text('Median 180,00\u00a0€'), findsOneWidget);
+    expect(find.text('Median 650,00\u00a0€'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('sale-1')));
+    await tester.tap(find.byKey(const Key('sale-1'))); // PSA-Verkauf abwählen
+    await tester.pumpAndSettle();
+    expect(find.text('Median 650,00\u00a0€'), findsNothing);
+
+    await tester.ensureVisible(find.text('Verkäufe speichern'));
+    await tester.tap(find.text('Verkäufe speichern'));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('ebaySold:c1:3:0:true'));
+    expect(find.text('eBay-Verkäufe gespeichert.'), findsOneWidget);
   });
 }

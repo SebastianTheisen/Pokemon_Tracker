@@ -3,10 +3,11 @@
 Reihenfolge je Stück:
 
 1. **Eigener Preis** (``custom_price``) – immer vorrangig, gekennzeichnet als „dein Preis“.
-2. Nur Rohkarten: **belegter Zustandspreis** einer Plug-in-Quelle für Variante + Zustand.
+2. Nur Rohkarten: **belegter Zustandspreis** einer externen Quelle für Variante + Zustand
+   (z. B. ausgelesene Cardmarket-Angebote).
 3. Nur Rohkarten: **Schätzung** = NM-Basis × Zustandsfaktor (gekennzeichnet).
-4. Sonst **kein Wert** – gegradete Karten und versiegelte Produkte brauchen einen eigenen
-   Preis (Grading-Aufschläge schwanken zu stark, für Produkte gibt es keine Quelle).
+4. Gegradete Karten: **Median der ausgelesenen eBay-Verkäufe** mit gleicher Firma und Note.
+5. Sonst **kein Wert** – versiegelte Produkte brauchen einen eigenen Preis.
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ from decimal import Decimal
 from typing import Literal
 
 from app.models import CollectionItem
+from app.services.ebay_sold import SOURCE as EBAY_SOLD
+from app.services.ebay_sold import graded_variant
 from app.services.pricing import CardPrices
 
 ItemKind = Literal["raw", "graded", "sealed"]
@@ -58,7 +61,11 @@ def unit_value(item: CollectionItem, prices: CardPrices | None) -> ItemValue:
     """Stückwert ohne Menge (für ``value_at_add`` und Anzeige)."""
     if item.custom_price is not None:
         return ItemValue("manual", item.custom_price, item.custom_price, source="manual")
-    if item_kind(item) != "raw" or prices is None:
+    if prices is None:
+        return NO_VALUE
+    if item_kind(item) == "graded" and item.grading_company is not None:
+        return _graded_value(item.grading_company, item.grade, prices)
+    if item_kind(item) != "raw":
         return NO_VALUE
     condition = item.condition or DEFAULT_CONDITION
     match = next(
@@ -98,3 +105,15 @@ def value_item(item: CollectionItem, prices: Mapping[uuid.UUID, CardPrices]) -> 
         basis=single.basis,
         change=change,
     )
+
+
+def _graded_value(company: str, grade: str | None, prices: CardPrices) -> ItemValue:
+    """Median der gespeicherten eBay-Verkäufe mit gleicher Grading-Firma und Note."""
+    variant = graded_variant(company, grade)
+    offer = next((o for o in prices.offers if o.source == EBAY_SOLD and o.variant == variant), None)
+    median = offer.metrics.get("median") if offer is not None else None
+    if offer is None or median is None:
+        return NO_VALUE
+    count = offer.metrics.get("count")
+    basis = f"Median aus {int(count)} eBay-Verkäufen" if count is not None else None
+    return ItemValue("external", median, median, source=EBAY_SOLD, basis=basis)

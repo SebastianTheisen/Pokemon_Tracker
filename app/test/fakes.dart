@@ -205,6 +205,34 @@ class FakeApi extends Api {
   Future<CardPrices> prices(String cardId) async => CardPrices.fromJson(pricesJson);
 
   @override
+  Future<EbaySoldResult> ebaySold(
+    String cardId, {
+    required String pageUrl,
+    required List<Json> rows,
+    List<int>? selected,
+    bool save = false,
+  }) async {
+    calls.add('ebaySold:$cardId:${rows.length}:${selected?.join(',')}:$save');
+    return EbaySoldResult.fromJson({
+      'sales': [
+        for (final (index, row) in rows.indexed)
+          {
+            'index': index,
+            'title': row['title'],
+            'price': (row['title'] as String).contains('PSA') ? '650.00' : '180.00',
+            'sold_on': '2026-10-12',
+            'group': (row['title'] as String).contains('PSA') ? 'PSA 10' : 'raw',
+            'url': '',
+            'issues': (row['title'] as String).contains('Konvolut') ? ['Konvolut'] : <String>[],
+            'suggested': !(row['title'] as String).contains('Konvolut'),
+          },
+      ],
+      'warnings': <String>[],
+      'saved': save ? 4 : 0,
+    });
+  }
+
+  @override
   Future<CardmarketOffersResult> cardmarketOffers(
     String cardId, {
     required String pageUrl,

@@ -942,3 +942,72 @@ String? cardmarketOffersUrl({
   final separator = productUrl.contains('?') ? '&' : '?';
   return '$productUrl$separator${params.join('&')}#kartenkiste=$cardId';
 }
+
+// --------------------------------------------------------------- eBay-Verkäufe
+
+class EbaySale {
+  const EbaySale({
+    required this.index,
+    required this.title,
+    required this.group,
+    required this.issues,
+    required this.suggested,
+    this.price,
+    this.soldOn,
+    this.url = '',
+  });
+
+  factory EbaySale.fromJson(Json json) => EbaySale(
+    index: json.integer('index'),
+    title: json.str('title'),
+    price: json.strOrNull('price'),
+    soldOn: json.timeOrNull('sold_on'),
+    group: json.str('group'),
+    url: json.strOrNull('url') ?? '',
+    issues: json.strings('issues'),
+    suggested: json.flag('suggested'),
+  );
+
+  final int index;
+  final String title;
+  final String? price;
+  final DateTime? soldOn;
+
+  /// `raw` (ungegradet) oder z. B. `PSA 10`.
+  final String group;
+  final String url;
+  final List<String> issues;
+  final bool suggested;
+}
+
+class EbaySoldResult {
+  const EbaySoldResult({required this.sales, required this.warnings, required this.saved});
+
+  factory EbaySoldResult.fromJson(Json json) => EbaySoldResult(
+    sales: json.list('sales', EbaySale.fromJson),
+    warnings: json.strings('warnings'),
+    saved: json.integer('saved'),
+  );
+
+  final List<EbaySale> sales;
+  final List<String> warnings;
+  final int saved;
+}
+
+/// Median, günstigster und teuerster Wert einer Gruppe gewählter Verkäufe (für die Vorschau).
+({double median, double low, double high, int count}) soldStats(Iterable<double> prices) {
+  final sorted = prices.toList()..sort();
+  final middle = sorted.length ~/ 2;
+  final median = sorted.length.isOdd ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+  return (median: median, low: sorted.first, high: sorted.last, count: sorted.length);
+}
+
+/// Lesbarer Name einer Preis-Variante (`reverse`, `raw`, `graded:PSA 10` …).
+String variantLabel(String variant) => switch (variant) {
+  'normal' => 'Normal',
+  'reverse' => 'Reverse Holo',
+  'holo' => 'Holo',
+  'raw' => 'ungegradet',
+  _ when variant.startsWith('graded:') => variant.substring('graded:'.length),
+  _ => variant,
+};

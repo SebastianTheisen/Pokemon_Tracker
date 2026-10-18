@@ -27,31 +27,43 @@ import '../card/card_detail_screen.dart';
 String bookmarkletCode(String appOrigin) {
   final script =
       '''
-(()=>{const A=${jsonEncode(appOrigin)};const r=[];
-document.querySelectorAll('[id^="articleRow"],.article-row').forEach(e=>{
+(()=>{const A=${jsonEncode(appOrigin)};const r=[];let k='cardmarket';
+const T=(e,s)=>{const x=e.querySelector(s);return x?x.textContent.trim().replace(/\\s+/g,' '):''};
+if(/(^|\\.)ebay\\./.test(location.hostname)){k='ebay';
+document.querySelectorAll('li.s-item,li.s-card').forEach(e=>{
+const t=T(e,'.s-item__title,.s-card__title');const p=T(e,'.s-item__price,.s-card__price');
+if(!t||!p||/^Shop on eBay/i.test(t))return;
+const m=(e.innerText||'').match(/(Verkauft|Sold)[^\\n]*/);const a=e.querySelector('a[href*="/itm/"]');
+r.push({title:t.slice(0,300),price:p.slice(0,80),sold:m?m[0].slice(0,120):'',url:a?a.href.split('?')[0]:''})})}
+else{document.querySelectorAll('[id^="articleRow"],.article-row').forEach(e=>{
 const c=e.querySelector('.article-condition');const p=e.querySelector('.price-container');
 if(!c||!p)return;const l=[];
 e.querySelectorAll('.product-attributes [aria-label],.product-attributes [data-bs-original-title],.product-attributes [data-original-title],.product-attributes [title]').forEach(x=>{
 const t=x.getAttribute('aria-label')||x.getAttribute('data-bs-original-title')||x.getAttribute('data-original-title')||x.getAttribute('title');
 if(t&&l.indexOf(t)<0)l.push(t.slice(0,80))});
-r.push({condition:c.textContent.trim().split(/\\s+/)[0],price:p.textContent.trim().slice(0,40),labels:l.slice(0,12)})});
-if(!r.length){alert('Kartenkiste: Keine Angebote gefunden. Bitte die Angebotsseite einer Karte ganz laden und erneut tippen.');return}
+r.push({condition:c.textContent.trim().split(/\\s+/)[0],price:p.textContent.trim().slice(0,40),labels:l.slice(0,12)})})}
+if(!r.length){alert('Kartenkiste: Keine Angebote oder Verkäufe gefunden. Bitte die Seite ganz laden und erneut tippen.');return}
 const m=location.hash.match(/kartenkiste=([0-9a-f-]+)/);
-const d={c:m?m[1]:null,u:location.href.split('#')[0],r:r.slice(0,60)};
+const d={c:m?m[1]:null,u:location.href.split('#')[0],r:r.slice(0,k==='ebay'?120:60)};
 const b=btoa(unescape(encodeURIComponent(JSON.stringify(d)))).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+\$/,'');
-location.href=A+'/#/cardmarket-import?d='+b})();''';
+location.href=A+'/#/'+k+'-import?d='+b})();''';
   return 'javascript:${script.replaceAll('\n', '')}';
 }
 
-/// Inhalt des Lesezeichens (Base64url-JSON aus dem Parameter `d`).
-class CardmarketPayload {
-  const CardmarketPayload({required this.pageUrl, required this.rows, this.cardId});
+/// Inhalt des Lesezeichens (Base64url-JSON aus dem Parameter `d`): Karten-ID (falls die
+/// Seite aus Kartenkiste geöffnet wurde), Seitenadresse und Rohzeilen der Seite.
+class BookmarkletPayload {
+  const BookmarkletPayload({required this.pageUrl, required this.rows, this.cardId});
 
   final String? cardId;
   final String pageUrl;
-  final List<CardmarketOfferRow> rows;
+  final List<Json> rows;
 
-  static CardmarketPayload? decode(String? data) {
+  List<CardmarketOfferRow> get offerRows => [
+    for (final row in rows) CardmarketOfferRow.fromJson(row),
+  ];
+
+  static BookmarkletPayload? decode(String? data) {
     if (data == null || data.isEmpty) return null;
     try {
       final json = jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(data))));
@@ -59,12 +71,12 @@ class CardmarketPayload {
       final rows = json['r'];
       final url = json['u'];
       if (rows is! List || url is! String) return null;
-      return CardmarketPayload(
+      return BookmarkletPayload(
         cardId: json['c'] is String ? json['c']! as String : null,
         pageUrl: url,
         rows: [
           for (final row in rows)
-            if (row is Map<String, Object?>) CardmarketOfferRow.fromJson(row),
+            if (row is Map<String, Object?>) row,
         ],
       );
     } on FormatException {
@@ -83,7 +95,7 @@ class CardmarketImportScreen extends ConsumerStatefulWidget {
 }
 
 class _CardmarketImportScreenState extends ConsumerState<CardmarketImportScreen> {
-  late final CardmarketPayload? _payload = CardmarketPayload.decode(widget.data);
+  late final BookmarkletPayload? _payload = BookmarkletPayload.decode(widget.data);
   String? _cardId;
   Future<CardmarketOffersResult>? _preview;
   bool _saving = false;
@@ -101,7 +113,7 @@ class _CardmarketImportScreenState extends ConsumerState<CardmarketImportScreen>
     if (payload == null || cardId == null) return;
     _preview = ref
         .read(apiProvider)
-        .cardmarketOffers(cardId, pageUrl: payload.pageUrl, rows: payload.rows);
+        .cardmarketOffers(cardId, pageUrl: payload.pageUrl, rows: payload.offerRows);
   }
 
   Future<void> _save() async {
@@ -110,7 +122,12 @@ class _CardmarketImportScreenState extends ConsumerState<CardmarketImportScreen>
     final ok = await runAction(context, () async {
       await ref
           .read(apiProvider)
-          .cardmarketOffers(_cardId!, pageUrl: payload.pageUrl, rows: payload.rows, save: true);
+          .cardmarketOffers(
+            _cardId!,
+            pageUrl: payload.pageUrl,
+            rows: payload.offerRows,
+            save: true,
+          );
     });
     if (!mounted) return;
     setState(() => _saving = false);
@@ -132,7 +149,7 @@ class _CardmarketImportScreenState extends ConsumerState<CardmarketImportScreen>
               message: 'Keine gültigen Daten vom Lesezeichen erhalten.',
             )
           : _cardId == null
-          ? _CardPicker(
+          ? CardPicker(
               onPicked: (id) => setState(() {
                 _cardId = id;
                 _loadPreview();
@@ -216,16 +233,16 @@ class _PreviewView extends ConsumerWidget {
 }
 
 /// Karte wählen, wenn das Lesezeichen keine Karten-ID mitgebracht hat.
-class _CardPicker extends ConsumerStatefulWidget {
-  const _CardPicker({required this.onPicked});
+class CardPicker extends ConsumerStatefulWidget {
+  const CardPicker({required this.onPicked, super.key});
 
   final ValueChanged<String> onPicked;
 
   @override
-  ConsumerState<_CardPicker> createState() => _CardPickerState();
+  ConsumerState<CardPicker> createState() => _CardPickerState();
 }
 
-class _CardPickerState extends ConsumerState<_CardPicker> {
+class _CardPickerState extends ConsumerState<CardPicker> {
   final _query = TextEditingController();
   Future<List<SearchHit>>? _hits;
 
@@ -280,9 +297,10 @@ class BookmarkletSetupScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: [
           const Text(
-            'Mit diesem Lesezeichen übernimmst du die echten Angebote von Cardmarket – '
-            'gefiltert nach Sprache und Zustand – als Preis in Kartenkiste. Es liest nur die '
-            'Seite, die du gerade selbst geöffnet hast.',
+            'Mit diesem Lesezeichen übernimmst du echte Preise in Kartenkiste: die Angebote '
+            'von Cardmarket (gefiltert nach Sprache und Zustand) und verkaufte Angebote von '
+            'eBay (auch gegradete Karten). Es liest nur die Seite, die du gerade selbst '
+            'geöffnet hast.',
           ),
           const SectionTitle('1. Code kopieren'),
           FilledButton.icon(
@@ -305,7 +323,7 @@ class BookmarkletSetupScreen extends StatelessWidget {
           ),
           const SectionTitle('3. Benutzen'),
           const Text(
-            'In einer Karte auf „Cardmarket-Angebote“ tippen → Cardmarket öffnet sich gefiltert '
+            'In einer Karte auf „Cardmarket-Angebote“ oder „Verkaufte Angebote bei eBay“ tippen '
             '→ Seite laden lassen → Lesezeichen „An Kartenkiste senden“ öffnen → Vorschau '
             'prüfen und speichern.\n\n'
             'Auf dem iPhone öffnet sich Kartenkiste dabei in Safari: dort einmal anmelden.',

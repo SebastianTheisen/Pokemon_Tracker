@@ -13,6 +13,10 @@ from app.schemas.pricing import (
     CardmarketOffersIn,
     CardmarketOffersOut,
     CardPricesOut,
+    EbayGroupOut,
+    EbaySaleOut,
+    EbaySoldIn,
+    EbaySoldOut,
     PriceHistoryOut,
     PriceSourceOut,
     UserSettingsOut,
@@ -20,6 +24,7 @@ from app.schemas.pricing import (
 )
 from app.services import catalog_search
 from app.services.cardmarket_offers import OfferRow, evaluate_offers, save_offers
+from app.services.ebay_sold import SoldRow, evaluate_sold, save_sold
 from app.services.user_settings import (
     effective_factors,
     effective_language_factors,
@@ -87,6 +92,47 @@ async def cardmarket_offers(
         accepted=result.accepted,
         skipped=result.skipped,
         prices=[CardmarketConditionOut(**price.__dict__) for price in result.prices],
+        warnings=result.warnings,
+        saved=result.saved,
+    )
+
+
+@router.post("/cards/{card_id}/ebay-sold")
+async def ebay_sold(
+    card_id: uuid.UUID, body: EbaySoldIn, session: SessionDep, _user: CurrentUser
+) -> EbaySoldOut:
+    """Selbst ausgelesene eBay-Verkäufe auswerten (Vorschau) und mit ``save`` speichern.
+
+    Ohne ``selected`` werden die Verkäufe gezählt, die sicher zur Karte passen (Nummer im
+    Titel, kein Konvolut, Euro, nicht älter als vier Monate). Gegradete Verkäufe bilden
+    eigene Gruppen („PSA 10“) und bewerten gegradete Sammlungspositionen.
+    """
+    card = await catalog_search.get_card(session, card_id)
+    result = evaluate_sold(
+        card,
+        body.page_url,
+        [SoldRow(row.title, row.price, row.sold, row.url) for row in body.rows],
+        selected=body.selected,
+    )
+    if body.save:
+        await save_sold(session, card, result)
+    return EbaySoldOut(
+        card_id=card.id,
+        page_url=result.page_url,
+        sales=[
+            EbaySaleOut(
+                index=sale.index,
+                title=sale.title,
+                price=sale.price,
+                sold_on=sale.sold_on,
+                group=sale.group,
+                url=sale.url,
+                issues=list(sale.issues),
+                suggested=sale.suggested,
+            )
+            for sale in result.sales
+        ],
+        groups=[EbayGroupOut(**group.__dict__) for group in result.groups],
         warnings=result.warnings,
         saved=result.saved,
     )

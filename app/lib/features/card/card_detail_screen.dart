@@ -39,6 +39,7 @@ const metricLabels = {
   'high': 'höchstes',
   'direct_low': 'Direkt ab',
   'low3': 'Ø 3 günstigste',
+  'median': 'Median',
 };
 
 String sourceLabel(String source) => switch (source) {
@@ -46,14 +47,16 @@ String sourceLabel(String source) => switch (source) {
   'tcgplayer' => 'TCGplayer',
   'pokemontcg' => 'pokemontcg.io',
   'cardmarket_offers' => 'Cardmarket-Angebote',
+  'ebay_sold' => 'eBay verkauft',
   _ => source,
 };
 
+/// eBay-Suche „Verkaufte Artikel“; die Sprungmarke sagt dem Lesezeichen, welche Karte es ist.
 Uri ebaySoldSearch(CardInfo card) => Uri.https('www.ebay.de', '/sch/i.html', {
   '_nkw': '${card.name} ${card.number}',
   'LH_Sold': '1',
   'LH_Complete': '1',
-});
+}).replace(fragment: 'kartenkiste=${card.id}');
 
 Future<void> openLink(BuildContext context, String url) async {
   final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
@@ -408,7 +411,8 @@ class _OfferTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                Tag(offer.variant == 'reverse' ? 'Reverse' : 'Normal'),
+                Tag(variantLabel(offer.variant)),
+                if (offer.condition != null) ...[const SizedBox(width: 6), Tag(offer.condition!)],
                 const Spacer(),
                 Text(
                   date(offer.updatedAt),
@@ -423,8 +427,10 @@ class _OfferTile extends StatelessWidget {
               children: [
                 for (final entry in offer.metrics.entries)
                   Text(
-                    '${metricLabels[entry.key] ?? entry.key}: '
-                    '${money(entry.value, currency: offer.currency)}',
+                    entry.key == 'count'
+                        ? '${double.parse(entry.value).round()} Verkäufe'
+                        : '${metricLabels[entry.key] ?? entry.key}: '
+                              '${money(entry.value, currency: offer.currency)}',
                     style: const TextStyle(fontSize: 13),
                   ),
               ],
