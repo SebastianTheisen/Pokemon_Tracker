@@ -1,4 +1,0 @@
-# Nur ein SOCKS-Proxy für Tests. Kein Relay, kein Exit-Betrieb.
-SocksPort 0.0.0.0:9050
-Log notice stdout
-DataDirectory /var/lib/tor
