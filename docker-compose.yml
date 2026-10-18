@@ -67,6 +67,16 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Optionaler Tor-Proxy für den eBay-Test (deploy/phase5_ebay_test.sh):
+  #   docker compose --profile tor up -d tor
+  # Der Port ist nur auf dem VPS selbst erreichbar (127.0.0.1), nicht im Netz.
+  tor:
+    build: ./deploy/tor
+    profiles: ["tor"]
+    ports:
+      - "127.0.0.1:9050:9050"
+    restart: "no"
+
   # Nur zum Bauen der App: docker compose --profile build run --rm app-builder ...
   app-builder:
     build: ./deploy/app-builder
