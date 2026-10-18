@@ -237,7 +237,7 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
               ),
             ),
           const SizedBox(height: 12),
-          _NmPrice(cardId: selected.id),
+          _ScanPrice(card: selected, grading: widget.result.grading),
           const SizedBox(height: 20),
           if (added == null) ...[
             FilledButton.icon(
@@ -337,47 +337,104 @@ class _StatusChip extends StatelessWidget {
   );
 }
 
-/// NM-Preis einer Karte (belegt oder geschätzt) – kompakt für das Scan-Ergebnis.
-class _NmPrice extends ConsumerWidget {
-  const _NmPrice({required this.cardId});
+/// Preis im Scan-Ergebnis: Rohkarte → Near-Mint-Preis (belegt oder geschätzt); Slab → Median
+/// gespeicherter eBay-Verkäufe gleicher Firma und Note (sonst Knopf zu diesen Verkäufen).
+class _ScanPrice extends ConsumerWidget {
+  const _ScanPrice({required this.card, this.grading});
 
-  final String cardId;
+  final CardInfo card;
+  final Grading? grading;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final prices = ref.watch(pricesProvider(cardId));
+    final prices = ref.watch(pricesProvider(card.id));
     return prices.when(
       loading: () => const Center(
         child: SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)),
       ),
       error: (_, _) => const SizedBox.shrink(),
-      data: (data) {
-        final nm = data.conditions
-            .where((c) => c.condition == 'NM' && c.variant == 'normal')
-            .firstOrNull;
-        if (nm == null) {
-          return const Text(
-            'Noch kein belegter Preis',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textMuted),
-          );
-        }
-        return Column(
-          children: [
-            Text(
-              money(nm.value, currency: nm.currency),
-              key: const Key('scan-price'),
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
-            ),
-            Text(
-              nm.isEstimate ? 'Near Mint · geschätzt' : 'Near Mint · mit Beleg',
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-            ),
-          ],
-        );
-      },
+      data: (data) => grading == null ? _raw(data) : _graded(context, data, grading!),
     );
   }
+
+  Widget _raw(CardPrices data) {
+    final nm = data.conditions
+        .where((c) => c.condition == 'NM' && c.variant == 'normal')
+        .firstOrNull;
+    if (nm == null) {
+      return const Text(
+        'Noch kein belegter Preis',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: AppColors.textMuted),
+      );
+    }
+    return _PriceLine(
+      value: money(nm.value, currency: nm.currency),
+      label: nm.isEstimate ? 'Near Mint · geschätzt' : 'Near Mint · mit Beleg',
+    );
+  }
+
+  Widget _graded(BuildContext context, CardPrices data, Grading grading) {
+    final label = '${grading.company} ${grading.grade ?? ''}'.trim();
+    final sold = data.offers
+        .where(
+          (o) =>
+              o.source == 'ebay_sold' && o.variant == gradedVariant(grading.company, grading.grade),
+        )
+        .firstOrNull;
+    final median = sold?.metrics['median'];
+    if (sold != null && median != null) {
+      final count = double.tryParse(sold.metrics['count'] ?? '')?.round();
+      return _PriceLine(
+        value: money(median, currency: sold.currency),
+        label: '$label · Median aus ${count ?? '?'} eBay-Verkäufen · ${date(sold.updatedAt)}',
+      );
+    }
+    return Column(
+      children: [
+        Text(
+          'Noch kein $label-Preis – der Rohkarten-Preis passt für Slabs nicht.',
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: AppColors.textMuted),
+        ),
+        const SizedBox(height: 6),
+        OutlinedButton.icon(
+          key: const Key('scan-graded-ebay'),
+          onPressed: () => openLink(context, ebaySoldSearch(card, grading: label).toString()),
+          icon: const Icon(Icons.open_in_new, size: 18),
+          label: Text('Verkaufte $label bei eBay'),
+        ),
+        const Text(
+          'Dort das Lesezeichen „An Kartenkiste senden“ antippen – dann steht der Preis hier.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+        ),
+      ],
+    );
+  }
+}
+
+class _PriceLine extends StatelessWidget {
+  const _PriceLine({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Text(
+        value,
+        key: const Key('scan-price'),
+        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+      ),
+      Text(
+        label,
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+      ),
+    ],
+  );
 }
 
 class _AlternativeThumb extends StatelessWidget {

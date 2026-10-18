@@ -52,11 +52,30 @@ String sourceLabel(String source) => switch (source) {
 };
 
 /// eBay-Suche „Verkaufte Artikel“; die Sprungmarke sagt dem Lesezeichen, welche Karte es ist.
-Uri ebaySoldSearch(CardInfo card) => Uri.https('www.ebay.de', '/sch/i.html', {
-  '_nkw': '${card.name} ${card.number}',
-  'LH_Sold': '1',
-  'LH_Complete': '1',
-}).replace(fragment: 'kartenkiste=${card.id}');
+///
+/// Asiatische Karten werden auf eBay mit lateinischem Namen und „japanese“ o. Ä. angeboten,
+/// deshalb dort der übersetzte Name. Mit [grading] (z. B. „PSA 10“) nur gegradete Verkäufe.
+Uri ebaySoldSearch(CardInfo card, {String? grading}) {
+  final language = switch (card.language) {
+    'ja' => 'japanese',
+    'ko' => 'korean',
+    'zh-tw' || 'zh-cn' => 'chinese',
+    _ => null,
+  };
+  final query = [card.translatedName ?? card.name, card.number, ?grading, ?language].join(' ');
+  return Uri.https('www.ebay.de', '/sch/i.html', {
+    '_nkw': query,
+    'LH_Sold': '1',
+    'LH_Complete': '1',
+  }).replace(fragment: 'kartenkiste=${card.id}');
+}
+
+/// Preis-Variante gespeicherter eBay-Verkäufe zu einer Grading-Angabe („graded:PSA 10“).
+String gradedVariant(String company, String? grade) {
+  var normalized = (grade ?? '').trim().replaceAll(',', '.');
+  if (normalized.endsWith('.0')) normalized = normalized.substring(0, normalized.length - 2);
+  return 'graded:${company.toUpperCase()} $normalized'.trim();
+}
 
 Future<void> openLink(BuildContext context, String url) async {
   final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);

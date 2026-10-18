@@ -94,7 +94,9 @@ void main() {
 
     expect(api.calls, contains('scan:galerie.jpg'));
     expect(find.text('Erkannt'), findsOneWidget);
-    expect(find.byKey(const Key('scan-price')), findsOneWidget);
+    // Slab ohne gespeicherte PSA-10-Verkäufe: kein Rohkarten-Preis, sondern Weg zu eBay.
+    expect(find.byKey(const Key('scan-price')), findsNothing);
+    expect(find.byKey(const Key('scan-graded-ebay')), findsOneWidget);
     expect(find.text('Slab: PSA 10'), findsOneWidget);
     expect(find.text('Umbreon VMAX'), findsNothing); // Alternativen erst auf Wunsch
 
@@ -215,5 +217,29 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.calls, contains('logout'));
     expect(find.text('Anmelden'), findsOneWidget);
+  });
+
+  testWidgets('Slab-Scan zeigt den Median gespeicherter PSA-10-Verkäufe', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..scanResult = scanJson(grading: {'company': 'PSA', 'grade': '10'});
+    (api.pricesJson['offers']! as List<Object?>).add({
+      'source': 'ebay_sold',
+      'variant': 'graded:PSA 10',
+      'condition': null,
+      'currency': 'EUR',
+      'kind': 'external',
+      'updated_at': DateTime(2026, 10, 18).toIso8601String(),
+      'url': 'https://www.ebay.de/sch/i.html?_nkw=x',
+      'metrics': {'median': '650.00', 'low': '600.00', 'high': '700.00', 'count': '5'},
+    });
+    await pumpApp(tester, api);
+
+    await tester.tap(find.byKey(const Key('scan-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scan-gallery')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('650,00\u00a0€'), findsOneWidget);
+    expect(find.textContaining('Median aus 5 eBay-Verkäufen'), findsOneWidget);
   });
 }
