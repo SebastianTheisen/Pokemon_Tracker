@@ -35,7 +35,7 @@ Wasm dry run succeeded. Consider building and testing your application with the 
 Use --no-wasm-dry-run to disable these warnings.
 Font asset "CupertinoIcons.ttf" was tree-shaken, reducing it from 257628 to 1472 bytes (99.4% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
 Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 12644 bytes (99.2% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
-Compiling lib/main.dart for the Web...                            109.2s
+Compiling lib/main.dart for the Web...                            126.2s
 ✓ Built build/web
 Resolving dependencies...
 Downloading packages...
@@ -80,5 +80,5 @@ Preparing "Install CMake 3.22.1 v.3.22.1".
 Installing CMake 3.22.1 in /opt/android-sdk/cmake/3.22.1
 "Install CMake 3.22.1 v.3.22.1" complete.
 "Install CMake 3.22.1 v.3.22.1" finished.
-Running Gradle task 'assembleRelease'...                          222.3s
+Running Gradle task 'assembleRelease'...                          263.4s
 ✓ Built build/app/outputs/flutter-apk/app-release.apk (58.7MB)
