@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Query
 
 from app.api.deps import AdminUser, CurrentUser, PriceServiceDep, SessionDep
+from app.models import UserSettings
 from app.schemas.pricing import (
     CardmarketConditionOut,
     CardmarketOffersIn,
@@ -19,11 +21,18 @@ from app.schemas.pricing import (
     EbaySoldOut,
     PriceHistoryOut,
     PriceSourceOut,
+    PriceTargetIn,
+    PriceTargetOut,
     UserSettingsOut,
     UserSettingsUpdate,
 )
 from app.services import catalog_search
-from app.services.cardmarket_offers import OfferRow, evaluate_offers, save_offers
+from app.services.cardmarket_offers import (
+    OfferRow,
+    evaluate_offers,
+    remember_product_page,
+    save_offers,
+)
 from app.services.ebay_sold import SoldRow, evaluate_sold, save_sold
 from app.services.user_settings import (
     effective_factors,
@@ -69,7 +78,7 @@ async def card_price_history(
 
 @router.post("/cards/{card_id}/cardmarket-offers")
 async def cardmarket_offers(
-    card_id: uuid.UUID, body: CardmarketOffersIn, session: SessionDep, _user: CurrentUser
+    card_id: uuid.UUID, body: CardmarketOffersIn, session: SessionDep, user: CurrentUser
 ) -> CardmarketOffersOut:
     """Selbst ausgelesene Cardmarket-Angebote auswerten (Vorschau) und mit ``save`` speichern.
 
@@ -85,6 +94,9 @@ async def cardmarket_offers(
     )
     if body.save:
         await save_offers(session, card, result)
+        # Seite merken: korrigiert falsche Cardmarket-Zuordnungen von TCGdex.
+        if body.remember_page and result.accepted:
+            await remember_product_page(session, card, result.page_url, user.id)
     return CardmarketOffersOut(
         card_id=card.id,
         card_language=result.card_language,
@@ -136,6 +148,36 @@ async def ebay_sold(
         warnings=result.warnings,
         saved=result.saved,
     )
+
+
+PRICE_TARGET_MAX_AGE = timedelta(hours=2)
+
+
+@router.put("/me/price-target", tags=["me"])
+async def set_price_target(
+    body: PriceTargetIn, session: SessionDep, user: CurrentUser
+) -> PriceTargetOut:
+    """Merkt die Karte, für die gerade „Preis holen“ geöffnet wurde (für das Lesezeichen)."""
+    card = await catalog_search.get_card(session, body.card_id)
+    settings = await session.get(UserSettings, user.id)
+    if settings is None:
+        settings = UserSettings(user_id=user.id, condition_factors={}, language_factors={})
+        session.add(settings)
+    settings.price_target_card_id = card.id
+    settings.price_target_at = datetime.now(UTC)
+    return PriceTargetOut(card_id=card.id)
+
+
+@router.get("/me/price-target", tags=["me"])
+async def get_price_target(session: SessionDep, user: CurrentUser) -> PriceTargetOut:
+    settings = await session.get(UserSettings, user.id)
+    if (
+        settings is None
+        or settings.price_target_at is None
+        or datetime.now(UTC) - settings.price_target_at > PRICE_TARGET_MAX_AGE
+    ):
+        return PriceTargetOut(card_id=None)
+    return PriceTargetOut(card_id=settings.price_target_card_id)
 
 
 @router.get("/me/settings", tags=["me"])

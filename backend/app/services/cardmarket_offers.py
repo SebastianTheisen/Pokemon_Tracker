@@ -30,10 +30,11 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from urllib.parse import parse_qs, urlsplit
 
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Card, PricePoint
+from app.models import Card, CardPriceLink, PricePoint
 from app.providers.pricing import CONDITIONS
 from app.services.errors import InvalidInputError
 
@@ -230,6 +231,37 @@ def evaluate_offers(card: Card, page_url: str, rows: Sequence[OfferRow]) -> Offe
             "geladen?"
         )
     return result
+
+
+def product_page(page_url: str) -> str | None:
+    """Produktseite ohne Filter (``…/Products/Singles/<Set>/<Karte>``), sonst ``None``."""
+    parts = urlsplit(page_url)
+    if "/Products/Singles/" not in parts.path:
+        return None
+    return parts._replace(query="", fragment="").geturl()[:500]
+
+
+async def remember_product_page(
+    session: AsyncSession, card: Card, page_url: str, user_id: object
+) -> bool:
+    """Die ausgelesene Produktseite gilt künftig als Cardmarket-Seite der Karte."""
+    page = product_page(page_url)
+    if page is None:
+        return False
+    statement = insert(CardPriceLink).values(
+        card_id=card.id, cardmarket_url=page, updated_by_id=user_id
+    )
+    await session.execute(
+        statement.on_conflict_do_update(
+            index_elements=[CardPriceLink.card_id],
+            set_={
+                "cardmarket_url": statement.excluded.cardmarket_url,
+                "updated_by_id": statement.excluded.updated_by_id,
+                "updated_at": func.now(),
+            },
+        )
+    )
+    return True
 
 
 async def save_offers(

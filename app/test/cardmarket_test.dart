@@ -139,4 +139,34 @@ void main() {
     expect(api.calls, contains('ebaySold:c1:3:0:true'));
     expect(find.text('eBay-Verkäufe gespeichert.'), findsOneWidget);
   });
+
+  testWidgets('Weitergeklickt (ohne Sprungmarke): gemerkte Karte, Seite merken vorgeschlagen', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true)..rememberedCard = 'c1';
+    await pumpApp(tester, api);
+    final container = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)));
+    final data = encodePayload({
+      'c': null,
+      'u': 'https://www.cardmarket.com/de/Pokemon/Products/Singles/30th-Celebration/Charizard',
+      'r': [
+        {
+          'condition': 'NM',
+          'price': '120,00 €',
+          'labels': ['Japanisch'],
+        },
+      ],
+    });
+
+    container.read(routerProvider).go('/cardmarket-import?d=$data');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nachtara VMAX'), findsOneWidget); // gemerkte Karte c1
+    final remember = tester.widget<CheckboxListTile>(find.byKey(const Key('import-remember-page')));
+    expect(remember.value, isTrue);
+    await tester.ensureVisible(find.text('Preise speichern'));
+    await tester.tap(find.text('Preise speichern'));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('cardmarketOffers:c1:1:true:remember'));
+  });
 }

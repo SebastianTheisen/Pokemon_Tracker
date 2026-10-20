@@ -172,3 +172,52 @@ async def test_api_rejects_foreign_pages(
         f"{API}/cards/{card.id}/cardmarket-offers", json={"page_url": PAGE, "rows": []}
     )
     assert unauthenticated.status_code == 401
+
+
+async def test_saving_from_product_page_corrects_cardmarket_link(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    session_factory: async_sessionmaker[AsyncSession],
+    price_provider: FakeProvider,
+) -> None:
+    """TCGdex verweist auf die falsche Ausgabe → ausgelesene Seite gilt künftig für die Karte."""
+    user = await register_user("max@example.com")
+    card = await make_card(session_factory)
+    price_provider.quotes = [cardmarket("trend", "76.19")]  # Wert der falschen Ausgabe
+    product = (
+        "https://www.cardmarket.com/de/Pokemon/Products/Singles/30th-Celebration/Charizard-M6a137"
+    )
+    body = {
+        "page_url": f"{product}?language=3&minCondition=2#kartenkiste={card.id}",
+        "rows": [{"condition": "NM", "price": "120,00 €", "labels": ["Deutsch"]}],
+        "save": True,
+        "remember_page": True,
+    }
+
+    saved = await client.post(
+        f"{API}/cards/{card.id}/cardmarket-offers", json=body, headers=user.headers
+    )
+    assert saved.status_code == 200, saved.text
+
+    prices = (await client.get(f"{API}/cards/{card.id}/prices", headers=user.headers)).json()
+    assert prices["cardmarket_link"] == product
+    assert all(offer["source"] != "cardmarket" for offer in prices["offers"])
+    nm = next(c for c in prices["conditions"] if c["condition"] == "NM")
+    assert (nm["value"], nm["source"]) == ("120.00", "cardmarket_offers")
+    assert not any(c["kind"] == "estimated" for c in prices["conditions"])  # keine 76,19 €
+
+
+async def test_price_target_roundtrip(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    user = await register_user("max@example.com")
+    card = await make_card(session_factory)
+    empty = await client.get(f"{API}/me/price-target", headers=user.headers)
+    assert empty.json() == {"card_id": None}
+
+    await client.put(f"{API}/me/price-target", json={"card_id": str(card.id)}, headers=user.headers)
+
+    current = await client.get(f"{API}/me/price-target", headers=user.headers)
+    assert current.json() == {"card_id": str(card.id)}

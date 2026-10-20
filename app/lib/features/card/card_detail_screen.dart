@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/api.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
@@ -75,6 +76,17 @@ String gradedVariant(String company, String? grade) {
   var normalized = (grade ?? '').trim().replaceAll(',', '.');
   if (normalized.endsWith('.0')) normalized = normalized.substring(0, normalized.length - 2);
   return 'graded:${company.toUpperCase()} $normalized'.trim();
+}
+
+/// Preis-Seite (Cardmarket/eBay) öffnen und die Karte vorher auf dem Server merken – so
+/// findet das Lesezeichen sie auch, wenn man dort weiterklickt (z. B. „Reprints“).
+Future<void> openPriceLink(BuildContext context, WidgetRef ref, String cardId, String url) async {
+  try {
+    await ref.read(apiProvider).setPriceTarget(cardId);
+  } on ApiException {
+    // Nicht kritisch: Ohne gemerkte Karte fragt die Import-Seite nach.
+  }
+  if (context.mounted) await openLink(context, url);
 }
 
 Future<void> openLink(BuildContext context, String url) async {
@@ -224,7 +236,8 @@ class _CardBodyState extends ConsumerState<_CardBody> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: OutlinedButton.icon(
-              onPressed: () => openLink(context, ebaySoldSearch(card).toString()),
+              onPressed: () =>
+                  openPriceLink(context, ref, card.id, ebaySoldSearch(card).toString()),
               icon: const Icon(Icons.open_in_new),
               label: const Text('Verkaufte Angebote bei eBay'),
             ),
@@ -236,7 +249,7 @@ class _CardBodyState extends ConsumerState<_CardBody> {
 
   /// Angebotsseite auf Cardmarket, gefiltert nach Kartensprache und gewähltem Zustand.
   String? _cardmarketLink(CardPrices prices) => cardmarketOffersUrl(
-    productUrl: prices.offers.where((o) => o.source == 'cardmarket').firstOrNull?.url,
+    productUrl: prices.cardmarketPage,
     cardId: widget.card.id,
     language: widget.card.language,
     condition: _condition,
@@ -302,7 +315,7 @@ class _CardBodyState extends ConsumerState<_CardBody> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: OutlinedButton.icon(
               key: const Key('cardmarket-offers'),
-              onPressed: () => openLink(context, link),
+              onPressed: () => openPriceLink(context, ref, widget.card.id, link),
               icon: const Icon(Icons.storefront),
               label: Text(
                 'Cardmarket-Angebote: ${languageLabels[widget.card.language] ?? widget.card.language}, '

@@ -65,6 +65,9 @@ class CardPricesOut(BaseModel):
     last_checked_at: datetime | None
     offers: list[OfferOut]
     conditions: list[ConditionPriceOut]
+    cardmarket_link: str | None = Field(
+        default=None, description="Korrigierte Cardmarket-Seite (statt der TCGdex-Zuordnung)."
+    )
 
     @classmethod
     def build(cls, prices: CardPrices) -> CardPricesOut:
@@ -72,6 +75,7 @@ class CardPricesOut(BaseModel):
             card_id=prices.card_id,
             status="ok" if prices.has_prices else "no_data",
             last_checked_at=prices.last_checked_at,
+            cardmarket_link=prices.cardmarket_link,
             offers=[OfferOut.build(o) for o in prices.offers],
             conditions=[ConditionPriceOut.build(c) for c in prices.conditions],
         )
@@ -157,6 +161,11 @@ class CardmarketOffersIn(BaseModel):
     page_url: str = Field(max_length=2000, description="Ausgelesene Cardmarket-Seite.")
     rows: list[CardmarketOfferRowIn] = Field(max_length=200)
     save: bool = Field(default=False, description="false = nur Vorschau.")
+    remember_page: bool = Field(
+        default=False,
+        description="Beim Speichern diese Produktseite künftig für die Karte verwenden "
+        "(korrigiert eine falsche Cardmarket-Zuordnung von TCGdex).",
+    )
 
 
 class CardmarketConditionOut(BaseModel):
@@ -222,3 +231,13 @@ class EbaySoldOut(BaseModel):
     groups: list[EbayGroupOut]
     warnings: list[str]
     saved: int
+
+
+class PriceTargetIn(BaseModel):
+    card_id: uuid.UUID
+
+
+class PriceTargetOut(BaseModel):
+    card_id: uuid.UUID | None = Field(
+        description="Zuletzt zum Preisholen geöffnete Karte (höchstens 2 Stunden alt)."
+    )

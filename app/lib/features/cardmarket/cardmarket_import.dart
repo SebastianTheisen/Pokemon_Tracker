@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api.dart';
 import '../../core/config.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
@@ -99,12 +100,39 @@ class _CardmarketImportScreenState extends ConsumerState<CardmarketImportScreen>
   String? _cardId;
   Future<CardmarketOffersResult>? _preview;
   bool _saving = false;
+  bool _lookingUp = false;
+
+  /// Seite für die Karte merken? Vorgeschlagen, wenn man auf Cardmarket weitergeklickt hat
+  /// (keine Sprungmarke aus Kartenkiste) – typisch, wenn TCGdex die falsche Ausgabe verlinkt.
+  late bool _rememberPage = _payload?.cardId == null && _isProductPage;
+
+  bool get _isProductPage => _payload?.pageUrl.contains('/Products/Singles/') ?? false;
 
   @override
   void initState() {
     super.initState();
     _cardId = _payload?.cardId;
+    if (_payload != null && _cardId == null) {
+      _lookingUp = true;
+      _useRememberedCard();
+    }
     _loadPreview();
+  }
+
+  /// Ohne Sprungmarke: die Karte nehmen, für die zuletzt „Preis holen“ geöffnet wurde.
+  Future<void> _useRememberedCard() async {
+    String? cardId;
+    try {
+      cardId = await ref.read(apiProvider).priceTarget();
+    } on ApiException {
+      cardId = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _lookingUp = false;
+      _cardId = cardId;
+      _loadPreview();
+    });
   }
 
   void _loadPreview() {
@@ -127,6 +155,7 @@ class _CardmarketImportScreenState extends ConsumerState<CardmarketImportScreen>
             pageUrl: payload.pageUrl,
             rows: payload.offerRows,
             save: true,
+            rememberPage: _rememberPage && _isProductPage,
           );
     });
     if (!mounted) return;
@@ -148,6 +177,8 @@ class _CardmarketImportScreenState extends ConsumerState<CardmarketImportScreen>
               icon: Icons.link_off,
               message: 'Keine gültigen Daten vom Lesezeichen erhalten.',
             )
+          : _lookingUp
+          ? const Center(child: CircularProgressIndicator())
           : _cardId == null
           ? CardPicker(
               onPicked: (id) => setState(() {
@@ -168,6 +199,9 @@ class _CardmarketImportScreenState extends ConsumerState<CardmarketImportScreen>
                   result: result,
                   saving: _saving,
                   onSave: result.prices.isEmpty ? null : _save,
+                  onOtherCard: () => setState(() => _cardId = null),
+                  rememberPage: _isProductPage ? _rememberPage : null,
+                  onRememberChanged: (value) => setState(() => _rememberPage = value),
                 );
               },
             ),
@@ -181,12 +215,20 @@ class _PreviewView extends ConsumerWidget {
     required this.result,
     required this.saving,
     required this.onSave,
+    required this.onOtherCard,
+    required this.rememberPage,
+    required this.onRememberChanged,
   });
 
   final String cardId;
   final CardmarketOffersResult result;
   final bool saving;
   final VoidCallback? onSave;
+  final VoidCallback onOtherCard;
+
+  /// `null`: keine Produktseite, nichts zu merken.
+  final bool? rememberPage;
+  final ValueChanged<bool> onRememberChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -195,6 +237,14 @@ class _PreviewView extends ConsumerWidget {
       padding: const EdgeInsets.only(bottom: 24),
       children: [
         if (card != null) CardTile(card: card),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            key: const Key('import-other-card'),
+            onPressed: onOtherCard,
+            child: const Text('Andere Karte wählen'),
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
@@ -218,6 +268,17 @@ class _PreviewView extends ConsumerWidget {
             ),
             subtitle: Text('${price.offers} Angebote · Ø 3 günstigste ${money(price.low3)}'),
             trailing: Text('ab ${money(price.low)}', style: const TextStyle(fontSize: 16)),
+          ),
+        if (rememberPage != null)
+          CheckboxListTile(
+            key: const Key('import-remember-page'),
+            value: rememberPage,
+            onChanged: (value) => onRememberChanged(value ?? false),
+            title: const Text('Diese Cardmarket-Seite künftig für die Karte verwenden'),
+            subtitle: const Text(
+              'Für falsch verlinkte Karten (z. B. andere Sprachausgabe). Die Cardmarket-'
+              'Durchschnittspreise von TCGdex werden dann nicht mehr verwendet.',
+            ),
           ),
         Padding(
           padding: const EdgeInsets.all(16),

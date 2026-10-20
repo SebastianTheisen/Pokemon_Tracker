@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
@@ -30,12 +31,33 @@ class _EbayImportScreenState extends ConsumerState<EbayImportScreen> {
   Future<EbaySoldResult>? _preview;
   Set<int>? _selected;
   bool _saving = false;
+  bool _lookingUp = false;
 
   @override
   void initState() {
     super.initState();
     _cardId = _payload?.cardId;
+    if (_payload != null && _cardId == null) {
+      _lookingUp = true;
+      _useRememberedCard();
+    }
     _loadPreview();
+  }
+
+  /// Ohne Sprungmarke: die Karte nehmen, für die zuletzt „Preis holen“ geöffnet wurde.
+  Future<void> _useRememberedCard() async {
+    String? cardId;
+    try {
+      cardId = await ref.read(apiProvider).priceTarget();
+    } on ApiException {
+      cardId = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _lookingUp = false;
+      _cardId = cardId;
+      _loadPreview();
+    });
   }
 
   void _loadPreview() {
@@ -87,6 +109,8 @@ class _EbayImportScreenState extends ConsumerState<EbayImportScreen> {
               icon: Icons.link_off,
               message: 'Keine gültigen Daten vom Lesezeichen erhalten.',
             )
+          : _lookingUp
+          ? const Center(child: CircularProgressIndicator())
           : _cardId == null
           ? CardPicker(
               onPicked: (id) => setState(() {
@@ -122,6 +146,16 @@ class _EbayImportScreenState extends ConsumerState<EbayImportScreen> {
       padding: const EdgeInsets.only(bottom: 24),
       children: [
         if (card != null) CardTile(card: card),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: () => setState(() {
+              _cardId = null;
+              _selected = null;
+            }),
+            child: const Text('Andere Karte wählen'),
+          ),
+        ),
         for (final warning in result.warnings)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),

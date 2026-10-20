@@ -378,7 +378,7 @@ class _ScanPrice extends ConsumerWidget {
         child: SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)),
       ),
       error: (_, _) => const SizedBox.shrink(),
-      data: (data) => grading == null ? _raw(context, data) : _graded(context, data, grading!),
+      data: (data) => grading == null ? _raw(context, data) : _graded(context, ref, data, grading!),
     );
   }
 
@@ -387,7 +387,7 @@ class _ScanPrice extends ConsumerWidget {
         .where((c) => c.condition == 'NM' && c.variant == 'normal')
         .firstOrNull;
     final cardmarket = cardmarketOffersUrl(
-      productUrl: data.offers.where((o) => o.source == 'cardmarket').firstOrNull?.url,
+      productUrl: data.cardmarketPage,
       cardId: card.id,
       language: card.language,
     );
@@ -406,6 +406,7 @@ class _ScanPrice extends ConsumerWidget {
           ),
         const SizedBox(height: 6),
         _FetchPrices(
+          cardId: card.id,
           buttons: [
             if (cardmarket != null)
               (
@@ -424,7 +425,7 @@ class _ScanPrice extends ConsumerWidget {
     );
   }
 
-  Widget _graded(BuildContext context, CardPrices data, Grading grading) {
+  Widget _graded(BuildContext context, WidgetRef ref, CardPrices data, Grading grading) {
     final label = '${grading.company} ${grading.grade ?? ''}'.trim();
     final sold = data.offers
         .where(
@@ -443,6 +444,7 @@ class _ScanPrice extends ConsumerWidget {
           ),
           const SizedBox(height: 6),
           _FetchPrices(
+            cardId: card.id,
             buttons: [
               (
                 key: const Key('scan-graded-ebay'),
@@ -464,7 +466,8 @@ class _ScanPrice extends ConsumerWidget {
         const SizedBox(height: 6),
         OutlinedButton.icon(
           key: const Key('scan-graded-ebay'),
-          onPressed: () => openLink(context, ebaySoldSearch(card, grading: label).toString()),
+          onPressed: () =>
+              openPriceLink(context, ref, card.id, ebaySoldSearch(card, grading: label).toString()),
           icon: const Icon(Icons.open_in_new, size: 18),
           label: Text('Verkaufte $label bei eBay'),
         ),
@@ -480,13 +483,14 @@ class _ScanPrice extends ConsumerWidget {
 
 /// Knöpfe „Preis holen“: öffnen die passende Seite (Sprache, Zustand bzw. Note sind schon
 /// gesetzt); dort überträgt das Lesezeichen „An Kartenkiste senden“ die Preise.
-class _FetchPrices extends StatelessWidget {
-  const _FetchPrices({required this.buttons});
+class _FetchPrices extends ConsumerWidget {
+  const _FetchPrices({required this.cardId, required this.buttons});
 
+  final String cardId;
   final List<({Key key, String label, String url})> buttons;
 
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context, WidgetRef ref) => Column(
     children: [
       Wrap(
         alignment: WrapAlignment.center,
@@ -496,7 +500,7 @@ class _FetchPrices extends StatelessWidget {
           for (final button in buttons)
             OutlinedButton.icon(
               key: button.key,
-              onPressed: () => openLink(context, button.url),
+              onPressed: () => openPriceLink(context, ref, cardId, button.url),
               icon: const Icon(Icons.open_in_new, size: 18),
               label: Text(button.label),
             ),

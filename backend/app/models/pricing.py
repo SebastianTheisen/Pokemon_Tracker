@@ -64,3 +64,26 @@ class PriceCheck(Base):
     ok: Mapped[bool] = mapped_column(nullable=False)
     message: Mapped[str | None] = mapped_column(String(300))
     last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CardPriceLink(Base):
+    """Von Nutzern korrigierte Cardmarket-Seite einer Karte.
+
+    TCGdex ordnet manchen Karten das falsche Cardmarket-Produkt zu (z. B. japanische
+    „30th CELEBRATION“-Karten der vereinfacht-chinesischen Ausgabe). Liest ein Nutzer die
+    Angebote einer Produktseite per Lesezeichen aus, gilt diese Seite künftig für die Karte –
+    für alle Nutzer. Die Cardmarket-Werte von TCGdex werden dann nicht mehr verwendet.
+    """
+
+    __tablename__ = "card_price_links"
+
+    card_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cards.id", ondelete="CASCADE"), primary_key=True
+    )
+    cardmarket_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    updated_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )

@@ -307,12 +307,20 @@ class Api {
         as Json,
   );
 
+  /// Karte merken, für die gerade „Preis holen“ geöffnet wird (für das Lesezeichen).
+  Future<void> setPriceTarget(String cardId) async =>
+      _send('PUT', '/me/price-target', body: {'card_id': cardId});
+
+  /// Zuletzt zum Preisholen geöffnete Karte (höchstens 2 Stunden alt) oder `null`.
+  Future<String?> priceTarget() async => (await _get('/me/price-target')).strOrNull('card_id');
+
   /// Ausgelesene Cardmarket-Angebote auswerten (`save: false` = Vorschau) bzw. speichern.
   Future<CardmarketOffersResult> cardmarketOffers(
     String cardId, {
     required String pageUrl,
     required List<CardmarketOfferRow> rows,
     bool save = false,
+    bool rememberPage = false,
   }) async => CardmarketOffersResult.fromJson(
     (await _send(
           'POST',
@@ -321,6 +329,7 @@ class Api {
             'page_url': pageUrl,
             'rows': [for (final row in rows) row.toJson()],
             'save': save,
+            'remember_page': rememberPage,
           },
         ))!
         as Json,

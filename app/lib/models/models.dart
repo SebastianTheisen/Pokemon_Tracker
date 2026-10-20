@@ -387,6 +387,7 @@ class CardPrices {
     required this.offers,
     required this.conditions,
     this.lastCheckedAt,
+    this.cardmarketLink,
   });
 
   factory CardPrices.fromJson(Json json) => CardPrices(
@@ -394,12 +395,20 @@ class CardPrices {
     lastCheckedAt: json.timeOrNull('last_checked_at'),
     offers: json.list('offers', Offer.fromJson),
     conditions: json.list('conditions', ConditionPrice.fromJson),
+    cardmarketLink: json.strOrNull('cardmarket_link'),
   );
 
   final String status; // ok | no_data
   final DateTime? lastCheckedAt;
   final List<Offer> offers;
   final List<ConditionPrice> conditions;
+
+  /// Von Nutzern korrigierte Cardmarket-Seite (statt der TCGdex-Zuordnung).
+  final String? cardmarketLink;
+
+  /// Cardmarket-Seite der Karte: korrigierte Seite, sonst der Link aus dem TCGdex-Preis.
+  String? get cardmarketPage =>
+      cardmarketLink ?? offers.where((o) => o.source == 'cardmarket').firstOrNull?.url;
 }
 
 class PricePoint {
@@ -926,7 +935,7 @@ const cardmarketConditionIds = {'MT': 1, 'NM': 2, 'EX': 3, 'GD': 4, 'LP': 5, 'PL
 
 /// Angebotsseite einer Karte auf Cardmarket, gefiltert nach Sprache und Mindestzustand.
 ///
-/// Nur mit Produkt-ID (Link aus dem Cardmarket-Preis); die Sprungmarke `#kartenkiste=<id>`
+/// Nur mit Produkt-ID bzw. Produktseite (nicht die Suche); die Sprungmarke `#kartenkiste=<id>`
 /// sagt dem Lesezeichen, zu welcher Karte die Angebote gehören.
 String? cardmarketOffersUrl({
   required String? productUrl,
@@ -934,7 +943,10 @@ String? cardmarketOffersUrl({
   required String language,
   String condition = 'NM',
 }) {
-  if (productUrl == null || !productUrl.contains('idProduct=')) return null;
+  if (productUrl == null ||
+      !(productUrl.contains('idProduct=') || productUrl.contains('/Products/Singles/'))) {
+    return null;
+  }
   final params = [
     if (cardmarketLanguageIds[language] case final id?) 'language=$id',
     if (cardmarketConditionIds[condition] case final id?) 'minCondition=$id',

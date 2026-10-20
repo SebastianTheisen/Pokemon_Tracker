@@ -204,6 +204,17 @@ class FakeApi extends Api {
   @override
   Future<CardPrices> prices(String cardId) async => CardPrices.fromJson(pricesJson);
 
+  String? rememberedCard;
+
+  @override
+  Future<void> setPriceTarget(String cardId) async {
+    calls.add('priceTarget:$cardId');
+    rememberedCard = cardId;
+  }
+
+  @override
+  Future<String?> priceTarget() async => rememberedCard;
+
   @override
   Future<EbaySoldResult> ebaySold(
     String cardId, {
@@ -238,8 +249,9 @@ class FakeApi extends Api {
     required String pageUrl,
     required List<CardmarketOfferRow> rows,
     bool save = false,
+    bool rememberPage = false,
   }) async {
-    calls.add('cardmarketOffers:$cardId:${rows.length}:$save');
+    calls.add('cardmarketOffers:$cardId:${rows.length}:$save${rememberPage ? ':remember' : ''}');
     return CardmarketOffersResult.fromJson({
       'accepted': rows.length,
       'skipped': 0,

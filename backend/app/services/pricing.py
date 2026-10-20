@@ -31,7 +31,15 @@ from sqlalchemy.dialects.postgresql import distinct_on, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.models import Card, CollectionItem, PriceCheck, PricePoint, User, WishlistItem
+from app.models import (
+    Card,
+    CardPriceLink,
+    CollectionItem,
+    PriceCheck,
+    PricePoint,
+    User,
+    WishlistItem,
+)
 from app.providers.pricing import (
     CONDITIONS,
     CardRef,
@@ -105,6 +113,8 @@ class CardPrices:
     last_checked_at: datetime | None
     offers: list[Offer]
     conditions: list[ConditionPrice]
+    cardmarket_link: str | None = None
+    """Von Nutzern korrigierte Cardmarket-Seite (dann ohne Cardmarket-Werte von TCGdex)."""
 
     @property
     def has_prices(self) -> bool:
@@ -360,12 +370,22 @@ class PriceService:
             .group_by(PriceCheck.card_id)
         )
         checked: dict[uuid.UUID, datetime] = {row[0]: row[1] for row in checked_rows}
+        link_rows = await self._session.execute(
+            select(CardPriceLink.card_id, CardPriceLink.cardmarket_url).where(
+                CardPriceLink.card_id.in_(ids)
+            )
+        )
+        links = {row.card_id: row.cardmarket_url for row in link_rows}
         result: dict[uuid.UUID, CardPrices] = {}
         for card_id, points in per_card.items():
             offers = _group_offers(points)
+            if card_id in links:
+                # TCGdex hat hier das falsche Cardmarket-Produkt – dessen Werte nicht nutzen.
+                offers = [o for o in offers if o.source != CARDMARKET]
             result[card_id] = CardPrices(
                 card_id=card_id,
                 last_checked_at=checked.get(card_id),
+                cardmarket_link=links.get(card_id),
                 offers=offers,
                 conditions=_condition_prices(
                     offers,
