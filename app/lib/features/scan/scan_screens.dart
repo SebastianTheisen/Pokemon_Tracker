@@ -353,24 +353,49 @@ class _ScanPrice extends ConsumerWidget {
         child: SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)),
       ),
       error: (_, _) => const SizedBox.shrink(),
-      data: (data) => grading == null ? _raw(data) : _graded(context, data, grading!),
+      data: (data) => grading == null ? _raw(context, data) : _graded(context, data, grading!),
     );
   }
 
-  Widget _raw(CardPrices data) {
+  Widget _raw(BuildContext context, CardPrices data) {
     final nm = data.conditions
         .where((c) => c.condition == 'NM' && c.variant == 'normal')
         .firstOrNull;
-    if (nm == null) {
-      return const Text(
-        'Noch kein belegter Preis',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: AppColors.textMuted),
-      );
-    }
-    return _PriceLine(
-      value: money(nm.value, currency: nm.currency),
-      label: nm.isEstimate ? 'Near Mint · geschätzt' : 'Near Mint · mit Beleg',
+    final cardmarket = cardmarketOffersUrl(
+      productUrl: data.offers.where((o) => o.source == 'cardmarket').firstOrNull?.url,
+      cardId: card.id,
+      language: card.language,
+    );
+    return Column(
+      children: [
+        if (nm == null)
+          const Text(
+            'Noch kein belegter Preis',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textMuted),
+          )
+        else
+          _PriceLine(
+            value: money(nm.value, currency: nm.currency),
+            label: nm.isEstimate ? 'Near Mint · geschätzt' : 'Near Mint · mit Beleg',
+          ),
+        const SizedBox(height: 6),
+        _FetchPrices(
+          buttons: [
+            if (cardmarket != null)
+              (
+                key: const Key('scan-cardmarket'),
+                label: 'Cardmarket ${languageTag(card.language)} ab NM',
+                url: cardmarket,
+              ),
+            (
+              key: const Key('scan-ebay'),
+              label: 'eBay verkauft',
+              url: ebaySoldSearch(card).toString(),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -385,9 +410,23 @@ class _ScanPrice extends ConsumerWidget {
     final median = sold?.metrics['median'];
     if (sold != null && median != null) {
       final count = double.tryParse(sold.metrics['count'] ?? '')?.round();
-      return _PriceLine(
-        value: money(median, currency: sold.currency),
-        label: '$label · Median aus ${count ?? '?'} eBay-Verkäufen · ${date(sold.updatedAt)}',
+      return Column(
+        children: [
+          _PriceLine(
+            value: money(median, currency: sold.currency),
+            label: '$label · Median aus ${count ?? '?'} eBay-Verkäufen · ${date(sold.updatedAt)}',
+          ),
+          const SizedBox(height: 6),
+          _FetchPrices(
+            buttons: [
+              (
+                key: const Key('scan-graded-ebay'),
+                label: '$label-Verkäufe neu holen',
+                url: ebaySoldSearch(card, grading: label).toString(),
+              ),
+            ],
+          ),
+        ],
       );
     }
     return Column(
@@ -412,6 +451,39 @@ class _ScanPrice extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// Knöpfe „Preis holen“: öffnen die passende Seite (Sprache, Zustand bzw. Note sind schon
+/// gesetzt); dort überträgt das Lesezeichen „An Kartenkiste senden“ die Preise.
+class _FetchPrices extends StatelessWidget {
+  const _FetchPrices({required this.buttons});
+
+  final List<({Key key, String label, String url})> buttons;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          for (final button in buttons)
+            OutlinedButton.icon(
+              key: button.key,
+              onPressed: () => openLink(context, button.url),
+              icon: const Icon(Icons.open_in_new, size: 18),
+              label: Text(button.label),
+            ),
+        ],
+      ),
+      const Text(
+        'Dort das Lesezeichen „An Kartenkiste senden“ antippen.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+      ),
+    ],
+  );
 }
 
 class _PriceLine extends StatelessWidget {

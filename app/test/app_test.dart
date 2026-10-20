@@ -125,9 +125,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Bitte prüfen'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('scan-other')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('scan-other')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Umbreon VMAX'));
+    // Die Liste baut weiter unten liegende Inhalte erst beim Scrollen.
+    await tester.scrollUntilVisible(
+      find.text('Umbreon VMAX'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Umbreon VMAX'));
     await tester.pumpAndSettle();
@@ -241,5 +248,18 @@ void main() {
 
     expect(find.text('650,00\u00a0€'), findsOneWidget);
     expect(find.textContaining('Median aus 5 eBay-Verkäufen'), findsOneWidget);
+  });
+
+  testWidgets('Scan einer Rohkarte: Knöpfe zum Preisholen bei Cardmarket und eBay', (tester) async {
+    await pumpApp(tester, FakeApi(loggedIn: true));
+
+    await tester.tap(find.byKey(const Key('scan-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scan-gallery')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('scan-price')), findsOneWidget);
+    expect(find.text('Cardmarket DE ab NM'), findsOneWidget);
+    expect(find.byKey(const Key('scan-ebay')), findsOneWidget);
   });
 }
