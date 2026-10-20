@@ -7,11 +7,18 @@
 #   4. API neu starten und prüfen
 # Ergebnis: docs/phase5/app_build.md
 #
-#   bash deploy/phase5_app.sh          # nur Web-App (schnell)
+#   bash deploy/phase5_app.sh          # nur Web-App; übersprungen, wenn sich app/ nicht geändert hat
 #   bash deploy/phase5_app.sh --apk    # zusätzlich Android-APK (dauert deutlich länger)
+#   bash deploy/phase5_app.sh --force  # Web-App auf jeden Fall neu bauen
 set -euo pipefail
 build_apk=false
-[[ "${1:-}" == "--apk" ]] && build_apk=true
+force=false
+for arg in "$@"; do
+  case "${arg}" in
+    --apk) build_apk=true ;;
+    --force) force=true ;;
+  esac
+done
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${REPO_ROOT}/docs/phase5"
@@ -43,36 +50,46 @@ fi
 flutter_version="$(docker compose --profile build run --rm -T app-builder flutter --version 2>/dev/null | head -1)"
 echo "${flutter_version}"
 
-if ${build_apk}; then
-  step "3/5 Web-App und Android-APK bauen"
-else
-  step "3/5 Web-App bauen (APK nur mit --apk)"
-fi
 app_log="${OUT_DIR}/app_flutter_build.log"
-# „flutter build web“ leert build/web – die vorhandene APK vorher sichern.
-kept_apk="$(mktemp)"
-if [[ -f app/build/web/kartenkiste.apk ]]; then cp app/build/web/kartenkiste.apk "${kept_apk}"; fi
-apk_commands=""
-if ${build_apk}; then
-  apk_commands="flutter build apk --release --dart-define=API_BASE_URL=${api_url}
-    cp build/app/outputs/flutter-apk/app-release.apk build/web/kartenkiste.apk"
-fi
+# Stand des Ordners app/ (Git-Baum): unverändert → Web-App nicht neu bauen.
+app_rev="$(git rev-parse HEAD:app 2>/dev/null || echo unbekannt)"
+stamp="app/build/web/.app-revision"
 start=$(date +%s)
-if ! docker compose --profile build run --rm -T app-builder sh -ec "
-    flutter pub get
-    flutter build web --release --no-web-resources-cdn
-    ${apk_commands}
-  " > "${app_log}" 2>&1; then
-  tail -60 "${app_log}" | mask
+if ! ${build_apk} && ! ${force} && [[ -f app/build/web/index.html && -f "${stamp}" ]] \
+    && [[ "$(cat "${stamp}")" == "${app_rev}" ]]; then
+  step "3/5 Web-App unverändert – kein neuer Build (erzwingen mit --force)"
+else
+  if ${build_apk}; then
+    step "3/5 Web-App und Android-APK bauen"
+  else
+    step "3/5 Web-App bauen (APK nur mit --apk)"
+  fi
+  # „flutter build web“ leert build/web – die vorhandene APK vorher sichern.
+  kept_apk="$(mktemp)"
+  if [[ -f app/build/web/kartenkiste.apk ]]; then cp app/build/web/kartenkiste.apk "${kept_apk}"; fi
+  apk_commands=""
+  if ${build_apk}; then
+    apk_commands="flutter build apk --release --dart-define=API_BASE_URL=${api_url}
+      cp build/app/outputs/flutter-apk/app-release.apk build/web/kartenkiste.apk"
+  fi
+  # --no-wasm-dry-run: kein zusätzlicher WebAssembly-Probelauf (halbiert die Bauzeit).
+  if ! docker compose --profile build run --rm -T app-builder sh -ec "
+      flutter pub get
+      flutter build web --release --no-web-resources-cdn --no-wasm-dry-run
+      ${apk_commands}
+    " > "${app_log}" 2>&1; then
+    tail -60 "${app_log}" | mask
+    rm -f "${kept_apk}"
+    fail "App-Build fehlgeschlagen (Protokoll: ${app_log})."
+  fi
+  if ! ${build_apk} && [[ -s "${kept_apk}" ]]; then
+    cp "${kept_apk}" app/build/web/kartenkiste.apk
+  fi
   rm -f "${kept_apk}"
-  fail "App-Build fehlgeschlagen (Protokoll: ${app_log})."
+  echo "${app_rev}" > "${stamp}"
 fi
-if ! ${build_apk} && [[ -s "${kept_apk}" ]]; then
-  cp "${kept_apk}" app/build/web/kartenkiste.apk
-fi
-rm -f "${kept_apk}"
 duration=$(( $(date +%s) - start ))
-sed -i -E 's/\.[a-z0-9-]+\.ts\.net/.<tailnet>.ts.net/g' "${app_log}"
+[[ -f "${app_log}" ]] && sed -i -E 's/\.[a-z0-9-]+\.ts\.net/.<tailnet>.ts.net/g' "${app_log}"
 apk_size="$(du -h app/build/web/kartenkiste.apk 2>/dev/null | cut -f1 || true)"
 apk_size="${apk_size:-keine}"
 ${build_apk} || apk_size="${apk_size} (nicht neu gebaut)"
@@ -80,8 +97,10 @@ web_size="$(du -sh --exclude=kartenkiste.apk app/build/web | cut -f1)"
 echo "Fertig in ${duration} s – APK ${apk_size}, Web ${web_size}"
 
 step "4/5 Backend neu bauen und starten (liefert die Web-App aus)"
-# --build: Das Backend-Image muss den aktuellen Code enthalten (Auslieferung der Web-App).
-docker compose up -d --build --force-recreate api worker
+# --build: Das Backend-Image muss den aktuellen Code enthalten. Neu gestartet werden api und
+# worker nur, wenn sich das Image geändert hat – die Web-App liegt in einem eingebundenen
+# Ordner und wird ohne Neustart ausgeliefert (laufender Bild-Import wird nicht unterbrochen).
+docker compose up -d --build api worker
 health="keine Antwort"
 for _ in $(seq 1 60); do
   if health="$(curl -fsS http://127.0.0.1:8000/api/v1/health 2>/dev/null)"; then break; fi
