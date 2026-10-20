@@ -23,7 +23,7 @@ from typing import Any
 
 import httpx
 
-UA = "Kartenkiste/0.1 (private Sammel-App, Test der Cardmarket-Verknüpfung)"
+UA = "Kartenkiste/0.1 (private Sammel-App, Test der Cardmarket-Verknuepfung)"
 CATALOG = "https://downloads.s3.cardmarket.com/productCatalog/productList/products_singles_6.json"
 GUIDE = "https://downloads.s3.cardmarket.com/productCatalog/priceGuide/price_guide_6.json"
 TCGDEX = "https://api.tcgdex.net/v2"
