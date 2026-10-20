@@ -28,7 +28,9 @@ GLURAK_JA = "https://www.cardmarket.com/de/Pokemon/Products?idProduct=907902"
 TURTOK_151 = "https://www.cardmarket.com/de/Pokemon/Products/Singles/151/Blastoise-ex-V3-MEW200"
 EBAY_QUERY = "Glurak ex 151 PSA 10"
 
-RUNS: list[tuple[str, str, dict[str, Any]]] = [
+TURTOK_151_EN = TURTOK_151.replace("/de/", "/en/")
+RunList = list[tuple[str, str, dict[str, Any]]]
+RUNS: RunList = [
     (
         "Cardmarket · Glurak M6a japanisch NM (Link per idProduct)",
         "phantom_coder/cardmarket-listings-scraper",
@@ -60,6 +62,65 @@ RUNS: list[tuple[str, str, dict[str, Any]]] = [
         "eBay.de verkauft · PSA 10 (kostenloser Anbieter, Preisführer je Note)",
         "yumitori/ebay-sold-scraper",
         {"queries": [EBAY_QUERY], "marketplace": "DE", "days": "90", "maxComps": 20},
+    ),
+]
+
+
+# Stufe C: Gegenprobe Cardmarket (überhaupt Treffer? mit Residential-Proxy?) und genauere
+# eBay-Suche mit Kartennummer (Rohkarte und PSA 10).
+RUNS_C: RunList = [
+    (
+        "Cardmarket · Turtok-ex 151 ohne Filter (englische Seite)",
+        "phantom_coder/cardmarket-listings-scraper",
+        {"productUrl": TURTOK_151_EN, "language": "any", "minCondition": "PO", "maxResults": 5},
+    ),
+    (
+        "Cardmarket · Turtok-ex 151 deutsch NM, Residential-Proxy DE",
+        "crawloop/cardmarket-listings-scraper",
+        {
+            "startUrls": [{"url": TURTOK_151_EN}],
+            "language": "German",
+            "minCondition": "NM",
+            "maxItems": 10,
+            "maxPages": 1,
+            "proxyConfiguration": {
+                "useApifyProxy": True,
+                "apifyProxyGroups": ["RESIDENTIAL"],
+                "apifyProxyCountry": "DE",
+            },
+        },
+    ),
+    (
+        "Cardmarket · Suche „Blastoise ex“ deutsch NM (Deal-Finder im Angebotsmodus)",
+        "lowlanddata/cardmarket-deal-finder",
+        {
+            "searchQuery": "Blastoise ex",
+            "minDiscountPct": 0,
+            "languages": ["German"],
+            "minCondition": "NM",
+            "maxProducts": 1,
+            "maxItems": 10,
+        },
+    ),
+    (
+        "eBay.de verkauft · Glurak ex 183/165 PSA 10 (mit Nummer)",
+        "caffein.dev/ebay-sold-listings",
+        {
+            "keywords": ["Glurak 183/165 PSA 10"],
+            "ebaySite": "ebay.de",
+            "daysToScrape": 90,
+            "count": 20,
+        },
+    ),
+    (
+        "eBay.de verkauft · Glurak ex 183/165 Rohkarte",
+        "caffein.dev/ebay-sold-listings",
+        {
+            "keywords": ["Glurak ex 183/165 -PSA -BGS -CGC"],
+            "ebaySite": "ebay.de",
+            "daysToScrape": 90,
+            "count": 20,
+        },
     ),
 ]
 
@@ -155,14 +216,20 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
 
 
 def main() -> None:
-    emit("# Spike Apify, Stufe B: Testläufe\n")
+    stage = os.environ.get("APIFY_SPIKE_STAGE", "B").upper()
+    runs = RUNS_C if stage == "C" else RUNS
+    emit(f"# Spike Apify, Stufe {stage}: Testläufe\n")
     token = os.environ.get("PT_APIFY_TOKEN", "").strip()
     if not token:
         emit("❌ `PT_APIFY_TOKEN` fehlt – zuerst `bash deploy/phase5_apify_token.sh`.")
         return
     headers = {"Authorization": f"Bearer {token}", "User-Agent": "Kartenkiste/0.1 (Spike)"}
     with httpx.Client(headers=headers, timeout=90) as client:
-        for title, actor, payload in RUNS:
+        me = client.get(f"{API}/users/me").json().get("data") or {}
+        proxy = me.get("proxy") or {}
+        groups = [g.get("name") for g in proxy.get("groups") or []]
+        emit(f"- Verfügbare Proxy-Gruppen im Tarif: {groups or 'keine Angabe'}\n")
+        for title, actor, payload in runs:
             try:
                 report(client, title, actor, payload)
             except (httpx.HTTPError, ValueError, KeyError) as exc:
