@@ -17,6 +17,7 @@ Dieser Spike prüft das an echten Sets und zeigt alle Ausgaben von Metakarte 211
 from __future__ import annotations
 
 import asyncio
+import traceback
 from collections import Counter, defaultdict
 from typing import Any
 
@@ -29,7 +30,14 @@ TCGDEX = "https://api.tcgdex.net/v2"
 # (Sprache, Set-ID bei TCGdex) – das Problem-Set und zwei Vergleichs-Sets.
 SETS = [("ja", "M6a"), ("ja", "SV2a"), ("en", "sv03.5"), ("de", "sv03.5")]
 GLURAK_METACARD = 211560
-out: list[str] = ["# Spike 2: Cardmarket-Verknüpfung über Katalog prüfen\n"]
+
+
+def emit(line: str = "") -> None:
+    """Sofort ausgeben – bricht etwas ab, steht alles Bisherige schon im Bericht."""
+    print(line, flush=True)
+
+
+emit("# Spike 2: Cardmarket-Verknüpfung über Katalog prüfen\n")
 
 
 async def tcgdex_json(client: httpx.AsyncClient, path: str) -> Any:
@@ -75,37 +83,37 @@ async def main() -> None:
         for row in catalog:
             by_meta[row["idMetacard"]].append(row)
         expansion_sizes = Counter(row["idExpansion"] for row in catalog)
-        out.append(f"- Katalog: {len(catalog)} Produkte, {len(expansion_sizes)} Ausgaben\n")
+        emit(f"- Katalog: {len(catalog)} Produkte, {len(expansion_sizes)} Ausgaben\n")
 
-        out.append(f"## Metakarte {GLURAK_METACARD} (alle Ausgaben dieser Glurak-Karte)\n")
+        emit(f"## Metakarte {GLURAK_METACARD} (alle Ausgaben dieser Glurak-Karte)\n")
         for row in sorted(by_meta[GLURAK_METACARD], key=lambda r: r["idExpansion"]):
-            out.append(
+            emit(
                 f"- idProduct {row['idProduct']}, Ausgabe {row['idExpansion']} "
                 f"({expansion_sizes[row['idExpansion']]} Karten), hinzugefügt "
                 f"{row['dateAdded']}, Trend {trend.get(row['idProduct'])} €, `{row['name']}`"
             )
-        out.append("")
+        emit()
 
         for language, set_id in SETS:
-            out.append(f"## TCGdex {language}/{set_id}\n")
+            emit(f"## TCGdex {language}/{set_id}\n")
             try:
                 rows = await set_products(client, language, set_id)
-            except httpx.HTTPError as exc:
-                out.append(f"- ❌ {type(exc).__name__}: {exc}\n")
+            except Exception as exc:
+                emit(f"- ❌ {type(exc).__name__}: {exc}\n")
                 continue
             linked = [(num, name, pid) for num, name, pid in rows if pid is not None]
             unknown = [pid for _, _, pid in linked if pid not in by_id]
             expansions = Counter(by_id[pid]["idExpansion"] for _, _, pid in linked if pid in by_id)
-            out.append(
+            emit(
                 f"- Karten: {len(rows)}, mit Cardmarket-ID: {len(linked)}, "
                 f"nicht im Katalog: {len(unknown)}"
             )
-            out.append(
+            emit(
                 "- Ausgaben (idExpansion: Anzahl Karten des Sets / Größe der Ausgabe): "
                 + ", ".join(f"{e}: {n}/{expansion_sizes[e]}" for e, n in expansions.most_common(8))
             )
             if not expansions:
-                out.append("")
+                emit()
                 continue
             majority = expansions.most_common(1)[0][0]
             outliers = [
@@ -113,19 +121,21 @@ async def main() -> None:
                 for num, name, pid in linked
                 if pid in by_id and by_id[pid]["idExpansion"] != majority
             ]
-            out.append(f"- Mehrheits-Ausgabe: {majority}; abweichend: {len(outliers)}")
+            emit(f"- Mehrheits-Ausgabe: {majority}; abweichend: {len(outliers)}")
             for num, name, pid in sorted(outliers)[:25]:
                 product = by_id[pid]
                 siblings = [
                     s for s in by_meta[product["idMetacard"]] if s["idExpansion"] == majority
                 ]
                 fix = ", ".join(f"{s['idProduct']} `{s['name']}`" for s in siblings) or "keiner"
-                out.append(
+                emit(
                     f"  - {num} {name}: {pid} (Ausgabe {product['idExpansion']}, "
                     f"`{product['name']}`) → Ersatz in {majority}: {fix}"
                 )
-            out.append("")
-    print("\n".join(out))
+            emit()
 
 
-asyncio.run(main())
+try:
+    asyncio.run(main())
+except Exception:
+    emit("\n## ❌ Abbruch\n\n```\n" + traceback.format_exc() + "```")
