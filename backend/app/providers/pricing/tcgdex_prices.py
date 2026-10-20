@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
-from urllib.parse import quote_plus
+from urllib.parse import parse_qs, quote_plus, urlsplit
 
 from app.providers.pricing import CardRef, PriceKind, PriceNotAvailableError, PriceQuote
 from app.providers.tcgdex import TcgdexClient, TcgdexError
@@ -45,6 +45,17 @@ def cardmarket_url(card: CardRef, product_id: object) -> str:
         return f"https://www.cardmarket.com/de/Pokemon/Products?idProduct={product_id}"
     query = quote_plus(f"{card.name} {card.number}")
     return f"https://www.cardmarket.com/de/Pokemon/Products/Search?searchString={query}"
+
+
+def product_id_from_url(url: str | None) -> int | None:
+    """Cardmarket-Produkt-ID aus einem Beleglink (``…/Products?idProduct=908315``)."""
+    if not url:
+        return None
+    values = parse_qs(urlsplit(url).query).get("idProduct", [])
+    if len(values) != 1 or not values[0].isdigit():
+        return None
+    product_id = int(values[0])
+    return product_id if product_id > 0 else None
 
 
 def _amount(value: object) -> Decimal | None:

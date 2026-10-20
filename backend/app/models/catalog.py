@@ -64,6 +64,15 @@ class CardSet(UuidPrimaryKeyMixin, Base):
     synced_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # Cardmarket-Ausgabe des Sets (``idExpansion``) und woher sie stammt
+    # (:class:`app.models.cardmarket.ExpansionLinkSource`).
+    cardmarket_expansion_id: Mapped[int | None] = mapped_column(Integer)
+    cardmarket_expansion_source: Mapped[str | None] = mapped_column(String(16))
+    cardmarket_expansion_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    # Letzte Nachfrage bei TCGdex nach der Ausgabe (Sets ohne Cardmarket-ID nicht täglich).
+    cardmarket_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Card(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -102,6 +111,10 @@ class Card(UuidPrimaryKeyMixin, TimestampMixin, Base):
     # Herkunft des Bildes (:class:`ImageSource`); leer = von TCGdex.
     image_source: Mapped[str | None] = mapped_column(String(32))
     rarity: Mapped[str | None] = mapped_column(String(100))
+    # Cardmarket-Produkt laut TCGdex (kann in der falschen Ausgabe liegen) und – falls ein
+    # Nutzer innerhalb der Ausgabe ein anderes Produkt gewählt hat – dieses.
+    cardmarket_product_id: Mapped[int | None] = mapped_column(Integer)
+    cardmarket_product_override: Mapped[int | None] = mapped_column(Integer)
     source: Mapped[CardSource] = mapped_column(
         Enum(
             CardSource,

@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.core.config import CatalogLanguage
 from app.providers.pricing import Condition
+from app.services.cardmarket_catalog import CardmarketChoice, ChoiceResult
 from app.services.price_health import SourceStatus
 from app.services.pricing import CardPrices, ConditionPrice, Offer, PriceHistory
 
@@ -241,3 +242,77 @@ class PriceTargetOut(BaseModel):
     card_id: uuid.UUID | None = Field(
         description="Zuletzt zum Preisholen geöffnete Karte (höchstens 2 Stunden alt)."
     )
+
+
+class CardmarketOptionOut(BaseModel):
+    """Dieselbe Karte in einer Cardmarket-Ausgabe (Sprachfassung)."""
+
+    product_id: int
+    expansion_id: int
+    expansion_label: str | None
+    expansion_size: int | None
+    name: str
+    trend: Decimal | None
+    low: Decimal | None
+    url: str
+    selected: bool
+    from_tcgdex: bool
+
+
+class CardmarketChoiceOut(BaseModel):
+    """Cardmarket-Produkt einer Karte und die Alternativen zur Auswahl."""
+
+    card_id: uuid.UUID
+    product_id: int | None
+    expansion_id: int | None
+    reason: Literal["tcgdex", "set", "card", "unmapped", "none"] = Field(
+        description=(
+            "tcgdex: wie von TCGdex gemeldet · set: über die Ausgabe des Sets umgehängt · "
+            "card: für diese Karte gewählt · unmapped: in der Ausgabe nicht gefunden · "
+            "none: kein Produkt bekannt"
+        )
+    )
+    set_source: str | None = Field(description="Ausgabe des Sets von: tcgdex, builtin, user")
+    uncertain: bool = Field(description="Es gibt Sprachfassungen; Ausgabe nur von TCGdex.")
+    catalog_ready: bool
+    url: str | None
+    options: list[CardmarketOptionOut]
+    set_changed: bool | None = Field(
+        default=None, description="Nur nach einer Auswahl: galt sie für das ganze Set?"
+    )
+    cards_affected: int | None = None
+
+    @classmethod
+    def build(
+        cls, choice: CardmarketChoice, result: ChoiceResult | None = None
+    ) -> CardmarketChoiceOut:
+        return cls(
+            card_id=choice.card_id,
+            product_id=choice.product_id,
+            expansion_id=choice.expansion_id,
+            reason=choice.reason,
+            set_source=choice.set_source,
+            uncertain=choice.uncertain,
+            catalog_ready=choice.catalog_ready,
+            url=choice.url,
+            options=[CardmarketOptionOut(**option.__dict__) for option in choice.options],
+            set_changed=result.set_changed if result else None,
+            cards_affected=result.cards_affected if result else None,
+        )
+
+
+class CardmarketChoiceIn(BaseModel):
+    product_id: int = Field(gt=0, description="Gewähltes Cardmarket-Produkt (``idProduct``).")
+
+
+class CardmarketExpansionIn(BaseModel):
+    label: str | None = Field(
+        default=None, max_length=100, description="z. B. „Japanisch“; leer = entfernen"
+    )
+
+
+class CardmarketExpansionOut(BaseModel):
+    expansion_id: int
+    label: str | None
+    product_count: int
+    twin_ids: list[int]

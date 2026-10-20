@@ -26,10 +26,16 @@ def upgrade() -> None:
         sa.Column("cardmarket_url", sa.String(length=500), nullable=False),
         sa.Column("updated_by_id", sa.Uuid(), nullable=True),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
         ),
         sa.ForeignKeyConstraint(
-            ["card_id"], ["cards.id"], name=op.f("fk_card_price_links_card_id_cards"), ondelete="CASCADE"
+            ["card_id"],
+            ["cards.id"],
+            name=op.f("fk_card_price_links_card_id_cards"),
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
             ["updated_by_id"],

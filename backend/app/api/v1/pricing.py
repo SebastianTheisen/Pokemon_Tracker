@@ -11,7 +11,11 @@ from fastapi import APIRouter, Query
 from app.api.deps import AdminUser, CurrentUser, PriceServiceDep, SessionDep
 from app.models import UserSettings
 from app.schemas.pricing import (
+    CardmarketChoiceIn,
+    CardmarketChoiceOut,
     CardmarketConditionOut,
+    CardmarketExpansionIn,
+    CardmarketExpansionOut,
     CardmarketOffersIn,
     CardmarketOffersOut,
     CardPricesOut,
@@ -27,6 +31,11 @@ from app.schemas.pricing import (
     UserSettingsUpdate,
 )
 from app.services import catalog_search
+from app.services.cardmarket_catalog import (
+    cardmarket_choice,
+    choose_product,
+    set_expansion_label,
+)
 from app.services.cardmarket_offers import (
     OfferRow,
     evaluate_offers,
@@ -147,6 +156,48 @@ async def ebay_sold(
         groups=[EbayGroupOut(**group.__dict__) for group in result.groups],
         warnings=result.warnings,
         saved=result.saved,
+    )
+
+
+@router.get("/cards/{card_id}/cardmarket")
+async def card_cardmarket(
+    card_id: uuid.UUID, session: SessionDep, _user: CurrentUser
+) -> CardmarketChoiceOut:
+    """Cardmarket-Produkt der Karte und dieselbe Karte in anderen Sprachfassungen.
+
+    ``uncertain``: Die Ausgabe stammt nur von TCGdex und es gibt gleichzeitig erschienene
+    Sprachfassungen – die App fragt dann nach der richtigen.
+    """
+    card = await catalog_search.get_card(session, card_id)
+    return CardmarketChoiceOut.build(await cardmarket_choice(session, card))
+
+
+@router.put("/cards/{card_id}/cardmarket")
+async def choose_card_cardmarket(
+    card_id: uuid.UUID, body: CardmarketChoiceIn, session: SessionDep, user: CurrentUser
+) -> CardmarketChoiceOut:
+    """Richtiges Cardmarket-Produkt wählen (gilt für alle Nutzer).
+
+    Liegt es in einer anderen Ausgabe, gilt diese für das ganze Set; die Preise der
+    betroffenen Karten werden beim nächsten Aufruf neu geholt.
+    """
+    card = await catalog_search.get_card(session, card_id)
+    result = await choose_product(session, card, body.product_id, user.id)
+    await session.flush()
+    return CardmarketChoiceOut.build(await cardmarket_choice(session, card), result)
+
+
+@router.put("/cardmarket/expansions/{expansion_id}")
+async def label_cardmarket_expansion(
+    expansion_id: int, body: CardmarketExpansionIn, session: SessionDep, user: CurrentUser
+) -> CardmarketExpansionOut:
+    """Bezeichnung einer Cardmarket-Ausgabe (z. B. „Japanisch“) – steht nicht im Download."""
+    expansion = await set_expansion_label(session, expansion_id, body.label, user.id)
+    return CardmarketExpansionOut(
+        expansion_id=expansion.id_expansion,
+        label=expansion.label,
+        product_count=expansion.product_count,
+        twin_ids=list(expansion.twin_ids),
     )
 
 

@@ -2,6 +2,7 @@
 
 from app.models.audit import AuditLog
 from app.models.auth import InviteCode, PasswordResetToken, RefreshToken
+from app.models.cardmarket import CmExpansion, CmImport, CmPrice, CmProduct, ExpansionLinkSource
 from app.models.catalog import Card, CardSet, CardSource, ImageSource
 from app.models.collection import (
     CollectionEvent,
@@ -27,9 +28,14 @@ __all__ = [
     "CardReferenceImage",
     "CardSet",
     "CardSource",
+    "CmExpansion",
+    "CmImport",
+    "CmPrice",
+    "CmProduct",
     "CollectionEvent",
     "CollectionEventType",
     "CollectionItem",
+    "ExpansionLinkSource",
     "Folder",
     "GradingCompany",
     "ImageImportRun",

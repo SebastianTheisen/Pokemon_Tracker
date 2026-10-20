@@ -15,6 +15,10 @@ und Referenzbild-Dateien, deren Karte oder Nutzer gelöscht wurde.
 Unabhängig davon ergänzt der Worker alle ``PT_IMAGE_IMPORT_INTERVAL_DAYS`` Tage fehlende
 Kartenbilder (:mod:`app.services.image_import`). Der erste Lauf startet kurz nach dem Start,
 wenn noch nie einer fertig wurde; er dauert wegen der sanften Abfrage einige Stunden.
+
+Alle ``PT_CARDMARKET_CATALOG_INTERVAL_HOURS`` Stunden lädt der Worker den offiziellen
+Cardmarket-Katalog samt Preisführer und verknüpft neue Sets mit ihrer Cardmarket-Ausgabe
+(:mod:`app.services.cardmarket_catalog`).
 """
 
 from __future__ import annotations
@@ -37,6 +41,7 @@ from app.providers.pricing import PriceProvider
 from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
 from app.scanner.storage import ReferenceStore
+from app.services.cardmarket_catalog import last_successful_import, run_catalog_import
 from app.services.collection import CollectionService, users_with_items
 from app.services.image_import import last_finished_run, last_run_incomplete, run_image_import
 from app.services.price_health import SourceHealth
@@ -197,6 +202,46 @@ async def image_import_forever(
             await asyncio.sleep(3600)  # nicht in einer Fehlerschleife hämmern
 
 
+CARDMARKET_START_DELAY = timedelta(minutes=2)
+
+
+def next_catalog_import(
+    now: datetime, last_success: datetime | None, interval_hours: int
+) -> datetime | None:
+    """Wann ist der nächste Cardmarket-Import fällig? ``None`` = abgeschaltet."""
+    if interval_hours <= 0:
+        return None
+    earliest = now + CARDMARKET_START_DELAY
+    if last_success is None:
+        return earliest
+    return max(earliest, last_success + timedelta(hours=interval_hours))
+
+
+async def cardmarket_forever(
+    session_factory: async_sessionmaker[AsyncSession], settings: Settings, client: TcgdexClient
+) -> None:
+    """Endlosschleife des Cardmarket-Imports (Katalog, Preisführer, Ausgabe je Set)."""
+    while True:
+        try:
+            async with session_factory() as session:
+                last = await last_successful_import(session)
+        except Exception:  # z. B. Migration beim Start noch nicht durch
+            log.exception("worker.cardmarket_status_failed")
+            await asyncio.sleep(CARDMARKET_START_DELAY.total_seconds())
+            continue
+        due = next_catalog_import(
+            datetime.now(UTC), last, settings.cardmarket_catalog_interval_hours
+        )
+        if due is None:
+            log.info("worker.cardmarket_disabled")
+            return
+        log.info("worker.cardmarket_scheduled", next_run=due.isoformat())
+        await asyncio.sleep(max((due - datetime.now(UTC)).total_seconds(), 0))
+        summary = await run_catalog_import(session_factory, settings, tcgdex=client)
+        if summary.error:
+            await asyncio.sleep(3600)  # nicht in einer Fehlerschleife hämmern
+
+
 async def run_forever(settings: Settings) -> None:
     """Endlosschleife: bis zur nächsten Uhrzeit schlafen, Runde ausführen, wiederholen."""
     engine = create_engine(settings.database_url)
@@ -212,6 +257,7 @@ async def run_forever(settings: Settings) -> None:
             providers = build_price_providers(settings, client)
             # Bild-Import läuft unabhängig (dauert Stunden); Referenz halten, am Ende beenden.
             images = asyncio.create_task(image_import_forever(session_factory, settings))
+            cardmarket = asyncio.create_task(cardmarket_forever(session_factory, settings, client))
             try:
                 while True:
                     next_run = next_run_after(
@@ -229,6 +275,7 @@ async def run_forever(settings: Settings) -> None:
                         log.exception("worker.housekeeping_failed")
             finally:
                 images.cancel()
+                cardmarket.cancel()
     finally:
         await engine.dispose()
 

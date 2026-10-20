@@ -48,6 +48,11 @@ from app.providers.pricing import (
     PriceQuote,
 )
 from app.providers.pricing.tcgdex_prices import CARDMARKET, TCGPLAYER
+from app.services.cardmarket_catalog import (
+    correct_cardmarket_quotes,
+    product_url,
+    resolve_product,
+)
 from app.services.price_health import SourceHealth
 from app.services.user_settings import (
     effective_factors,
@@ -254,6 +259,9 @@ class PriceService:
         if provider.kind == "external":
             # Externe Quellen dürfen keine eingebauten Quellen „vortäuschen“.
             quotes = [dataclasses.replace(q, source=provider.name) for q in quotes]
+        else:
+            # TCGdex verknüpft manche Sets mit der falschen Sprachfassung bei Cardmarket.
+            quotes = await correct_cardmarket_quotes(self._session, card, card_ref(card), quotes)
         stored = await self._store(card, quotes)
         return "fetched", True, None if quotes else "keine Preise", stored
 
@@ -318,7 +326,17 @@ class PriceService:
     async def get_prices(self, card: Card, user: User | None) -> CardPrices:
         """Aktuelle Preise je Quelle/Variante und Zustandspreise (Faktoren des Nutzers,
         ohne Nutzer die Standardfaktoren)."""
-        return (await self.prices_for_cards([card.id], user))[card.id]
+        prices = (await self.prices_for_cards([card.id], user))[card.id]
+        if prices.cardmarket_link is None and not any(
+            o.source == CARDMARKET for o in prices.offers
+        ):
+            # Umgehängtes Produkt ohne Werte im Preisführer: wenigstens richtig verlinken.
+            resolution = await resolve_product(self._session, card)
+            if resolution.corrected and resolution.product_id is not None:
+                prices = dataclasses.replace(
+                    prices, cardmarket_link=product_url(resolution.product_id)
+                )
+        return prices
 
     async def prices_for_cards(
         self, card_ids: Sequence[uuid.UUID], user: User | None

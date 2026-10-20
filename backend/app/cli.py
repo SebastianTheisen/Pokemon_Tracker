@@ -53,6 +53,9 @@ from app.providers.tcgdex import TcgdexClient
 from app.scanner.ocr import RapidOcrReader
 from app.scanner.runtime import ScannerRuntime
 from app.services.admin import AdminService
+from app.services.cardmarket_catalog import catalog_status as cardmarket_status
+from app.services.cardmarket_catalog import render_status as render_cardmarket_status
+from app.services.cardmarket_catalog import run_catalog_import
 from app.services.catalog_search import search_cards
 from app.services.catalog_sync import fill_image_fallbacks, sync_catalog
 from app.services.collection import CollectionService, ItemFilter, ItemInput
@@ -164,6 +167,42 @@ async def _import_images(
         dry_run=args.dry_run,
     )
     text = render_image_report(report)
+    if args.out:
+        await asyncio.to_thread(Path(args.out).write_text, text, encoding="utf-8")
+    print(text)
+
+
+async def _cardmarket_import(
+    factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
+) -> None:
+    """Cardmarket-Katalog + Preisführer laden, Sets mit ihrer Cardmarket-Ausgabe verknüpfen."""
+    if args.no_link:
+        summary = await run_catalog_import(factory, settings, tcgdex=None)
+    else:
+        async with TcgdexClient(
+            base_url=settings.tcgdex_base_url, user_agent=settings.http_user_agent
+        ) as client:
+            summary = await run_catalog_import(factory, settings, tcgdex=client)
+    print(
+        f"Produkte: {summary.products}, Preise: {summary.prices}, Ausgaben: "
+        f"{summary.expansions} (mit Zwillingen: {summary.expansions_with_twins}), "
+        f"feste Zuordnungen geändert: {summary.known_links}, Sets verknüpft: {summary.sets_linked}"
+    )
+    async with factory() as session:
+        text = render_cardmarket_status(await cardmarket_status(session))
+    if args.out:
+        await asyncio.to_thread(Path(args.out).write_text, text, encoding="utf-8")
+    print(text)
+    if summary.error:
+        raise SystemExit(f"Fehler: {summary.error}")
+
+
+async def _cardmarket_status(
+    factory: async_sessionmaker[AsyncSession], _settings: Settings, args: argparse.Namespace
+) -> None:
+    """Stand des Cardmarket-Katalogs und unsichere Sets."""
+    async with factory() as session:
+        text = render_cardmarket_status(await cardmarket_status(session))
     if args.out:
         await asyncio.to_thread(Path(args.out).write_text, text, encoding="utf-8")
     print(text)
@@ -465,6 +504,22 @@ def _add_image_commands(commands: Any) -> None:
     status.set_defaults(handler=_image_status)
 
 
+def _add_cardmarket_commands(commands: Any) -> None:
+    cardmarket = commands.add_parser(
+        "cardmarket-import", help="Cardmarket-Katalog + Preisführer laden, Sets verknüpfen"
+    )
+    cardmarket.add_argument(
+        "--no-link", action="store_true", help="Sets nicht bei TCGdex nachfragen (schneller)"
+    )
+    cardmarket.add_argument("--out", help="Status zusätzlich als Markdown-Datei")
+    cardmarket.set_defaults(handler=_cardmarket_import)
+    cardmarket_info = commands.add_parser(
+        "cardmarket-status", help="Stand des Cardmarket-Katalogs und unsichere Sets"
+    )
+    cardmarket_info.add_argument("--out", help="zusätzlich als Markdown-Datei")
+    cardmarket_info.set_defaults(handler=_cardmarket_status)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.cli", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -491,6 +546,8 @@ def build_parser() -> argparse.ArgumentParser:
     images.set_defaults(handler=_fill_images)
 
     _add_image_commands(commands)
+
+    _add_cardmarket_commands(commands)
 
     prices = commands.add_parser(
         "refresh-prices", help="Preise aller vorgemerkten Karten jetzt aktualisieren"

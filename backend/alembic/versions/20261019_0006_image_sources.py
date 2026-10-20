@@ -59,10 +59,16 @@ def upgrade() -> None:
         sa.Column("url", sa.String(length=500), nullable=False),
         sa.Column("found", sa.Boolean(), nullable=False),
         sa.Column(
-            "checked_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+            "checked_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
         ),
         sa.ForeignKeyConstraint(
-            ["card_id"], ["cards.id"], name=op.f("fk_image_probes_card_id_cards"), ondelete="CASCADE"
+            ["card_id"],
+            ["cards.id"],
+            name=op.f("fk_image_probes_card_id_cards"),
+            ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("card_id", "source", name=op.f("pk_image_probes")),
     )
@@ -70,7 +76,10 @@ def upgrade() -> None:
         "image_import_runs",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column(
-            "started_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+            "started_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
         ),
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("report", postgresql.JSONB(astext_type=sa.Text()), nullable=False),

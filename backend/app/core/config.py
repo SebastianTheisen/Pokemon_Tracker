@@ -109,6 +109,18 @@ class Settings(BaseSettings):
     )
     image_probe_max_per_run: int = Field(default=6000, ge=0)
 
+    # --- Cardmarket-Katalog (offizielle Download-Dateien) ----------------------
+    cardmarket_catalog_url: str = "https://downloads.s3.cardmarket.com/productCatalog"
+    cardmarket_catalog_interval_hours: int = Field(
+        default=24, ge=0, description="Katalog + Preisführer im Worker alle n Stunden; 0 = aus."
+    )
+    cardmarket_set_link_concurrency: int = Field(default=4, ge=1, le=16)
+    cardmarket_set_recheck_days: int = Field(
+        default=14,
+        ge=1,
+        description="Sets, für die TCGdex keine Cardmarket-ID kennt, erst danach erneut fragen.",
+    )
+
     # --- Preise --------------------------------------------------------------
     price_max_age_hours: int = Field(
         default=12, ge=1, le=168, description="Ältere Preise werden beim Ansehen neu geholt."
