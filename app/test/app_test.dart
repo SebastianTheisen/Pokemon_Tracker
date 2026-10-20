@@ -262,4 +262,34 @@ void main() {
     expect(find.text('Cardmarket DE ab NM'), findsOneWidget);
     expect(find.byKey(const Key('scan-ebay')), findsOneWidget);
   });
+
+  testWidgets('Scan: „Ist ein Slab?“ – Firma Beckett, Note 10, Black Label', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('scan-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scan-gallery')));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('scan-slab')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scan-slab')));
+    await tester.pumpAndSettle();
+    expect(find.text('Slab (gegradet)'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('item-company')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Beckett (BGS)').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('item-black-label')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('item-save')));
+    await tester.tap(find.byKey(const Key('item-save')));
+    await tester.pumpAndSettle();
+
+    expect(api.lastItemBody?['grading_company'], 'BGS');
+    expect(api.lastItemBody?['grade'], '10 BL');
+    expect(api.lastItemBody?.containsKey('condition'), isFalse);
+    expect(api.calls, contains('confirm:scan1:c1'));
+  });
 }

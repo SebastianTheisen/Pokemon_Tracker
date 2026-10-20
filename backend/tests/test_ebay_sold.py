@@ -168,3 +168,9 @@ async def test_api_save_values_graded_item(
     ebay = [o for o in prices["offers"] if o["source"] == "ebay_sold"]
     assert {o["variant"] for o in ebay} == {"raw", "graded:PSA 10"}
     assert all(o["url"] == PAGE for o in ebay)
+
+
+def test_black_label_group() -> None:
+    assert grading_group("Pokemon Glurak BGS 10 Black Label") == "BGS 10 BL"
+    assert graded_variant("BGS", "10 BL") == "graded:BGS 10 BL"
+    assert grading_group("Lugia V TAG 10") == "TAG 10"

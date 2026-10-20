@@ -160,7 +160,10 @@ def grading_group(title: str) -> str:
         return RAW_VARIANT
     company = match.group(1).upper()
     company = "BGS" if company == "BECKETT" else company
-    return f"{company} {match.group(2).replace(',', '.')}"
+    grade = match.group(2).replace(",", ".")
+    if grade == "10" and re.search(r"BLACK\s*LABEL", title, re.I):
+        grade = "10 BL"
+    return f"{company} {grade}"
 
 
 def _number_tokens(card: Card) -> set[str]:

@@ -345,12 +345,17 @@ class CollectionService:
         if isinstance(folder_id := changes.get("folder_id"), uuid.UUID):  # geprüft oben
             item.folder_id = (await self._own_folder(folder_id)).id
         old_quantity = item.quantity
+        kind_changed = _switch_kind(item, changes)
         for name in ("variant", "condition", "quantity", "purchase_price", "purchase_date",
                      "custom_price", "note", "grade"):  # fmt: skip
             if name in changes:
                 setattr(item, name, changes[name])
         if item.note is not None:
             item.note = item.note.strip() or None
+        if kind_changed:
+            # Rohkarte ↔ Slab: neuer Ausgangswert, sonst wäre die „Veränderung“ sinnlos.
+            await self._session.flush()
+            item.value_at_add = (await self._current_unit_value(item)).unit_value
         if item.quantity != old_quantity:
             current = await self._current_unit_value(item)
             self._event(
@@ -698,6 +703,41 @@ def _export_row(entry: ValuedItem) -> list[object]:
     ]
 
 
+def _switch_kind(item: CollectionItem, changes: dict[str, object]) -> bool:
+    """Rohkarte ↔ Slab umstellen (``grading_company`` gesetzt bzw. ``null``).
+
+    Slab: Firma setzen, Zustand entfällt. Rohkarte: Firma und Note entfallen, Zustand NM
+    (sofern nicht gleichzeitig ein anderer angegeben ist). Gibt zurück, ob sich die Art geändert
+    hat.
+    """
+    if "grading_company" not in changes:
+        return False
+    company = changes["grading_company"]
+    was_graded = item.grading_company is not None
+    if company is None:
+        item.grading_company = None
+        item.grade = None
+        item.condition = item.condition or "NM"
+    else:
+        item.grading_company = GradingCompany(str(company))
+        item.condition = None
+    return was_graded != (company is not None)
+
+
+def _target_kind(item: CollectionItem, changes: dict[str, object]) -> str:
+    """Art der Position nach der Änderung (Rohkarte ↔ Slab über ``grading_company``)."""
+    if "grading_company" not in changes:
+        return item_kind(item)
+    if item.card_id is None:
+        raise InvalidInputError("Nur Karten können gegradet sein.")
+    company = changes["grading_company"]
+    if company is None:
+        return "raw"
+    if company not in set(GradingCompany):
+        raise InvalidInputError("Unbekannte Grading-Firma.")
+    return "graded"
+
+
 def _validate_changes(item: CollectionItem, changes: dict[str, object]) -> None:
     """Fachliche Prüfung einer Änderung, bevor irgendetwas gesetzt wird."""
     for name in NOT_NULLABLE:
@@ -707,12 +747,15 @@ def _validate_changes(item: CollectionItem, changes: dict[str, object]) -> None:
         raise InvalidInputError("Ordner angeben.")
     if "variant" in changes and changes["variant"] not in VARIANTS:
         raise InvalidInputError(f"Variante muss eine von {', '.join(VARIANTS)} sein.")
+    kind = _target_kind(item, changes)
+    if kind == "graded" and item.grade is None and not changes.get("grade"):
+        raise InvalidInputError("Für einen Slab bitte die Note angeben.")
     if "condition" in changes:
-        if item_kind(item) != "raw":
+        if kind != "raw":
             raise InvalidInputError("Zustand gibt es nur bei Rohkarten.")
         if changes["condition"] not in CONDITIONS:
             raise InvalidInputError("Unbekannter Zustand.")
-    if "grade" in changes and item_kind(item) != "graded":
+    if "grade" in changes and kind != "graded":
         raise InvalidInputError("Eine Note gibt es nur bei gegradeten Karten.")
     quantity = changes.get("quantity", item.quantity)
     if not isinstance(quantity, int) or quantity < 1:

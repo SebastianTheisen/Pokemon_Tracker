@@ -31,7 +31,8 @@ Money = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)]
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 FolderName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
 Note = Annotated[str, StringConstraints(max_length=500)]
-Grade = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^\d{1,2}(\.\d)?$")]
+# Note, z. B. „10“, „9.5“ oder „10 BL“ (Black Label, z. B. Beckett/CGC).
+Grade = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^\d{1,2}(\.\d)?( BL)?$")]
 Variant = Literal["normal", "reverse"]
 
 
@@ -134,6 +135,10 @@ class ItemUpdate(BaseModel):
     custom_price: Money | None = None
     note: Note | None = None
     grade: Grade | None = None
+    grading_company: GradingCompany | None = Field(
+        default=None,
+        description="Rohkarte ↔ Slab umstellen: Firma setzen bzw. ``null`` (dann Zustand NM).",
+    )
 
 
 class ValueOut(BaseModel):

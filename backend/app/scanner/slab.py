@@ -5,6 +5,9 @@ Ein PSA-Label sieht im OCR z. B. so aus (Testfoto 04)::
     #110 · 2022 POKEMON JPN.SWSH · GEM MT · FA/LUGIA V · 10 · PARADIGMTRIGGER · 73270136 · PSA
 
 Erkannt wird ein Slab, wenn eine Grading-Firma **und** eine Notenbezeichnung vorkommen.
+Neuere PSA-Labels tragen „PSA“ nur als kleines Logo (kein Text für die OCR). Dann gilt ein
+Label als PSA, wenn Kopfzeile („2025 POKEMON M2A JP“), Notenwort und eine 8–10-stellige
+Zertifikatsnummer zusammen vorkommen (Testfoto Mega-Dragonite ex, 20.10.2026).
 Daraus entstehen: Firma, Note, Nummer (``#110``), englischer Name (``LUGIA V``) und ein
 Sprachhinweis (``JPN``). Gegradete Karten zeigt die App immer zur Bestätigung an.
 """
@@ -47,6 +50,7 @@ _PSA_WORD_GRADES = {
 }
 _LANGUAGE_HINTS = (
     ("JPN", "ja"),
+    ("JP", "ja"),
     ("JAPANESE", "ja"),
     ("KOREAN", "ko"),
     ("KOR", "ko"),
@@ -59,6 +63,9 @@ _NOT_A_NAME = re.compile(
     r"|BASIC|BASIS|STAGE|WEAKNESS|RESISTANCE|RETREAT|ABILITY|TRAINER"
 )
 _MAX_GRADE = 10.0
+_HEADER = re.compile(r"(?:19|20)\d{2}\s+POK[EÉ]MON")
+_CERT_NUMBER = re.compile(r"^\d{8,10}$")
+_BLACK_LABEL = re.compile(r"BLACK\s*LABEL")
 _GRADE_SEARCH_DISTANCE = 3
 
 
@@ -90,6 +97,11 @@ def _find_company(texts: Sequence[str]) -> str | None:
     for company, pattern in _COMPANIES:
         if any(pattern.search(text) for text in texts):
             return company
+    # PSA-Logo ohne lesbaren Schriftzug: typischer Label-Aufbau genügt.
+    if any(_HEADER.search(text) for text in texts) and any(
+        _CERT_NUMBER.match(text.replace(" ", "")) for text in texts
+    ):
+        return "PSA"
     return None
 
 
@@ -162,6 +174,8 @@ def parse_slab(lines: Sequence[OcrLine]) -> SlabLabel | None:
         ),
         None,
     )
+    if grade == "10" and any(_BLACK_LABEL.search(text) for text in texts):
+        grade = "10 BL"
     return SlabLabel(
         company=company,
         grade=grade,

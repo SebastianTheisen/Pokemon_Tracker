@@ -447,6 +447,40 @@ async def test_patch_rejects_nulls_and_grade_on_raw_cards(
     assert regraded.json()["grade"] == "9.5"
 
 
+async def test_switch_raw_card_to_slab_and_back(
+    client: AsyncClient, register_user: RegisterUser, cards: tuple[Card, Card]
+) -> None:
+    alice = await register_user("alice@example.com")
+    item = await _add(client, alice, card_id=str(cards[0].id))
+    url = f"{API}/collection/items/{item['id']}"
+
+    missing_grade = await client.patch(url, json={"grading_company": "BGS"}, headers=alice.headers)
+    assert missing_grade.status_code == 400
+
+    slab = await client.patch(
+        url, json={"grading_company": "BGS", "grade": "10 BL"}, headers=alice.headers
+    )
+    assert slab.status_code == 200, slab.text
+    body = slab.json()
+    assert (body["kind"], body["grading_company"], body["grade"], body["condition"]) == (
+        "graded",
+        "BGS",
+        "10 BL",
+        None,
+    )
+    tag = await client.patch(url, json={"grading_company": "TAG"}, headers=alice.headers)
+    assert tag.json()["grading_company"] == "TAG"  # Note bleibt
+
+    raw = await client.patch(
+        url, json={"grading_company": None, "condition": "EX"}, headers=alice.headers
+    )
+    assert (raw.json()["kind"], raw.json()["grade"], raw.json()["condition"]) == (
+        "raw",
+        None,
+        "EX",
+    )
+
+
 async def test_csv_export_neutralizes_formulas(
     client: AsyncClient, register_user: RegisterUser
 ) -> None:

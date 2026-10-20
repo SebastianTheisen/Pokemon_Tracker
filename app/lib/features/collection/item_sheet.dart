@@ -12,7 +12,14 @@ final foldersProvider = FutureProvider.autoDispose<List<Folder>>(
   (ref) => ref.watch(apiProvider).folders(),
 );
 
-const gradingCompanies = ['PSA', 'BGS', 'CGC', 'OTHER'];
+const gradingCompanies = ['PSA', 'BGS', 'CGC', 'SGC', 'TAG', 'ACE', 'OTHER'];
+
+const gradingCompanyLabels = {'BGS': 'Beckett (BGS)', 'OTHER': 'Andere'};
+
+/// Noten von 10 bis 1 in halben Schritten.
+final gradeValues = [
+  for (var value = 20; value >= 2; value--) value.isEven ? '${value ~/ 2}' : '${value ~/ 2}.5',
+];
 
 /// Öffnet das Formular. Gibt die gespeicherte Position zurück (oder `null`).
 Future<CollectionItem?> showItemSheet(
@@ -46,8 +53,9 @@ class _ItemFormState extends ConsumerState<ItemForm> {
   late String _condition = _item?.condition ?? 'NM';
   late int _quantity = _item?.quantity ?? 1;
   late bool _graded = _item?.kind == 'graded' || widget.grading != null;
-  late String _company = _item?.gradingCompany ?? widget.grading?.company ?? 'PSA';
-  late final _grade = TextEditingController(text: _item?.grade ?? widget.grading?.grade ?? '');
+  late String _company = _initialCompany();
+  late String _grade = _initialGrade();
+  late bool _blackLabel = (_item?.grade ?? widget.grading?.grade ?? '').endsWith(' BL');
   late final _purchase = TextEditingController(text: _item?.purchasePrice ?? '');
   late final _custom = TextEditingController(text: _item?.customPrice ?? '');
   late final _note = TextEditingController(text: _item?.note ?? '');
@@ -58,7 +66,7 @@ class _ItemFormState extends ConsumerState<ItemForm> {
 
   @override
   void dispose() {
-    for (final controller in [_grade, _purchase, _custom, _note]) {
+    for (final controller in [_purchase, _custom, _note]) {
       controller.dispose();
     }
     super.dispose();
@@ -66,6 +74,19 @@ class _ItemFormState extends ConsumerState<ItemForm> {
 
   /// „1.234,50“ / „12,50“ / „12.50“ → "1234.50" / "12.50"; leer → null.
   static String? _amount(TextEditingController controller) => normalizeAmount(controller.text);
+
+  String _initialCompany() {
+    final company = _item?.gradingCompany ?? widget.grading?.company ?? 'PSA';
+    return gradingCompanies.contains(company) ? company : 'OTHER';
+  }
+
+  String _initialGrade() {
+    final grade = (_item?.grade ?? widget.grading?.grade ?? '10').replaceAll(' BL', '');
+    return gradeValues.contains(grade) ? grade : '10';
+  }
+
+  /// Note für die API: „10“, „9.5“ oder „10 BL“ (Black Label).
+  String get _gradeValue => _blackLabel && _grade == '10' ? '10 BL' : _grade;
 
   Map<String, Object?> _body() => {
     'folder_id': ?_folderId,
@@ -75,8 +96,9 @@ class _ItemFormState extends ConsumerState<ItemForm> {
     'purchase_price': _amount(_purchase),
     'custom_price': _amount(_custom),
     'note': _note.text.trim().isEmpty ? null : _note.text.trim(),
-    if (_graded && !_isEdit) 'grading_company': _company,
-    if (_graded) 'grade': _grade.text.trim().isEmpty ? null : _grade.text.trim(),
+    // Beim Bearbeiten auch Rohkarte ↔ Slab umstellen (Firma setzen bzw. entfernen).
+    if (!_isSealed && (_graded || _isEdit)) 'grading_company': _graded ? _company : null,
+    if (_graded) 'grade': _gradeValue,
   };
 
   Future<void> _save() async {
@@ -140,6 +162,19 @@ class _ItemFormState extends ConsumerState<ItemForm> {
               ],
             ),
             const SizedBox(height: 20),
+            if (!_isSealed) ...[
+              SegmentedButton<bool>(
+                key: const Key('item-kind'),
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Rohkarte')),
+                  ButtonSegment(value: true, label: Text('Slab (gegradet)')),
+                ],
+                selected: {_graded},
+                onSelectionChanged: (value) => setState(() => _graded = value.first),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (_graded) ..._gradingFields(),
             if (!_isSealed && !_graded) ...[
               const Text('Zustand', style: TextStyle(color: AppColors.textMuted)),
               const SizedBox(height: 8),
@@ -189,7 +224,7 @@ class _ItemFormState extends ConsumerState<ItemForm> {
                 initiallyExpanded: _hasExtras,
                 title: const Text('Weitere Angaben'),
                 subtitle: const Text(
-                  'Kaufpreis, Eigenpreis, Reverse Holo, Slab, Notiz',
+                  'Kaufpreis, Eigenpreis, Reverse Holo, Notiz',
                   style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                 ),
                 children: [_extras(folders)],
@@ -207,6 +242,49 @@ class _ItemFormState extends ConsumerState<ItemForm> {
     );
   }
 
+  List<Widget> _gradingFields() => [
+    DropdownButtonFormField<String>(
+      key: const Key('item-company'),
+      isExpanded: true,
+      initialValue: _company,
+      decoration: const InputDecoration(labelText: 'Grading-Firma'),
+      items: [
+        for (final company in gradingCompanies)
+          DropdownMenuItem(value: company, child: Text(gradingCompanyLabels[company] ?? company)),
+      ],
+      onChanged: (value) => setState(() => _company = value ?? 'PSA'),
+    ),
+    const SizedBox(height: 12),
+    Row(
+      children: [
+        Expanded(
+          child: DropdownButtonFormField<String>(
+            key: const Key('item-grade'),
+            isExpanded: true,
+            initialValue: _grade,
+            decoration: const InputDecoration(labelText: 'Note'),
+            items: [
+              for (final grade in gradeValues)
+                DropdownMenuItem(value: grade, child: Text(grade.replaceAll('.', ','))),
+            ],
+            onChanged: (value) => setState(() => _grade = value ?? '10'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: SwitchListTile(
+            key: const Key('item-black-label'),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Black Label'),
+            value: _blackLabel && _grade == '10',
+            onChanged: _grade == '10' ? (value) => setState(() => _blackLabel = value) : null,
+          ),
+        ),
+      ],
+    ),
+    const SizedBox(height: 12),
+  ];
+
   Widget _extras(List<Folder> folders) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -219,42 +297,6 @@ class _ItemFormState extends ConsumerState<ItemForm> {
           selected: {_variant},
           onSelectionChanged: (value) => setState(() => _variant = value.first),
         ),
-        if (!_isEdit || _graded)
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Gegradet (Slab)'),
-            value: _graded,
-            onChanged: _isEdit ? null : (value) => setState(() => _graded = value),
-          ),
-        if (_graded) ...[
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: _company,
-                  decoration: const InputDecoration(labelText: 'Firma'),
-                  items: [
-                    for (final company in gradingCompanies)
-                      DropdownMenuItem(
-                        value: company,
-                        child: Text(company == 'OTHER' ? 'Andere' : company),
-                      ),
-                  ],
-                  onChanged: _isEdit ? null : (value) => setState(() => _company = value ?? 'PSA'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _grade,
-                  decoration: const InputDecoration(labelText: 'Note, z. B. 10'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-        ],
       ],
       Row(
         children: [
@@ -279,7 +321,8 @@ class _ItemFormState extends ConsumerState<ItemForm> {
         const Padding(
           padding: EdgeInsets.only(top: 6),
           child: Text(
-            'Slabs und versiegelte Produkte haben nur mit Eigenpreis einen Wert.',
+            'Slabs: Wert aus gespeicherten eBay-Verkäufen gleicher Firma und Note, sonst '
+            'Eigenpreis. Versiegelte Produkte nur mit Eigenpreis.',
             style: TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
         ),

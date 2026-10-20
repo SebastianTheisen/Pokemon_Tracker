@@ -211,3 +211,30 @@ def test_slab_language_hint_used_when_text_has_none() -> None:
     )
     assert features.language.languages == ("ja",)
     assert features.language.script == "label"
+
+
+def test_psa_label_with_logo_only() -> None:
+    """Neues PSA-Label: „PSA“ nur als Logo – OCR-Zeilen wie beim echten Foto (20.10.2026)."""
+    slab = parse_slab(
+        lines(
+            "2025 POKEMON M2a JP",
+            "#246",
+            "MEGA DRAGONITE ex",
+            "GEM MT",
+            "SPECIAL ART RARE",
+            "10",
+            "154634082",
+            "メガカイュービX",
+        )
+    )
+    assert slab is not None
+    assert (slab.company, slab.grade, slab.number, slab.language_hint) == ("PSA", "10", "246", "ja")
+    assert slab.name_hint == "MEGA DRAGONITE EX"
+
+
+def test_black_label_and_no_false_psa() -> None:
+    black = parse_slab(lines("BECKETT", "2021 POKEMON", "PRISTINE 10", "BLACK LABEL"))
+    assert black is not None and black.grade == "10 BL"
+    # Ohne Kopfzeile oder Zertifikatsnummer bleibt es keine PSA-Erkennung.
+    assert parse_slab(lines("GEM MT", "10", "154634082")) is None
+    assert parse_slab(lines("2025 POKEMON M2a JP", "GEM MT", "10")) is None

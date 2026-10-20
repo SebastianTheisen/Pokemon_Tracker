@@ -149,6 +149,26 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
     if (ok) invalidateCollection(ref);
   }
 
+  /// Nicht als Slab erkannt, ist aber einer: Formular mit Slab-Auswahl (Firma, Note, Black
+  /// Label) öffnen; beim Speichern wird der Scan wie beim schnellen Hinzufügen bestätigt.
+  Future<void> _addAsSlab() async {
+    final card = _selected;
+    if (card == null) return;
+    final saved = await showItemSheet(
+      context,
+      card: card,
+      grading: widget.result.grading ?? const Grading(company: 'PSA', grade: '10'),
+    );
+    if (saved == null || !mounted) return;
+    await runAction(
+      context,
+      () => ref.read(apiProvider).confirmScan(widget.result.scanId, card.id),
+    );
+    if (!mounted) return;
+    setState(() => _added = saved);
+    invalidateCollection(ref);
+  }
+
   Future<void> _editAdded() async {
     final item = _added;
     if (item == null) return;
@@ -250,6 +270,11 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
             Wrap(
               alignment: WrapAlignment.center,
               children: [
+                TextButton(
+                  key: const Key('scan-slab'),
+                  onPressed: _busy ? null : _addAsSlab,
+                  child: Text(widget.result.grading == null ? 'Ist ein Slab?' : 'Slab anpassen'),
+                ),
                 TextButton(
                   key: const Key('scan-other'),
                   onPressed: () => setState(() => _showAlternatives = !_showAlternatives),

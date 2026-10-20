@@ -52,8 +52,11 @@ class ProductKind(enum.StrEnum):
 
 class GradingCompany(enum.StrEnum):
     PSA = "PSA"
-    BGS = "BGS"
+    BGS = "BGS"  # Beckett
     CGC = "CGC"
+    SGC = "SGC"
+    TAG = "TAG"
+    ACE = "ACE"
     OTHER = "OTHER"
 
 
