@@ -2,12 +2,16 @@
 # Phase 5: App „Kartenkiste“ auf dem VPS bauen und ausliefern.
 #   1. Build-Container (Flutter + Android-SDK) bauen – beim ersten Mal ca. 10–20 min
 #   2. Web-App (PWA) bauen → wird von der API unter https://kartenkiste.<tailnet>.ts.net/ ausgeliefert
-#   3. Android-APK bauen (fest auf die Tailscale-Adresse eingestellt) → Download unter …/kartenkiste.apk
+#   3. Android-APK bauen (nur mit --apk; fest auf die Tailscale-Adresse eingestellt) →
+#      Download unter …/kartenkiste.apk. Ohne --apk bleibt die zuletzt gebaute APK erhalten.
 #   4. API neu starten und prüfen
 # Ergebnis: docs/phase5/app_build.md
 #
-#   bash deploy/phase5_app.sh
+#   bash deploy/phase5_app.sh          # nur Web-App (schnell)
+#   bash deploy/phase5_app.sh --apk    # zusätzlich Android-APK (dauert deutlich länger)
 set -euo pipefail
+build_apk=false
+[[ "${1:-}" == "--apk" ]] && build_apk=true
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${REPO_ROOT}/docs/phase5"
@@ -39,21 +43,39 @@ fi
 flutter_version="$(docker compose --profile build run --rm -T app-builder flutter --version 2>/dev/null | head -1)"
 echo "${flutter_version}"
 
-step "3/5 Web-App und Android-APK bauen"
+if ${build_apk}; then
+  step "3/5 Web-App und Android-APK bauen"
+else
+  step "3/5 Web-App bauen (APK nur mit --apk)"
+fi
 app_log="${OUT_DIR}/app_flutter_build.log"
+# „flutter build web“ leert build/web – die vorhandene APK vorher sichern.
+kept_apk="$(mktemp)"
+if [[ -f app/build/web/kartenkiste.apk ]]; then cp app/build/web/kartenkiste.apk "${kept_apk}"; fi
+apk_commands=""
+if ${build_apk}; then
+  apk_commands="flutter build apk --release --dart-define=API_BASE_URL=${api_url}
+    cp build/app/outputs/flutter-apk/app-release.apk build/web/kartenkiste.apk"
+fi
 start=$(date +%s)
 if ! docker compose --profile build run --rm -T app-builder sh -ec "
     flutter pub get
     flutter build web --release --no-web-resources-cdn
-    flutter build apk --release --dart-define=API_BASE_URL=${api_url}
-    cp build/app/outputs/flutter-apk/app-release.apk build/web/kartenkiste.apk
+    ${apk_commands}
   " > "${app_log}" 2>&1; then
   tail -60 "${app_log}" | mask
+  rm -f "${kept_apk}"
   fail "App-Build fehlgeschlagen (Protokoll: ${app_log})."
 fi
+if ! ${build_apk} && [[ -s "${kept_apk}" ]]; then
+  cp "${kept_apk}" app/build/web/kartenkiste.apk
+fi
+rm -f "${kept_apk}"
 duration=$(( $(date +%s) - start ))
 sed -i -E 's/\.[a-z0-9-]+\.ts\.net/.<tailnet>.ts.net/g' "${app_log}"
-apk_size="$(du -h app/build/web/kartenkiste.apk | cut -f1)"
+apk_size="$(du -h app/build/web/kartenkiste.apk 2>/dev/null | cut -f1 || true)"
+apk_size="${apk_size:-keine}"
+${build_apk} || apk_size="${apk_size} (nicht neu gebaut)"
 web_size="$(du -sh --exclude=kartenkiste.apk app/build/web | cut -f1)"
 echo "Fertig in ${duration} s – APK ${apk_size}, Web ${web_size}"
 
