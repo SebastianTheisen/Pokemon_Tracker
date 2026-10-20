@@ -45,10 +45,8 @@ def short(value: object, limit: int = 160) -> str:
 
 def get(client: httpx.Client, path: str) -> dict[str, Any] | None:
     response = client.get(f"{API}{path}")
-    if response.status_code != 200:
-        emit(
-            f"  - ❌ `{path.split('?')[0]}` → HTTP {response.status_code}: {short(response.text, 200)}"
-        )
+    if response.status_code != httpx.codes.OK:
+        emit(f"  - ❌ `{path}` → HTTP {response.status_code}: {short(response.text, 200)}")
         return None
     data = response.json().get("data")
     return data if isinstance(data, dict) else None
