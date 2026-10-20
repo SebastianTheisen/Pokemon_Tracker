@@ -146,6 +146,10 @@ class Settings(BaseSettings):
         default=30, ge=1, description="Angesehene Karten werden so lange täglich mitgeführt."
     )
     price_refresh_concurrency: int = Field(default=4, ge=1, le=16)
+    apify_token: SecretStr | None = Field(
+        default=None,
+        description="API-Token von Apify (Cardmarket-Angebote, eBay-Verkäufe); nur in der .env.",
+    )
     extra_price_providers: list[str] = Field(
         default_factory=list,
         description=(
