@@ -11,6 +11,7 @@ import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
 import '../../widgets/value_chart.dart';
+import '../cardmarket/cardmarket_edition.dart';
 import '../collection/item_sheet.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../wishlist/wishlist_screen.dart';
@@ -224,6 +225,10 @@ class _CardBodyState extends ConsumerState<_CardBody> {
                 ),
               ],
             ),
+          ),
+          CardmarketEditionTile(
+            cardId: card.id,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
           ),
           AsyncBody(
             value: prices,

@@ -117,6 +117,41 @@ Json scanJson({bool confident = true, Json? grading}) => {
   'can_save_reference': true,
 };
 
+/// Cardmarket-Auswahl wie vom Server; mit [twins] zusätzlich die chinesische Ausgabe.
+Json cardmarketChoiceJson({
+  int selected = 907902,
+  bool twins = false,
+  bool uncertain = false,
+  String setSource = 'tcgdex',
+}) {
+  Json option(int product, int expansion, String? label, String trend) => {
+    'product_id': product,
+    'expansion_id': expansion,
+    'expansion_label': label,
+    'expansion_size': 176,
+    'name': 'Charizard [Energy Burn | Fire Spin]',
+    'trend': trend,
+    'low': null,
+    'url': 'https://www.cardmarket.com/de/Pokemon/Products?idProduct=$product',
+    'selected': product == selected,
+    'from_tcgdex': product == 908315,
+  };
+  return {
+    'card_id': 'c1',
+    'product_id': selected,
+    'expansion_id': selected == 907902 ? 6602 : 6603,
+    'reason': 'tcgdex',
+    'set_source': setSource,
+    'uncertain': uncertain,
+    'catalog_ready': true,
+    'url': 'https://www.cardmarket.com/de/Pokemon/Products?idProduct=$selected',
+    'options': [
+      option(907902, 6602, 'Japanisch', '158.67'),
+      if (twins) option(908315, 6603, null, '66.34'),
+    ],
+  };
+}
+
 /// API-Attrappe: zeichnet Aufrufe auf und liefert feste Antworten.
 class FakeApi extends Api {
   FakeApi({this.loggedIn = false, this.role = 'user'})
@@ -203,6 +238,29 @@ class FakeApi extends Api {
 
   @override
   Future<CardPrices> prices(String cardId) async => CardPrices.fromJson(pricesJson);
+
+  /// Cardmarket-Ausgabe: Standard eindeutig (keine Auswahl sichtbar).
+  Json cardmarketJson = cardmarketChoiceJson();
+
+  @override
+  Future<CardmarketChoice> cardmarketChoice(String cardId) async =>
+      CardmarketChoice.fromJson(cardmarketJson);
+
+  @override
+  Future<CardmarketChoice> chooseCardmarket(String cardId, int productId) async {
+    calls.add('chooseCardmarket:$cardId:$productId');
+    cardmarketJson = cardmarketChoiceJson(selected: productId, twins: true, setSource: 'user');
+    return CardmarketChoice.fromJson({
+      ...cardmarketJson,
+      'set_changed': true,
+      'cards_affected': 176,
+    });
+  }
+
+  @override
+  Future<void> labelCardmarketExpansion(int expansionId, String label) async {
+    calls.add('labelExpansion:$expansionId:$label');
+  }
 
   String? rememberedCard;
 

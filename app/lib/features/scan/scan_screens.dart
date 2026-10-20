@@ -17,6 +17,7 @@ import '../../widgets/common.dart';
 import '../collection/item_sheet.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../card/card_detail_screen.dart';
+import '../cardmarket/cardmarket_edition.dart';
 import '../search/search_screen.dart';
 import '../wishlist/wishlist_screen.dart';
 
@@ -258,6 +259,8 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
             ),
           const SizedBox(height: 12),
           _ScanPrice(card: selected, grading: widget.result.grading),
+          if (widget.result.grading == null)
+            CardmarketEditionTile(cardId: selected.id, padding: const EdgeInsets.only(top: 12)),
           const SizedBox(height: 20),
           if (added == null) ...[
             FilledButton.icon(

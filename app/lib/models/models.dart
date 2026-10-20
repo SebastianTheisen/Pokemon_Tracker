@@ -403,12 +403,111 @@ class CardPrices {
   final List<Offer> offers;
   final List<ConditionPrice> conditions;
 
-  /// Von Nutzern korrigierte Cardmarket-Seite (statt der TCGdex-Zuordnung).
+  /// Korrigierte Cardmarket-Seite: per Lesezeichen gemerkt oder – wenn das richtige Produkt
+  /// keinen Preis hat – die Seite des richtigen Produkts.
   final String? cardmarketLink;
 
   /// Cardmarket-Seite der Karte: korrigierte Seite, sonst der Link aus dem TCGdex-Preis.
   String? get cardmarketPage =>
       cardmarketLink ?? offers.where((o) => o.source == 'cardmarket').firstOrNull?.url;
+}
+
+/// Dieselbe Karte in einer Cardmarket-Ausgabe (Sprachfassung), z. B. japanisch oder chinesisch.
+class CardmarketOption {
+  const CardmarketOption({
+    required this.productId,
+    required this.expansionId,
+    required this.name,
+    required this.url,
+    required this.selected,
+    required this.fromTcgdex,
+    this.expansionLabel,
+    this.expansionSize,
+    this.trend,
+    this.low,
+  });
+
+  factory CardmarketOption.fromJson(Json json) => CardmarketOption(
+    productId: json.integer('product_id'),
+    expansionId: json.integer('expansion_id'),
+    expansionLabel: json.strOrNull('expansion_label'),
+    expansionSize: json.intOrNull('expansion_size'),
+    name: json.str('name'),
+    trend: json.strOrNull('trend'),
+    low: json.strOrNull('low'),
+    url: json.str('url'),
+    selected: json.flag('selected'),
+    fromTcgdex: json.flag('from_tcgdex'),
+  );
+
+  final int productId;
+  final int expansionId;
+
+  /// Bezeichnung der Ausgabe („Japanisch“); steht nicht im Cardmarket-Download.
+  final String? expansionLabel;
+  final int? expansionSize;
+  final String name;
+  final String? trend;
+  final String? low;
+  final String url;
+  final bool selected;
+  final bool fromTcgdex;
+
+  String get expansionTitle => expansionLabel ?? 'Ausgabe $expansionId';
+}
+
+/// Cardmarket-Produkt einer Karte und die Alternativen (gleiche Karte, andere Sprachfassung).
+class CardmarketChoice {
+  const CardmarketChoice({
+    required this.reason,
+    required this.uncertain,
+    required this.catalogReady,
+    required this.options,
+    this.productId,
+    this.expansionId,
+    this.setSource,
+    this.url,
+    this.setChanged,
+    this.cardsAffected,
+  });
+
+  factory CardmarketChoice.fromJson(Json json) => CardmarketChoice(
+    productId: json.intOrNull('product_id'),
+    expansionId: json.intOrNull('expansion_id'),
+    reason: json.str('reason'),
+    setSource: json.strOrNull('set_source'),
+    uncertain: json.flag('uncertain'),
+    catalogReady: json.flag('catalog_ready'),
+    url: json.strOrNull('url'),
+    options: json.list('options', CardmarketOption.fromJson),
+    setChanged: json['set_changed'] as bool?,
+    cardsAffected: json.intOrNull('cards_affected'),
+  );
+
+  final int? productId;
+  final int? expansionId;
+
+  /// tcgdex | set (über die Ausgabe des Sets umgehängt) | card (für diese Karte gewählt) |
+  /// unmapped (in der Ausgabe nicht gefunden) | none (kein Produkt bekannt).
+  final String reason;
+
+  /// Woher die Ausgabe des Sets stammt: tcgdex | builtin | user.
+  final String? setSource;
+
+  /// Es gibt Sprachfassungen und die Ausgabe stammt nur von TCGdex → bitte prüfen.
+  final bool uncertain;
+  final bool catalogReady;
+  final String? url;
+  final List<CardmarketOption> options;
+
+  /// Nur nach einer Auswahl: Galt sie für das ganze Set, wie viele Karten betrifft sie?
+  final bool? setChanged;
+  final int? cardsAffected;
+
+  CardmarketOption? get selected => options.where((o) => o.selected).firstOrNull;
+
+  /// Lohnt sich die Anzeige? Nur wenn es etwas zu wählen oder zu prüfen gibt.
+  bool get hasAlternatives => options.length > 1 || uncertain;
 }
 
 class PricePoint {

@@ -348,6 +348,20 @@ class Api {
   Future<CardPrices> prices(String cardId) async =>
       CardPrices.fromJson(await _get('/cards/$cardId/prices'));
 
+  /// Cardmarket-Produkt der Karte und dieselbe Karte in anderen Sprachfassungen.
+  Future<CardmarketChoice> cardmarketChoice(String cardId) async =>
+      CardmarketChoice.fromJson(await _get('/cards/$cardId/cardmarket'));
+
+  /// Richtiges Cardmarket-Produkt wählen; eine andere Sprachfassung gilt für das ganze Set.
+  Future<CardmarketChoice> chooseCardmarket(String cardId, int productId) async =>
+      CardmarketChoice.fromJson(
+        (await _send('PUT', '/cards/$cardId/cardmarket', body: {'product_id': productId}))! as Json,
+      );
+
+  /// Bezeichnung einer Cardmarket-Ausgabe setzen (leer = entfernen).
+  Future<void> labelCardmarketExpansion(int expansionId, String label) async =>
+      _send('PUT', '/cardmarket/expansions/$expansionId', body: {'label': label});
+
   Future<PriceHistory> priceHistory(
     String cardId, {
     String source = 'cardmarket',

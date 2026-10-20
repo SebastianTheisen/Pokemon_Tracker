@@ -17,6 +17,8 @@ String encodePayload(Map<String, Object?> data) =>
 const page = 'https://www.cardmarket.com/de/Pokemon/Products/Singles/X/Y?language=3';
 
 void main() {
+  cardmarketEditionTests();
+
   test('gefilterter Cardmarket-Link nur mit Produkt-ID', () {
     const product = 'https://www.cardmarket.com/de/Pokemon/Products?idProduct=574273';
     expect(
@@ -168,5 +170,71 @@ void main() {
     await tester.tap(find.text('Preise speichern'));
     await tester.pumpAndSettle();
     expect(api.calls, contains('cardmarketOffers:c1:1:true:remember'));
+  });
+}
+
+void cardmarketEditionTests() {
+  testWidgets('Scan: unsichere Sprachfassung prüfen und für das Set übernehmen', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..cardmarketJson = cardmarketChoiceJson(selected: 908315, twins: true, uncertain: true);
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('scan-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scan-gallery')));
+    await tester.pumpAndSettle();
+
+    final tile = find.byKey(const Key('cardmarket-edition'));
+    await tester.ensureVisible(tile);
+    expect(find.text('Cardmarket-Sprachfassung prüfen'), findsOneWidget);
+    expect(find.text('Ausgabe 6603 · laut TCGdex'), findsOneWidget);
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Japanisch'), findsOneWidget);
+    expect(find.textContaining('Trend 158,67 €'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('cardmarket-option-907902')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('cardmarket-edition-save')));
+    await tester.pumpAndSettle();
+
+    expect(api.calls, contains('chooseCardmarket:c1:907902'));
+    expect(find.textContaining('Für das ganze Set übernommen (176 Karten)'), findsOneWidget);
+    // Danach eindeutig gewählt: kein Hinweis mehr, aber weiterhin änderbar.
+    expect(find.text('Cardmarket-Sprachfassung prüfen'), findsNothing);
+    expect(find.text('Japanisch · von euch gewählt'), findsOneWidget);
+  });
+
+  testWidgets('Ausgabe benennen; ohne Sprachfassungen keine Auswahl', (tester) async {
+    final api = FakeApi(loggedIn: true)..cardmarketJson = cardmarketChoiceJson(twins: true);
+    await pumpApp(tester, api);
+    final topCard = find.text('Nachtara VMAX').first;
+    await tester.ensureVisible(topCard);
+    await tester.pumpAndSettle();
+    await tester.tap(topCard);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('cardmarket-edition')));
+    await tester.pumpAndSettle();
+    // Bestätigen nur nötig, solange die Zuordnung unsicher ist.
+    final save = tester.widget<FilledButton>(find.byKey(const Key('cardmarket-edition-save')));
+    expect(save.onPressed, isNull);
+    await tester.tap(find.byKey(const Key('cardmarket-label-6603')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'S-Chinesisch');
+    await tester.tap(find.text('Speichern'));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('labelExpansion:6603:S-Chinesisch'));
+  });
+
+  testWidgets('eindeutige Ausgabe: keine Zeile', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    final topCard = find.text('Nachtara VMAX').first;
+    await tester.ensureVisible(topCard);
+    await tester.pumpAndSettle();
+    await tester.tap(topCard);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('cardmarket-edition')), findsNothing);
   });
 }
