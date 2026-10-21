@@ -3,7 +3,10 @@
 * Unbekannte Pfade (z. B. ``/card/123`` beim Neuladen) liefern ``index.html``, damit die
   App ihr eigenes Routing übernimmt.
 * ``/api/...`` wird nie umgeleitet: Fehler der API bleiben JSON.
-* ``index.html`` und der Service-Worker werden nicht gecacht, damit Updates sofort ankommen.
+* Alles wird vor jeder Nutzung beim Server nachgefragt (``no-cache``): Flutter benennt seine
+  Dateien nicht nach Inhalt (``main.dart.js`` heißt nach jedem Update gleich). Sonst mischt
+  Safari nach einem Update alte und neue Dateien, und die App startet nicht. Unveränderte
+  Dateien kosten dank ETag nur eine kurze 304-Antwort.
 """
 
 from __future__ import annotations
@@ -19,8 +22,6 @@ from starlette.types import Scope
 
 log = structlog.get_logger(__name__)
 
-NO_CACHE = {"index.html", "flutter_service_worker.js", "flutter_bootstrap.js", "version.json"}
-
 
 class SpaStaticFiles(StaticFiles):
     """Statische Dateien mit Rückfall auf ``index.html`` (Single-Page-App)."""
@@ -32,10 +33,7 @@ class SpaStaticFiles(StaticFiles):
             if exc.status_code != 404 or path.startswith("api/"):  # noqa: PLR2004
                 raise
             response = await super().get_response("index.html", scope)
-            path = "index.html"
-        name = Path(path).name or "index.html"
-        if name in NO_CACHE or path in {"", "."}:
-            response.headers["Cache-Control"] = "no-cache"
+        response.headers["Cache-Control"] = "no-cache"
         return response
 
 

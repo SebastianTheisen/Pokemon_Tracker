@@ -47,6 +47,10 @@
       border: 3px solid #2A3B5E; border-top-color: #4C7DFF; animation: spin 0.9s linear infinite;
     }
     #splash .error { color: #EF4444; font-size: 14px; max-width: 360px; word-break: break-word; }
+    #splash button {
+      display: none; padding: 10px 20px; border: 0; border-radius: 10px;
+      background: #4C7DFF; color: #fff; font: inherit; font-size: 15px;
+    }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
@@ -64,22 +68,54 @@
     <div class="spinner"></div>
     <div id="splash-text">Kartenkiste wird geladen …</div>
     <div id="splash-error" class="error"></div>
+    <button id="splash-reload" type="button">Neu laden</button>
   </div>
   <script>
     (function () {
       var splash = document.getElementById('splash');
       var text = document.getElementById('splash-text');
       var error = document.getElementById('splash-error');
-      // Die App meldet ihr erstes Bild → Ladeanzeige entfernen.
-      window.addEventListener('flutter-first-frame', function () { splash.remove(); });
-      // Fehler sichtbar machen (am Handy gibt es keine Entwicklerkonsole).
-      function show(message) { if (document.body.contains(splash)) error.textContent = 'Fehler: ' + message; }
-      window.addEventListener('error', function (e) { show(e.message || String(e)); });
-      window.addEventListener('unhandledrejection', function (e) { show(String(e.reason)); });
+      var reload = document.getElementById('splash-reload');
+      var RETRY_KEY = 'kartenkiste-load-retry';
+      // Die App meldet ihr erstes Bild → Ladeanzeige entfernen, Wiederholung zurücksetzen.
+      window.addEventListener('flutter-first-frame', function () {
+        splash.remove();
+        try { sessionStorage.removeItem(RETRY_KEY); } catch (e) { /* privat: egal */ }
+      });
+      function loading() { return document.body.contains(splash); }
+      // Fehler sichtbar machen (am Handy gibt es keine Entwicklerkonsole). Eine abgebrochene
+      // Übertragung (z. B. Tailscale kurz weg, Server startet neu) wird einmal von selbst
+      // wiederholt; danach entscheidet man selbst per Knopf.
+      function show(message) {
+        if (!loading()) return;
+        error.textContent = 'Fehler: ' + message;
+        reload.style.display = 'block';
+        var retried = false;
+        try { retried = sessionStorage.getItem(RETRY_KEY) === '1'; } catch (e) { retried = true; }
+        if (!retried) {
+          try { sessionStorage.setItem(RETRY_KEY, '1'); } catch (e) { /* privat: egal */ }
+          text.textContent = 'Verbindung unterbrochen – neuer Versuch …';
+          setTimeout(function () { location.reload(); }, 1500);
+        }
+      }
+      reload.addEventListener('click', function () { location.reload(); });
+      window.addEventListener('error', function (e) {
+        var target = e.target;
+        if (target && target !== window && (target.src || target.href)) {
+          show('Datei nicht geladen: ' + (target.src || target.href).replace(location.origin, ''));
+        } else {
+          show(e.message || String(e));
+        }
+      }, true);  // „true“: auch fehlende Skripte/Dateien melden
+      window.addEventListener('unhandledrejection', function (e) {
+        var reason = e.reason;
+        show(String(reason && reason.message ? reason.name + ': ' + reason.message : reason));
+      });
       setTimeout(function () {
-        if (document.body.contains(splash)) {
+        if (loading()) {
           text.textContent = 'Lädt noch … Beim ersten Start werden ca. 4 MB geladen. ' +
             'Ist Tailscale verbunden?';
+          reload.style.display = 'block';
         }
       }, 15000);
     })();
