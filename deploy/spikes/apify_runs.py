@@ -184,7 +184,45 @@ RUNS_D: RunList = [
         {"productUrl": GLURAK_JA_EN, "language": "any", "minCondition": "PO", "maxResults": 5},
     ),
 ]
-STAGES = {"B": RUNS, "C": RUNS_C, "D": RUNS_D}
+# Stufe E: echte Kosten je Lauf (nach Abschluss erneut abgefragt) für die eBay-Favoriten
+# und: Liefert die Cardmarket-Suche Produkt-ID und Produktseite? (Der Angebots-Dienst braucht
+# die Seite mit Namen, z. B. …/Singles/151/Blastoise-ex-V3-MEW200, nicht ?idProduct=…)
+EBAY_RAW = "Glurak ex 183/165"
+RUNS_E: RunList = [
+    (
+        "eBay.de · caffein.dev Rohkarte (Ausschluss im Suchbegriff)",
+        "caffein.dev/ebay-sold-listings",
+        {
+            "keywords": [f"{EBAY_RAW} -PSA -BGS -CGC"],
+            "ebaySite": "ebay.de",
+            "daysToScrape": 90,
+            "count": 20,
+        },
+    ),
+    (
+        "eBay.de · epicscrapers Rohkarte (Ausschlusswörter)",
+        "epicscrapers/ebay-sold-listings-api",
+        {
+            "keywords": [EBAY_RAW],
+            "excludeKeywords": ["PSA", "BGS", "CGC"],
+            "site": "ebay.de",
+            "maxItems": 20,
+            "days": 90,
+        },
+    ),
+    (
+        "Cardmarket-Suche · „Blastoise ex“ (Produkt-ID und Seite?)",
+        "lulzasaur/cardmarket-scraper",
+        {"searchQueries": ["Blastoise ex"], "game": "Pokemon", "maxResults": 30},
+    ),
+    (
+        "Cardmarket-Suche · „Charizard“ 30th (Produkt-ID und Seite?)",
+        "lulzasaur/cardmarket-scraper",
+        {"searchQueries": ["Charizard 30th"], "game": "Pokemon", "maxResults": 30},
+    ),
+]
+STAGES = {"B": RUNS, "C": RUNS_C, "D": RUNS_D, "E": RUNS_E}
+RUN_IDS: list[tuple[str, str]] = []
 
 
 def actor_properties(client: httpx.Client, actor: str) -> dict[str, Any]:
@@ -272,13 +310,14 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
     emit(f"## {title}\n")
     emit(f"- Anbieter: `{actor}`")
     emit(f"- Eingabe: `{short(payload, 400)}`")
-    if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() == "D":
+    if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("D", "E"):
         payload = adapt_input(client, actor, payload)
     started = time.monotonic()
     run = run_actor(client, actor, payload)
     if run is None:
         emit()
         return
+    RUN_IDS.append((title, str(run.get("id"))))
     emit(
         f"- Status: {run.get('status')} {short(run.get('statusMessage') or '', 200)} · "
         f"Dauer {time.monotonic() - started:.0f} s"
@@ -341,6 +380,14 @@ def main() -> None:
                 report(client, title, actor, payload)
             except (httpx.HTTPError, ValueError, KeyError) as exc:
                 emit(f"- ❌ {type(exc).__name__}: {short(str(exc), 300)}\n")
+        # Kosten stehen erst nach einer Weile fest – deshalb am Ende erneut abfragen.
+        time.sleep(30)
+        emit("## Echte Kosten je Lauf (30 s nach dem letzten Lauf)\n")
+        for title, run_id in RUN_IDS:
+            run = client.get(f"{API}/actor-runs/{run_id}").json().get("data") or {}
+            usage = {k: round(v, 5) for k, v in (run.get("usageUsd") or {}).items() if v}
+            emit(f"- {title}: **{run.get('usageTotalUsd')} $** {short(usage, 300)}")
+        emit()
         limits = client.get(f"{API}/users/me/limits").json().get("data") or {}
         usage = (limits.get("current") or {}).get("monthlyUsageUsd")
         limit = (limits.get("limits") or {}).get("maxMonthlyUsageUsd")

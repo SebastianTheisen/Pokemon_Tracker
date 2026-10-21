@@ -3,6 +3,7 @@
 #   bash deploy/phase5_apify_runs.sh      → Stufe B (docs/phase5/apify_runs.md)
 #   bash deploy/phase5_apify_runs.sh C    → Stufe C (docs/phase5/apify_runs_c.md)
 #   bash deploy/phase5_apify_runs.sh D    → Stufe D (docs/phase5/apify_runs_d.md)
+#   bash deploy/phase5_apify_runs.sh E    → Stufe E (docs/phase5/apify_runs_e.md)
 # Berichte enthalten keinen Token.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
