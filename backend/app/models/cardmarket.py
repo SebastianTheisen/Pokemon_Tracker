@@ -42,7 +42,7 @@ class ExpansionLinkSource(enum.StrEnum):
 
 
 class CmProduct(Base):
-    """Eine Einzelkarte aus dem Cardmarket-Produktkatalog."""
+    """Ein Produkt aus dem Cardmarket-Katalog: Einzelkarte oder versiegeltes Produkt."""
 
     __tablename__ = "cm_products"
 
@@ -51,6 +51,9 @@ class CmProduct(Base):
     id_metacard: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(300), nullable=False)
     date_added: Mapped[date | None] = mapped_column(Date)
+    # Kategorie laut Download: 51 = Einzelkarte, sonst versiegelt (Booster, Display, …).
+    id_category: Mapped[int | None] = mapped_column(Integer)
+    category_name: Mapped[str | None] = mapped_column(String(60))
 
 
 class CmPrice(Base):

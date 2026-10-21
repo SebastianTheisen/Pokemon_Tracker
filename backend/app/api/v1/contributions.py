@@ -10,8 +10,16 @@ from fastapi import APIRouter, Query, status
 from app.api.deps import AdminUser, CurrentUser, SessionDep
 from app.core.config import CatalogLanguage
 from app.schemas.catalog import CardOut
-from app.schemas.collection import CardCreate, CardUpdate, ProductCreate, ProductOut, ProductUpdate
-from app.services import contributions
+from app.schemas.collection import (
+    CardCreate,
+    CardUpdate,
+    ProductCreate,
+    ProductFromCardmarket,
+    ProductOut,
+    ProductUpdate,
+    SealedOfferOut,
+)
+from app.services import contributions, sealed
 
 router = APIRouter(tags=["catalog"])
 
@@ -77,6 +85,29 @@ async def create_product(body: ProductCreate, session: SessionDep, user: Current
             set_id=body.set_id,
             image_url=_url(body.image_url),
         ),
+    )
+    return ProductOut.model_validate(product)
+
+
+@router.get("/cardmarket/sealed")
+async def search_cardmarket_sealed(
+    session: SessionDep,
+    _user: CurrentUser,
+    q: Annotated[str, Query(min_length=2, max_length=100)],
+) -> list[SealedOfferOut]:
+    """Versiegelte Produkte im Cardmarket-Katalog (englische Namen) mit aktuellem Preis."""
+    offers = await sealed.search_sealed(session, q)
+    return [SealedOfferOut(**offer.__dict__) for offer in offers]
+
+
+@router.post("/products/from-cardmarket")
+async def product_from_cardmarket(
+    body: ProductFromCardmarket, session: SessionDep, user: CurrentUser
+) -> ProductOut:
+    """Produkt zum Cardmarket-Eintrag (vorhanden oder neu) – sein Wert kommt dann täglich aus
+    dem Cardmarket-Preisführer."""
+    product = await sealed.product_from_cardmarket(
+        session, user, body.cardmarket_product_id, body.language
     )
     return ProductOut.model_validate(product)
 

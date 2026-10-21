@@ -100,11 +100,32 @@ PRODUCTS = [
     # Grundset 1999: dieselbe Glurak-Metakarte, aber Jahrzehnte früher – kein Zwilling.
     product(273699, 1523, 211560, "Charizard [Energy Burn | Fire Spin]", "0000-00-00 00:00:00"),
 ]
+SEALED = [
+    {
+        "idProduct": 700001,
+        "name": "Prismatic Evolutions Elite Trainer Box",
+        "idCategory": 61,
+        "categoryName": "Pokémon Elite Trainer Box",
+        "idExpansion": 6100,
+        "idMetacard": 0,
+        "dateAdded": "2025-01-10 10:00:00",
+    },
+    {
+        "idProduct": 700002,
+        "name": "Prismatic Evolutions Booster Bundle",
+        "idCategory": 52,
+        "categoryName": "Pokémon Booster",
+        "idExpansion": 6100,
+        "idMetacard": 0,
+        "dateAdded": "2025-01-10 10:00:00",
+    },
+]
 GUIDE = [
     guide(JAPANESE_GLURAK, 158.67, 120.0, **{"avg7": 150.0, "avg30": 160.0}),
     guide(CHINESE_GLURAK, 66.34, 70.0),
     guide(907904, 12.5, 9.0, **{"trend-holo": 20.0}),
     guide(908316, 0, None),  # ohne Preis → wird nicht gespeichert
+    guide(700001, 95.0, 89.0, **{"avg7": 99.0, "avg30": 110.0}),
 ]
 
 
@@ -124,6 +145,8 @@ def catalog_transport(
                 "createdAt": "2026-10-20T14:24:46+0200",
                 "products": PRODUCTS if products is None else products,
             }
+        elif request.url.path.endswith("products_nonsingles_6.json"):
+            body = {"version": 1, "createdAt": "2026-10-20T14:24:49+0200", "products": SEALED}
         elif request.url.path.endswith("price_guide_6.json"):
             body = {
                 "version": 1,
@@ -203,8 +226,8 @@ def test_parse_products_skips_broken_rows_and_unknown_dates() -> None:
 
     assert created == datetime(2026, 10, 20, 12, 24, 46, tzinfo=UTC)
     assert rows == [
-        ProductRow(1, 10, 5, "Glurak", date(2026, 9, 10)),
-        ProductRow(2, 10, 0, "Alt", None),
+        ProductRow(1, 10, 5, "Glurak", date(2026, 9, 10), 51, "Pokémon Single"),
+        ProductRow(2, 10, 0, "Alt", None, 51, "Pokémon Single"),
     ]
 
 
@@ -271,7 +294,8 @@ async def test_import_stores_catalog_prices_expansions_and_labels(
     session_factory: async_sessionmaker[AsyncSession], imported: None
 ) -> None:
     async with session_factory() as session:
-        assert await session.scalar(select(func.count()).select_from(CmProduct)) == len(PRODUCTS)
+        count = await session.scalar(select(func.count()).select_from(CmProduct))
+        assert count == len(PRODUCTS) + len(SEALED)
         price = await session.get_one(CmPrice, JAPANESE_GLURAK)
         assert price.metrics == {"trend": 158.67, "low": 120.0, "avg7": 150.0, "avg30": 160.0}
         assert price.updated_at == datetime(2026, 10, 20, 0, 44, 49, tzinfo=UTC)
@@ -284,7 +308,7 @@ async def test_import_stores_catalog_prices_expansions_and_labels(
         )
         run = await session.scalar(select(CmImport))
         assert run is not None and run.finished_at is not None and run.error is None
-        assert run.products == len(PRODUCTS)
+        assert run.products == len(PRODUCTS) + len(SEALED)
 
 
 async def test_import_keeps_user_labels_and_drops_outdated_prices(

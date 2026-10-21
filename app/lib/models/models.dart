@@ -554,6 +554,7 @@ class Product {
     required this.name,
     this.imageUrl,
     this.cardSet,
+    this.cardmarketProductId,
   });
 
   factory Product.fromJson(Json json) => Product(
@@ -563,6 +564,7 @@ class Product {
     name: json.str('name'),
     imageUrl: json.strOrNull('image_url'),
     cardSet: json.objOrNull('card_set') == null ? null : SetSummary.fromJson(json.obj('card_set')),
+    cardmarketProductId: json.intOrNull('cardmarket_product_id'),
   );
 
   final String id;
@@ -571,6 +573,58 @@ class Product {
   final String name;
   final String? imageUrl;
   final SetSummary? cardSet;
+
+  /// Mit Cardmarket verknüpft → Wert täglich aus dem Preisführer.
+  final int? cardmarketProductId;
+}
+
+/// Art eines versiegelten Produkts → Anzeige.
+const productKindLabels = {
+  'booster': 'Booster',
+  'booster_bundle': 'Booster-Bundle',
+  'elite_trainer_box': 'Elite Trainer Box',
+  'display': 'Display',
+  'tin': 'Tin',
+  'collection_box': 'Kollektion/Box',
+  'blister': 'Blister',
+  'case': 'Case',
+  'other': 'Sonstiges',
+};
+
+/// Versiegeltes Produkt aus dem Cardmarket-Katalog (Suchtreffer) mit Preisen in Euro.
+class SealedOffer {
+  const SealedOffer({
+    required this.cardmarketProductId,
+    required this.name,
+    required this.kind,
+    required this.url,
+    this.category,
+    this.trend,
+    this.low,
+    this.value,
+  });
+
+  factory SealedOffer.fromJson(Json json) => SealedOffer(
+    cardmarketProductId: json.integer('cardmarket_product_id'),
+    name: json.str('name'),
+    category: json.strOrNull('category'),
+    kind: json.str('kind'),
+    trend: json.strOrNull('trend'),
+    low: json.strOrNull('low'),
+    value: json.strOrNull('value'),
+    url: json.str('url'),
+  );
+
+  final int cardmarketProductId;
+  final String name;
+  final String? category;
+  final String kind;
+  final String? trend;
+  final String? low;
+
+  /// Wert je Stück: Median aus Trend, Ø 7 und Ø 30 Tagen.
+  final String? value;
+  final String url;
 }
 
 class Folder {

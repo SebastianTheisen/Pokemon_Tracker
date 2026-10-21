@@ -61,6 +61,12 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
         title: const Text('Sammlung'),
         actions: [
           IconButton(
+            key: const Key('add-sealed'),
+            tooltip: 'Versiegeltes hinzufügen',
+            onPressed: () => context.push('/sealed/add'),
+            icon: const Icon(Icons.inventory_2_outlined),
+          ),
+          IconButton(
             tooltip: 'Sets',
             onPressed: () => context.push('/sets'),
             icon: const Icon(Icons.layers_outlined),
@@ -134,7 +140,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                             maxCrossAxisExtent: 130,
                             mainAxisSpacing: 16,
                             crossAxisSpacing: 12,
-                            childAspectRatio: 0.52,
+                            childAspectRatio: 0.5, // Bild + Wert + Name ohne Überlauf
                           ),
                           delegate: SliverChildBuilderDelegate(
                             childCount: page.items.length,
@@ -260,20 +266,28 @@ class _SummaryHeader extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(
-            money(summary.totalValue),
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(width: 10),
-          if (change != 0)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(
-                signedMoney(summary.changeSinceAdded),
-                style: TextStyle(color: change > 0 ? AppColors.gain : AppColors.loss),
-              ),
+          // Wert und Veränderung brechen um statt über den Rand zu laufen (schmale Handys).
+          Expanded(
+            child: Wrap(
+              spacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.end,
+              children: [
+                Text(
+                  money(summary.totalValue),
+                  style: Theme.of(context).textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                if (change != 0)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      signedMoney(summary.changeSinceAdded),
+                      style: TextStyle(color: change > 0 ? AppColors.gain : AppColors.loss),
+                    ),
+                  ),
+              ],
             ),
-          const Spacer(),
+          ),
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Text(

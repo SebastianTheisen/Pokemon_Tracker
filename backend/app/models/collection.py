@@ -78,6 +78,8 @@ class Product(UuidPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("card_sets.id", ondelete="SET NULL"), index=True
     )
     image_url: Mapped[str | None] = mapped_column(String(500))
+    # Cardmarket-Produkt (``idProduct``) → Wert aus dem offiziellen Preisführer.
+    cardmarket_product_id: Mapped[int | None] = mapped_column(Integer, index=True)
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )

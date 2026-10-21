@@ -20,6 +20,7 @@ const page = 'https://www.cardmarket.com/de/Pokemon/Products/Singles/X/Y?languag
 void main() {
   cardmarketEditionTests();
   ebayFetchTests();
+  sealedTests();
 
   test('gefilterter Cardmarket-Link nur mit Produkt-ID', () {
     const product = 'https://www.cardmarket.com/de/Pokemon/Products?idProduct=574273';
@@ -299,5 +300,32 @@ void ebayFetchTests() {
 
     expect(find.textContaining('Monatsbudget für eBay-Abrufe erreicht'), findsOneWidget);
     expect(find.text('Erneut versuchen'), findsOneWidget);
+  });
+}
+
+void sealedTests() {
+  testWidgets('Versiegeltes aus dem Cardmarket-Katalog hinzufügen', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('tab-Sammlung')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('add-sealed')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('sealed-search')), 'prismatic etb');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('searchSealed:prismatic etb'));
+    expect(find.textContaining('Wert 99,00 €'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('sealed-700001')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sealed-more')));
+    await tester.tap(find.byKey(const Key('sealed-add')));
+    await tester.pumpAndSettle();
+
+    expect(api.calls, containsAllInOrder(['productFromCardmarket:700001:de', 'addItem']));
+    expect(api.lastItemBody, {'product_id': 'p1', 'quantity': 2});
+    expect(find.textContaining('Hinzugefügt: 2× Prismatic'), findsOneWidget);
   });
 }

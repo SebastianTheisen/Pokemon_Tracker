@@ -253,7 +253,7 @@ class _Showcase extends ConsumerWidget {
           ),
         ),
         SizedBox(
-          height: 216,
+          height: 228, // Bild (104 × 88/63) + Wert + Name, mit Luft für größere Schrift
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: items.length,

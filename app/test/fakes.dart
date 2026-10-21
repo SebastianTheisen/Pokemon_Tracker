@@ -395,6 +395,35 @@ class FakeApi extends Api {
   });
 
   @override
+  Future<List<SealedOffer>> searchSealed(String query) async {
+    calls.add('searchSealed:$query');
+    return [
+      SealedOffer.fromJson({
+        'cardmarket_product_id': 700001,
+        'name': 'Prismatic Evolutions Elite Trainer Box',
+        'category': 'Pokémon Elite Trainer Box',
+        'kind': 'elite_trainer_box',
+        'trend': '95.00',
+        'low': '89.00',
+        'value': '99.00',
+        'url': 'https://www.cardmarket.com/de/Pokemon/Products?idProduct=700001',
+      }),
+    ];
+  }
+
+  @override
+  Future<Product> productFromCardmarket(int cardmarketProductId, String language) async {
+    calls.add('productFromCardmarket:$cardmarketProductId:$language');
+    return Product.fromJson({
+      'id': 'p1',
+      'kind': 'elite_trainer_box',
+      'language': language,
+      'name': 'Prismatic Evolutions Elite Trainer Box',
+      'cardmarket_product_id': cardmarketProductId,
+    });
+  }
+
+  @override
   Future<CollectionItem> addItem(Map<String, Object?> body) async {
     calls.add('addItem');
     lastItemBody = body;

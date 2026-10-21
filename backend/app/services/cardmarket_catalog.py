@@ -2,7 +2,8 @@
 
 Ablauf (täglich im Worker, von Hand mit ``python -m app.cli cardmarket-import``):
 
-1. **Download** von Produktkatalog und Preisführer (je ~15 MB JSON, kein Scraping).
+1. **Download** von Produktkatalog (Einzelkarten und Versiegeltes) und Preisführer
+   (je ~15 MB JSON, kein Scraping).
 2. **Ausgaben und Zwillinge**: Ausgaben mit fast denselben Karten (``idMetacard``), die
    innerhalb weniger Wochen angelegt wurden, sind Sprachfassungen desselben Sets –
    z. B. 30th Celebration japanisch (6602) und vereinfacht-chinesisch (6603).
@@ -63,6 +64,8 @@ from app.services.errors import NotFoundError
 log = structlog.get_logger(__name__)
 
 PRODUCTS_PATH = "productList/products_singles_6.json"
+SEALED_PATH = "productList/products_nonsingles_6.json"
+SINGLE_CATEGORY = 51  # „Pokémon Single“; alles andere ist versiegelt
 GUIDE_PATH = "priceGuide/price_guide_6.json"
 GUIDE_METRICS = ("trend", "low", "avg", "avg1", "avg7", "avg30")
 GUIDE_KEYS = (*GUIDE_METRICS, *(f"{metric}-holo" for metric in GUIDE_METRICS))
@@ -114,6 +117,8 @@ class ProductRow:
     id_metacard: int
     name: str
     date_added: date | None
+    id_category: int | None = SINGLE_CATEGORY
+    category_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -185,6 +190,8 @@ def parse_products(data: object) -> tuple[datetime | None, list[ProductRow]]:
                 id_metacard=_positive_int(row.get("idMetacard")) or 0,
                 name=name.strip()[:300],
                 date_added=_parse_date(row.get("dateAdded")),
+                id_category=_positive_int(row.get("idCategory")),
+                category_name=str(row.get("categoryName") or "")[:60] or None,
             )
         )
     return created_at, products
@@ -305,6 +312,8 @@ async def store_catalog(
                     "id_metacard": p.id_metacard,
                     "name": p.name,
                     "date_added": p.date_added,
+                    "id_category": p.id_category,
+                    "category_name": p.category_name,
                 }
                 for p in chunk
             ]
@@ -314,7 +323,14 @@ async def store_catalog(
                 index_elements=[CmProduct.id_product],
                 set_={
                     column: statement.excluded[column]
-                    for column in ("id_expansion", "id_metacard", "name", "date_added")
+                    for column in (
+                        "id_expansion",
+                        "id_metacard",
+                        "name",
+                        "date_added",
+                        "id_category",
+                        "category_name",
+                    )
                 },
             )
         )
@@ -342,7 +358,8 @@ async def store_catalog(
         .execution_options(synchronize_session=False)
     )
 
-    stats = expansion_stats(products)
+    # Ausgaben und Zwillinge nur aus Einzelkarten (Versiegeltes hat keine Metakarte).
+    stats = expansion_stats(p for p in products if p.id_category in (None, SINGLE_CATEGORY))
     twins = find_twins(stats)
     report.expansions = len(stats)
     report.expansions_with_twins = len(twins)
@@ -378,8 +395,8 @@ async def store_catalog(
 
 async def download_catalog(
     settings: Settings, *, transport: httpx.AsyncBaseTransport | None = None
-) -> tuple[object, object]:
-    """Lädt Produktkatalog und Preisführer (gleichzeitig) und gibt das JSON zurück."""
+) -> tuple[object, object, object]:
+    """Lädt Einzelkarten, versiegelte Produkte und Preisführer (gleichzeitig) als JSON."""
     base = settings.cardmarket_catalog_url.rstrip("/")
     async with httpx.AsyncClient(
         headers={"User-Agent": settings.http_user_agent},
@@ -389,11 +406,13 @@ async def download_catalog(
     ) as client:
         try:
             responses = await asyncio.gather(
-                client.get(f"{base}/{PRODUCTS_PATH}"), client.get(f"{base}/{GUIDE_PATH}")
+                client.get(f"{base}/{PRODUCTS_PATH}"),
+                client.get(f"{base}/{SEALED_PATH}"),
+                client.get(f"{base}/{GUIDE_PATH}"),
             )
             for response in responses:
                 response.raise_for_status()
-            return responses[0].json(), responses[1].json()
+            return responses[0].json(), responses[1].json(), responses[2].json()
         except (httpx.HTTPError, ValueError) as exc:
             raise CatalogError(f"Download: {type(exc).__name__}: {exc}") from exc
 
@@ -956,14 +975,20 @@ async def run_catalog_import(
         await session.commit()
         summary = ImportSummary(run_id=run.id)
     try:
-        products_data, guide_data = await download_catalog(settings, transport=transport)
+        products_data, sealed_data, guide_data = await download_catalog(
+            settings, transport=transport
+        )
         summary.catalog_created_at, products = parse_products(products_data)
+        _, sealed = parse_products(sealed_data)
         summary.guide_created_at, guide = parse_price_guide(guide_data)
         if not products:
             raise CatalogError("Produktkatalog ist leer")
         async with session_factory() as session:
             stored = await store_catalog(
-                session, products, guide, guide_created_at=summary.guide_created_at or clock()
+                session,
+                [*products, *sealed],
+                guide,
+                guide_created_at=summary.guide_created_at or clock(),
             )
             summary.known_links = await apply_known_links(session)
             await session.commit()

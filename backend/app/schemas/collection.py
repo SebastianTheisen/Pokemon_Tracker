@@ -69,6 +69,7 @@ class ProductOut(BaseModel):
     name: str
     image_url: str | None
     card_set: SetSummary | None
+    cardmarket_product_id: int | None = None
 
 
 class ProductCreate(BaseModel):
@@ -321,3 +322,21 @@ class WishlistEntryOut(BaseModel):
     product: ProductOut | None
     nm_value: Decimal | None = Field(description="Near-Mint-Wert (normal), falls belegt.")
     nm_value_kind: Literal["external", "estimated"] | None
+
+
+class SealedOfferOut(BaseModel):
+    """Versiegeltes Produkt aus dem Cardmarket-Katalog mit Preis (Euro, Dezimal-String)."""
+
+    cardmarket_product_id: int
+    name: str
+    category: str | None
+    kind: ProductKind
+    trend: Decimal | None
+    low: Decimal | None
+    value: Decimal | None = Field(description="Median aus Trend, Ø 7 und Ø 30 Tagen")
+    url: str
+
+
+class ProductFromCardmarket(BaseModel):
+    cardmarket_product_id: int = Field(gt=0)
+    language: CatalogLanguage

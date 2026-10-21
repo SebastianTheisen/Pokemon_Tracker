@@ -36,6 +36,7 @@ from app.models import (
 from app.providers.pricing import CONDITIONS
 from app.services.errors import ConflictError, InvalidInputError, NotFoundError
 from app.services.pricing import CardPrices, PriceService
+from app.services.sealed import sealed_prices
 from app.services.valuation import CENT, ItemKind, ItemValue, item_kind, unit_value, value_item
 
 DEFAULT_FOLDER_NAME = "Sammlung"
@@ -272,7 +273,12 @@ class CollectionService:
             if item.card_id
             else None
         )
-        return unit_value(item, prices)
+        sealed = (
+            (await sealed_prices(self._session, [item.product_id])).get(item.product_id)
+            if item.product_id
+            else None
+        )
+        return unit_value(item, prices, sealed)
 
     def _event(
         self,
@@ -421,7 +427,10 @@ class CollectionService:
         prices = await self._prices.prices_for_cards(
             [i.card_id for i in items if i.card_id is not None], self._owner
         )
-        return [ValuedItem(item=i, value=value_item(i, prices)) for i in items]
+        sealed = await sealed_prices(
+            self._session, [i.product_id for i in items if i.product_id is not None]
+        )
+        return [ValuedItem(item=i, value=value_item(i, prices, sealed)) for i in items]
 
     async def valued_item(self, item_id: uuid.UUID) -> ValuedItem:
         """Eine eigene Position samt Bewertung."""
@@ -429,7 +438,8 @@ class CollectionService:
         prices = await self._prices.prices_for_cards(
             [item.card_id] if item.card_id else [], self._owner
         )
-        return ValuedItem(item=item, value=value_item(item, prices))
+        sealed = await sealed_prices(self._session, [item.product_id] if item.product_id else [])
+        return ValuedItem(item=item, value=value_item(item, prices, sealed))
 
     async def list_items(
         self,

@@ -360,6 +360,21 @@ class Api {
 
   Future<CardInfo> card(String id) async => CardInfo.fromJson(await _get('/cards/$id'));
 
+  /// Versiegelte Produkte im Cardmarket-Katalog (englische Namen) mit Preis.
+  Future<List<SealedOffer>> searchSealed(String query) async =>
+      parseList(await _getList('/cardmarket/sealed', query: {'q': query}), SealedOffer.fromJson);
+
+  /// Produkt zum Cardmarket-Eintrag in einer Sprache (vorhanden oder neu angelegt).
+  Future<Product> productFromCardmarket(int cardmarketProductId, String language) async =>
+      Product.fromJson(
+        (await _send(
+              'POST',
+              '/products/from-cardmarket',
+              body: {'cardmarket_product_id': cardmarketProductId, 'language': language},
+            ))!
+            as Json,
+      );
+
   Future<CardPrices> prices(String cardId) async =>
       CardPrices.fromJson(await _get('/cards/$cardId/prices'));
 
