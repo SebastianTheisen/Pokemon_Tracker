@@ -1,4 +1,4 @@
-"""Spike: Bilder für versiegelte Produkte aus tcgcsv.com (kostenloser Spiegel des TCGplayer-Katalogs).
+"""Spike: Bilder für versiegelte Produkte aus tcgcsv.com (Spiegel des TCGplayer-Katalogs).
 
 Prüft (kostenlos, ~250 Abrufe bei tcgcsv.com, je 4 gleichzeitig):
 
