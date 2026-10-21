@@ -61,12 +61,6 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
         title: const Text('Sammlung'),
         actions: [
           IconButton(
-            key: const Key('add-sealed'),
-            tooltip: 'Versiegeltes hinzufügen',
-            onPressed: () => context.push('/sealed/add'),
-            icon: const Icon(Icons.inventory_2_outlined),
-          ),
-          IconButton(
             tooltip: 'Sets',
             onPressed: () => context.push('/sets'),
             icon: const Icon(Icons.layers_outlined),
@@ -95,6 +89,15 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
           ),
         ],
       ),
+      // Gut sichtbar statt Symbol in der Kopfzeile: Karten kommen über „Scannen“, Versiegeltes hier.
+      floatingActionButton: FloatingActionButton.extended(
+        key: const Key('add-sealed'),
+        heroTag: 'add-sealed',
+        tooltip: 'Versiegeltes hinzufügen (Booster, Display, ETB …)',
+        onPressed: () => context.push('/sealed/add'),
+        icon: const Icon(Icons.inventory_2_outlined),
+        label: const Text('Versiegelt'),
+      ),
       body: RefreshIndicator(
         onRefresh: () async => _reload(),
         child: CustomScrollView(
@@ -122,8 +125,8 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                         child: EmptyView(
                           icon: Icons.collections_bookmark_outlined,
                           message:
-                              'Noch nichts hier. Scanne eine Karte oder füge sie über '
-                              'die Suche hinzu.',
+                              'Noch nichts hier. Scanne eine Karte, füge sie über die Suche '
+                              'hinzu oder lege Versiegeltes an (Knopf unten rechts).',
                           action: FilledButton.icon(
                             onPressed: () => context.push('/scan'),
                             icon: const Icon(Icons.document_scanner),
@@ -134,7 +137,8 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                     ]
                   : [
                       SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                        // unten Platz für den Knopf „Versiegelt“
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
                         sliver: SliverGrid(
                           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                             maxCrossAxisExtent: 130,
