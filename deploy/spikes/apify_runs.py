@@ -325,6 +325,9 @@ STAGES = {
     "I": RUNS_I,
 }
 RUN_IDS: list[tuple[str, str]] = []
+# Stufe I: Produktseiten aus der günstigen Suche → danach Details über incognito_mode.
+FOUND_URLS: list[str] = []
+DETAIL_URLS = 2
 
 
 def actor_properties(client: httpx.Client, actor: str) -> dict[str, Any]:
@@ -446,6 +449,11 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
         emit()
         return
     emit(f"- Felder: {short(sorted(items[0]), 600)}")
+    if actor == "gio21/pricecharting-scraper" and len(FOUND_URLS) < DETAIL_URLS:
+        first = items[0]
+        url = first.get("url") or first.get("productUrl") or first.get("link")
+        if isinstance(url, str) and "pricecharting.com" in url:
+            FOUND_URLS.append(url)
     languages = Counter(str(field(i, "language", "lang")) for i in items)
     conditions = Counter(str(field(i, "condition")) for i in items)
     emit(f"- Sprachen: {dict(languages)} · Zustände: {dict(conditions)}")
@@ -514,6 +522,22 @@ def main() -> None:
                 report(client, title, actor, payload)
             except (httpx.HTTPError, ValueError, KeyError) as exc:
                 emit(f"- ❌ {type(exc).__name__}: {short(str(exc), 300)}\n")
+        if stage == "I":
+            if FOUND_URLS:
+                # Suche (günstig) → Details (Verlauf, Verkäufe, POP, große Bilder) per URL.
+                report(
+                    client,
+                    "PriceCharting · incognito_mode · Details zu den ersten Suchtreffern",
+                    "incognito_mode/pricecharting-product-scraper",
+                    {
+                        "products": FOUND_URLS,
+                        "scrapeProductDetails": True,
+                        "includeRecentSales": True,
+                        "maxItems": DETAIL_URLS,
+                    },
+                )
+            else:
+                emit("- incognito_mode übersprungen: Suche lieferte keine Produkt-URL\n")
         # Kosten stehen erst nach einer Weile fest – deshalb am Ende erneut abfragen.
         time.sleep(30)
         emit("## Echte Kosten je Lauf (30 s nach dem letzten Lauf)\n")
