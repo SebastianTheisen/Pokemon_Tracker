@@ -60,7 +60,10 @@ async def test_web_app_is_served_with_spa_fallback(
 
         script = await client.get("/main.dart.js")
         assert script.text == "console.log(1);" * 200
-        assert "cache-control" not in script.headers
+        assert script.headers["cache-control"] == "no-cache"  # Name ohne Inhalts-Hash
+        etag = script.headers["etag"]
+        unchanged = await client.get("/main.dart.js", headers={"If-None-Match": etag})
+        assert unchanged.status_code == 304  # Nachfragen kostet fast nichts
         assert (await client.get("/flutter_service_worker.js")).headers["cache-control"] == (
             "no-cache"
         )
