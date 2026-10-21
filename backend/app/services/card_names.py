@@ -154,3 +154,44 @@ def foreign_search_terms(term: str) -> list[str]:
 
 def has_cjk(text: str) -> bool:
     return bool(_CJK.search(text))
+
+
+# Englische Zusätze auf deutschen Karten (Reihenfolge: längere zuerst).
+_ENGLISH_AFFIXES = (
+    ("Team Rocket's ", "Team Rockets "),
+    ("Dark ", "Dunkles "),
+    ("Light ", "Helles "),
+    ("Shining ", "Schillerndes "),
+    ("Radiant ", "Strahlendes "),
+    ("Alolan ", "Alola-"),
+    ("Galarian ", "Galar-"),
+    ("Hisuian ", "Hisui-"),
+    ("Paldean ", "Paldea-"),
+)
+
+
+@cache
+def _english_to_german() -> tuple[tuple[re.Pattern[str], str], ...]:
+    pairs = {
+        (names["en"], names["de"])
+        for names in _species().values()
+        if names.get("en") and names.get("de") and names["en"] != names["de"]
+    }
+    return tuple(
+        (re.compile(rf"(?<![\w-]){re.escape(english)}(?![\w])"), german)
+        for english, german in sorted(pairs, key=lambda pair: len(pair[0]), reverse=True)
+    )
+
+
+def translate_english_name(name: str) -> str:
+    """Englischer Kartenname → deutsche Schreibweise der Pokémon (Rest bleibt).
+
+    ``Charizard`` → ``Glurak``, ``Erika's Jigglypuff`` → ``Erikas Pummeluff``,
+    ``Dark Tyranitar`` → ``Dunkles Despotar``. Trainer- und Itemkarten bleiben englisch.
+    """
+    text = name
+    for english, german in _ENGLISH_AFFIXES:
+        text = text.replace(english, german)
+    for pattern, german in _english_to_german():
+        text = pattern.sub(german, text)
+    return re.sub(r"(\w)'s\b", r"\1s", text)

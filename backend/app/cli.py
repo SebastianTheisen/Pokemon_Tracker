@@ -7,6 +7,7 @@ Beispiele (im Container: ``docker compose exec api python -m app.cli ...``)::
     python -m app.cli sync-catalog                 # alle Sprachen, inkrementell
     python -m app.cli sync-catalog --languages de en --full
     python -m app.cli remove-digital --dry-run     # Pocket-Sets (Handyspiel) anzeigen/löschen
+    python -m app.cli import-ptcg --dry-run        # englische Lücken aus pokemontcg.io
     python -m app.cli import-german --dry-run      # fehlende deutsche Karten aus dem PokéWiki
     python -m app.cli import-pricecharting --dry-run   # Korea/China-Sets von PriceCharting
     python -m app.cli search "nachtara 215"
@@ -80,6 +81,8 @@ from app.services.price_health import SourceHealth
 from app.services.pricecharting_catalog import PriceChartingCatalog
 from app.services.pricecharting_catalog import render_report as render_pricecharting_report
 from app.services.pricing import PriceService
+from app.services.ptcg_import import import_ptcg
+from app.services.ptcg_import import render_report as render_ptcg_report
 from app.services.scan import ScanOutcome, ScanService
 from app.services.scan_eval import evaluate, load_expected, render_report
 from app.services.sealed_images import refresh_sealed_images
@@ -182,6 +185,18 @@ async def _import_german(
     """Fehlende deutsche Karten (Promos, Sondersets) aus dem PokéWiki ergänzen."""
     report = await import_german(factory, settings, dry_run=args.dry_run, limit=args.limit)
     print(render_german_report(report, dry_run=args.dry_run))
+
+
+async def _import_ptcg(
+    factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
+) -> None:
+    """Englische Sets/Karten, die TCGdex fehlen, aus dem pokemontcg.io-Datensatz."""
+    report = await import_ptcg(factory, settings, dry_run=args.dry_run)
+    if report.added and not args.dry_run:
+        async with factory() as session:
+            await fill_image_fallbacks(session)
+            await session.commit()
+    print(render_ptcg_report(report, dry_run=args.dry_run))
 
 
 async def _remove_german(
@@ -611,6 +626,12 @@ def _add_catalog_commands(commands: Any) -> None:
     german.add_argument("--dry-run", action="store_true", help="nur anzeigen, nichts anlegen")
     german.add_argument("--limit", type=int, help="höchstens so viele Sets (zum Testen)")
     german.set_defaults(handler=_import_german)
+
+    ptcg = commands.add_parser(
+        "import-ptcg", help="Englische Lücken (z. B. 30th Celebration) aus pokemontcg.io"
+    )
+    ptcg.add_argument("--dry-run", action="store_true", help="nur anzeigen, nichts anlegen")
+    ptcg.set_defaults(handler=_import_ptcg)
 
     undo = commands.add_parser(
         "remove-german", help="PokéWiki-Karten einzelner Sets entfernen (z. B. base4 lc si1)"

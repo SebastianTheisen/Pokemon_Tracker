@@ -37,6 +37,8 @@ class CardSource(enum.StrEnum):
     OFFICIAL = "official"  # aus einer offiziellen Kartendatenbank (z. B. japanische Promos)
     POKEWIKI = "pokewiki"  # deutsche Setliste aus dem PokéWiki (Promos, Sondersets)
     PRICECHARTING = "pricecharting"  # Setliste von PriceCharting (Korea, China)
+    POKEMONTCG = "pokemontcg"  # englischer Datensatz von pokemontcg.io (Lücken bei TCGdex)
+    TRANSLATED = "translated"  # deutsche Fassung aus der englischen Karte abgeleitet
 
 
 class ImageSource(enum.StrEnum):

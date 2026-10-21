@@ -36,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
 from app.models import Card, CardSet, CardSource, CollectionItem
+from app.services.card_names import translate_english_name
 from app.services.catalog_numbers import normalize_number
 from app.services.catalog_sync import fill_image_fallbacks
 
@@ -67,6 +68,14 @@ _NOT_GERMAN = re.compile(
     re.I,
 )
 NOT_GERMAN_NOTE = "laut PokéWiki nie auf Deutsch erschienen"
+# Sets, die nachweislich auf Deutsch erschienen sind, für die das PokéWiki (noch) keine
+# Kartenliste hat – deutsche Fassung wird aus der englischen abgeleitet.
+KNOWN_GERMAN_RELEASES = frozenset(
+    {
+        "me55c",  # 30th Celebration: Classic Collection – deutsche Karte gescannt (21.10.2026)
+    }
+)
+TRANSLATED_NOTE = "aus Englisch abgeleitet (Pokémon-Namen übersetzt)"
 _MCDONALDS = re.compile(r"^(\d{4})[a-z]+$")  # TCGdex: 2021swsh, 2023sv, …
 
 
@@ -186,7 +195,7 @@ async def find_page(wiki: PokeWiki, set_id: str, english_name: str) -> tuple[str
     return None
 
 
-async def _targets(session: AsyncSession) -> list[tuple[CardSet, int, int]]:
+async def _targets(session: AsyncSession) -> list[tuple[CardSet, int, int, bool]]:
     """Englische Sets (ohne Pocket) mit fehlendem oder kleinerem deutschem Gegenstück
     sowie Sets, in die schon PokéWiki-Karten importiert wurden."""
     counts = select(Card.set_id, func.count().label("cards")).group_by(Card.set_id).subquery()
@@ -221,7 +230,12 @@ async def _targets(session: AsyncSession) -> list[tuple[CardSet, int, int]]:
         ).all()
     )
     return [
-        (card_set, int(cards), int(german.get(card_set.external_id, 0)))
+        (
+            card_set,
+            int(cards),
+            int(german.get(card_set.external_id, 0)),
+            card_set.external_id in german,  # deutsches Set bekannt (TCGdex) → erschienen
+        )
         for card_set, cards in english_sets
         if german.get(card_set.external_id, 0) < cards or card_set.external_id in imported
     ]
@@ -270,7 +284,7 @@ async def import_german(
         transport=transport,
     ) as client:
         wiki = PokeWiki(client, pause=pause)
-        for english, _english_count, _german_count in targets[:limit]:
+        for english, _english_count, _german_count, german_exists in targets[:limit]:
             result = SetResult(english.external_id, english.name, page=None)
             report.sets.append(result)
             try:
@@ -280,6 +294,10 @@ async def import_german(
                 continue
             if found is None:
                 result.note = "keine PokéWiki-Seite"
+                if german_exists or english.external_id in KNOWN_GERMAN_RELEASES:
+                    result.note = TRANSLATED_NOTE
+                    async with session_factory() as session:
+                        await _apply_translated(session, english, result, dry_run=dry_run)
                 continue
             title, wikitext = found
             result.page = title
@@ -349,6 +367,46 @@ async def _apply(
             source=CardSource.POKEWIKI,
         )
         for card, name in missing
+    )
+    await session.commit()
+
+
+async def _apply_translated(
+    session: AsyncSession, english: CardSet, result: SetResult, *, dry_run: bool
+) -> None:
+    """Deutsche Karten aus den englischen ableiten: gleiche ID, Nummer, Bild und
+    Cardmarket-Produkt; Pokémon-Namen übersetzt (Trainer bleiben englisch)."""
+    cards = (await session.scalars(select(Card).where(Card.set_id == english.id))).all()
+    existing = set(
+        (
+            await session.scalars(
+                select(Card.external_id).where(
+                    Card.language == "de",
+                    Card.external_id.in_([card.external_id for card in cards if card.external_id]),
+                )
+            )
+        ).all()
+    )
+    missing = [card for card in cards if card.external_id and card.external_id not in existing]
+    result.rows = result.matched = len(cards)
+    result.added = len(missing)
+    if dry_run or not missing:
+        return
+    german_set = await _german_set(session, english, english.name)
+    session.add_all(
+        Card(
+            external_id=card.external_id,
+            language="de",
+            set_id=german_set.id,
+            number=card.number,
+            number_norm=card.number_norm,
+            name=translate_english_name(card.name)[:200],
+            rarity=card.rarity,
+            illustrator=card.illustrator,
+            cardmarket_product_id=card.cardmarket_product_id,
+            source=CardSource.TRANSLATED,
+        )
+        for card in missing
     )
     await session.commit()
 
