@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from collections import Counter
 from typing import Any
@@ -314,6 +315,20 @@ RUNS_I: RunList = [
         },
     ),
 ]
+# Stufe J: komplette Sets von PriceCharting (Kartenliste mit Nummern, Bildern, Preisen) –
+# Katalogquelle für Koreanisch und Chinesisch? Eingabe wird aus dem Schema gebaut.
+SET_PAGES = [
+    "https://www.pricecharting.com/console/pokemon-korean-electric-breaker",
+    "https://www.pricecharting.com/console/pokemon-chinese-gem-pack",
+]
+RUNS_J: RunList = [
+    (
+        "Set-Seite · incognito_mode collection",
+        "incognito_mode/pricecharting-collection-scraper",
+        {},
+    ),
+    ("Set-Seite · crawloop", "crawloop/pricecharting-scraper", {}),
+]
 STAGES = {
     "B": RUNS,
     "C": RUNS_C,
@@ -323,6 +338,7 @@ STAGES = {
     "G": RUNS_G,
     "H": RUNS_H,
     "I": RUNS_I,
+    "J": RUNS_J,
 }
 RUN_IDS: list[tuple[str, str]] = []
 # Stufe I: Produktseiten aus der günstigen Suche → danach Details über incognito_mode.
@@ -411,6 +427,51 @@ def run_actor(client: httpx.Client, actor: str, payload: dict[str, Any]) -> dict
     return run
 
 
+def set_page_payload(client: httpx.Client, actor: str) -> dict[str, Any]:
+    """Stufe J: Eingabe aus dem Schema – erstes URL-/Sammlungsfeld bekommt die Set-Seiten."""
+    properties = actor_properties(client, actor)
+    emit(f"- Eingabefelder: {short(sorted(properties), 400)}")
+    for name, prop in properties.items():
+        if prop.get("enum"):
+            emit(f"  - `{name}`: {short(prop.get('enum'), 200)} (Standard {prop.get('default')})")
+    payload: dict[str, Any] = {}
+    target = next(
+        (
+            name
+            for name in properties
+            if re.search(r"url|collection|console|set", name, re.I)
+            and properties[name].get("type") == "array"
+        ),
+        None,
+    )
+    if target is not None:
+        editor = properties[target].get("editor")
+        payload[target] = (
+            [{"url": url} for url in SET_PAGES] if editor == "requestListSources" else SET_PAGES
+        )
+    if "mode" in properties:
+        modes = [str(m) for m in properties["mode"].get("enum") or []]
+        payload["mode"] = next((m for m in modes if re.search(r"set|console|collection", m)), None)
+    for name in ("maxItems", "maxResults"):
+        if name in properties:
+            payload[name] = 400
+    for name in ("includeImages", "includeFullPrices"):
+        if name in properties:
+            payload[name] = True
+    return {key: value for key, value in payload.items() if value is not None}
+
+
+def prepare_payload(client: httpx.Client, actor: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Eingabe für den Lauf: Stufe J aus dem Schema, ab Stufe D an das Schema angepasst."""
+    stage = os.environ.get("APIFY_SPIKE_STAGE", "B").upper()
+    if stage == "J":
+        payload = set_page_payload(client, actor)
+    emit(f"- Eingabe: `{short(payload, 400)}`")
+    if stage in ("D", "E", "F", "G", "H", "I", "J"):
+        payload = adapt_input(client, actor, payload)
+    return payload
+
+
 def remember_product_url(actor: str, item: dict[str, Any]) -> None:
     """Stufe I: Produktseite des ersten Suchtreffers für den Detail-Abruf merken."""
     if actor != "gio21/pricecharting-scraper" or len(FOUND_URLS) >= DETAIL_URLS:
@@ -423,15 +484,14 @@ def remember_product_url(actor: str, item: dict[str, Any]) -> None:
 def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]) -> None:
     emit(f"## {title}\n")
     emit(f"- Anbieter: `{actor}`")
-    emit(f"- Eingabe: `{short(payload, 400)}`")
+    payload = prepare_payload(client, actor, payload)
     if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() == "H":
         language = actor_properties(client, actor).get("language") or {}
         emit(
             f"- Sprachen laut Schema: {short(language.get('enum'), 200)} "
             f"(Standard {language.get('default')})"
         )
-    if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("D", "E", "F", "G", "H", "I"):
-        payload = adapt_input(client, actor, payload)
+
     started = time.monotonic()
     run = run_actor(client, actor, payload)
     if run is None:
@@ -503,7 +563,11 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
                 f"ID {short(field(item, 'idproduct', 'productid', 'product_id', 'id'), 30)} · "
                 f"Bild {short(field(item, 'image', 'img', 'picture', 'photo'), 140)}"
             )
-    full = 4000 if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("F", "G", "H", "I") else 900
+    full = (
+        4000
+        if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("F", "G", "H", "I", "J")
+        else 900
+    )
     emit(f"- Erster Eintrag vollständig: `{short(items[0], full)}`")
     emit()
 

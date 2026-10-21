@@ -8,6 +8,7 @@
 #   bash deploy/phase5_apify_runs.sh G    → Versiegeltes mit Bild von Cardmarket (apify_runs_g.md)
 #   bash deploy/phase5_apify_runs.sh H    → parselab-Karten KO/ZH/JA (apify_runs_h.md)
 #   bash deploy/phase5_apify_runs.sh I    → PriceCharting: Sprachen, Gradings, Bilder (apify_runs_i.md)
+#   bash deploy/phase5_apify_runs.sh J    → PriceCharting-Set-Seiten KO/ZH (apify_runs_j.md)
 # Berichte enthalten keinen Token.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
