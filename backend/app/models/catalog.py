@@ -35,6 +35,8 @@ class CardSource(enum.StrEnum):
     TCGDEX = "tcgdex"
     USER = "user"
     OFFICIAL = "official"  # aus einer offiziellen Kartendatenbank (z. B. japanische Promos)
+    POKEWIKI = "pokewiki"  # deutsche Setliste aus dem PokéWiki (Promos, Sondersets)
+    PRICECHARTING = "pricecharting"  # Setliste von PriceCharting (Korea, China)
 
 
 class ImageSource(enum.StrEnum):

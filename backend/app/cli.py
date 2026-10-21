@@ -7,6 +7,7 @@ Beispiele (im Container: ``docker compose exec api python -m app.cli ...``)::
     python -m app.cli sync-catalog                 # alle Sprachen, inkrementell
     python -m app.cli sync-catalog --languages de en --full
     python -m app.cli remove-digital --dry-run     # Pocket-Sets (Handyspiel) anzeigen/löschen
+    python -m app.cli import-german --dry-run      # fehlende deutsche Karten aus dem PokéWiki
     python -m app.cli search "nachtara 215"
     python -m app.cli refresh-prices               # Preis-Runde sofort ausführen
     python -m app.cli prices "nachtara 215" --language de
@@ -62,6 +63,8 @@ from app.services.catalog_search import search_cards
 from app.services.catalog_sync import fill_image_fallbacks, remove_digital_sets, sync_catalog
 from app.services.collection import CollectionService, ItemFilter, ItemInput
 from app.services.errors import ServiceError
+from app.services.german_import import import_german
+from app.services.german_import import render_report as render_german_report
 from app.services.image_import import (
     ALL_SOURCES,
     catalog_coverage,
@@ -166,6 +169,14 @@ async def _remove_digital(
         f"Pocket-Sets: {len(report.sets)}, Karten {verb}: {report.cards_removed}, "
         f"behalten (in Sammlungen): {report.cards_kept}"
     )
+
+
+async def _import_german(
+    factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
+) -> None:
+    """Fehlende deutsche Karten (Promos, Sondersets) aus dem PokéWiki ergänzen."""
+    report = await import_german(factory, settings, dry_run=args.dry_run, limit=args.limit)
+    print(render_german_report(report, dry_run=args.dry_run))
 
 
 async def _fill_images(
@@ -551,6 +562,13 @@ def _add_catalog_commands(commands: Any) -> None:
         "fill-images", help="Fehlende Bilder aus anderen Sprachfassungen ergänzen"
     )
     images.set_defaults(handler=_fill_images)
+
+    german = commands.add_parser(
+        "import-german", help="Fehlende deutsche Karten aus dem PokéWiki ergänzen"
+    )
+    german.add_argument("--dry-run", action="store_true", help="nur anzeigen, nichts anlegen")
+    german.add_argument("--limit", type=int, help="höchstens so viele Sets (zum Testen)")
+    german.set_defaults(handler=_import_german)
 
 
 def _add_image_commands(commands: Any) -> None:
