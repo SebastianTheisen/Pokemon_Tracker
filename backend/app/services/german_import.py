@@ -59,6 +59,14 @@ PAGE_OVERRIDES: dict[str, str] = {
     "mep": "ME Black Star Promos (TCG)",
     "dv1": "Drachengruft (TCG)",
 }
+# Das PokéWiki führt auch Sets, die es nie auf Deutsch gab, und schreibt das in den Text
+# (Erkundung 2b): „nur auf Englisch erhältlich“, „nie auf Deutsch erschienen“ …
+_NOT_GERMAN = re.compile(
+    r"nur auf Englisch|nicht auf Deutsch erschienen|nie auf Deutsch erschienen"
+    r"|nicht in Deutschland erschienen|nie in Deutschland erschienen",
+    re.I,
+)
+NOT_GERMAN_NOTE = "laut PokéWiki nie auf Deutsch erschienen"
 _MCDONALDS = re.compile(r"^(\d{4})[a-z]+$")  # TCGdex: 2021swsh, 2023sv, …
 
 
@@ -70,6 +78,7 @@ class SetResult:
     rows: int = 0
     matched: int = 0
     added: int = 0
+    removed: int = 0
     note: str | None = None
 
 
@@ -80,6 +89,14 @@ class GermanReport:
     @property
     def added(self) -> int:
         return sum(result.added for result in self.sets)
+
+    @property
+    def removed(self) -> int:
+        return sum(result.removed for result in self.sets)
+
+
+def released_in_german(wikitext: str) -> bool:
+    return _NOT_GERMAN.search(wikitext) is None
 
 
 def parse_rows(wikitext: str) -> list[tuple[str, str]]:
@@ -170,7 +187,8 @@ async def find_page(wiki: PokeWiki, set_id: str, english_name: str) -> tuple[str
 
 
 async def _targets(session: AsyncSession) -> list[tuple[CardSet, int, int]]:
-    """Englische Sets (ohne Pocket) mit fehlendem oder kleinerem deutschem Gegenstück."""
+    """Englische Sets (ohne Pocket) mit fehlendem oder kleinerem deutschem Gegenstück
+    sowie Sets, in die schon PokéWiki-Karten importiert wurden."""
     counts = select(Card.set_id, func.count().label("cards")).group_by(Card.set_id).subquery()
     english_sets = (
         await session.execute(
@@ -192,10 +210,20 @@ async def _targets(session: AsyncSession) -> list[tuple[CardSet, int, int]]:
             )
         ).all()
     )
+    # Sets mit PokéWiki-Karten immer erneut prüfen (z. B. nie auf Deutsch erschienen).
+    imported = set(
+        (
+            await session.scalars(
+                select(CardSet.external_id)
+                .join(Card, Card.set_id == CardSet.id)
+                .where(CardSet.language == "de", Card.source == CardSource.POKEWIKI)
+            )
+        ).all()
+    )
     return [
         (card_set, int(cards), int(german.get(card_set.external_id, 0)))
         for card_set, cards in english_sets
-        if german.get(card_set.external_id, 0) < cards
+        if german.get(card_set.external_id, 0) < cards or card_set.external_id in imported
     ]
 
 
@@ -255,6 +283,14 @@ async def import_german(
                 continue
             title, wikitext = found
             result.page = title
+            if not released_in_german(wikitext):
+                result.note = NOT_GERMAN_NOTE
+                # Frühere Läufe haben solche Sets angelegt – aufräumen.
+                async with session_factory() as session:
+                    removed = await remove_imported(session, [english.external_id], dry_run=dry_run)
+                    result.removed = removed.cards_removed
+                    await session.commit()
+                continue
             async with session_factory() as session:
                 await _apply(session, english, title, result, parse_rows(wikitext), dry_run=dry_run)
     if report.added and not dry_run:
@@ -319,15 +355,18 @@ async def _apply(
 
 def render_report(report: GermanReport, *, dry_run: bool) -> str:
     verb = "würden angelegt" if dry_run else "angelegt"
+    gone = "würden entfernt" if dry_run else "entfernt"
     lines = [
         f"Deutsche Karten aus dem PokéWiki: {report.added} {verb} "
-        f"({sum(1 for s in report.sets if s.added)} von {len(report.sets)} Sets)",
+        f"({sum(1 for s in report.sets if s.added)} von {len(report.sets)} Sets), "
+        f"{report.removed} {gone} (nie auf Deutsch erschienen)",
         "",
-        f"{'Set':<12} {'Zeilen':>6} {'passend':>8} {'neu':>5}  PokéWiki-Seite / Hinweis",
+        f"{'Set':<12} {'Zeilen':>6} {'passend':>8} {'neu':>5} {'weg':>5}  PokéWiki-Seite / Hinweis",
     ]
     for result in report.sets:
         lines.append(
-            f"{result.set_id:<12} {result.rows:>6} {result.matched:>8} {result.added:>5}  "
+            f"{result.set_id:<12} {result.rows:>6} {result.matched:>8} {result.added:>5} "
+            f"{result.removed:>5}  "
             f"{result.page or '–'}{f' – {result.note}' if result.note else ''}"
         )
     return "\n".join(lines)

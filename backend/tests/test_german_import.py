@@ -10,7 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
 from app.models import Card, CardSet, CardSource
-from app.services.german_import import import_german, match_rows, parse_rows, remove_imported
+from app.services.german_import import (
+    import_german,
+    match_rows,
+    parse_rows,
+    released_in_german,
+    remove_imported,
+)
 
 PROMOS = """{{ErweiterungPrevNext}} Zu den '''XY Black Star Promos''' gehören …
 {{Setheader|level=nein}}
@@ -146,3 +152,33 @@ async def test_remove_imported_cards_of_a_set(
             await session.scalars(select(Card.external_id).where(Card.language == "de"))
         ).all()
         assert sorted(str(x) for x in german) == ["xyp-XY01", "xyp-XY02", "xyp-XY03"]  # anderes Set
+
+
+async def test_sets_never_released_in_german_are_skipped_and_cleaned_up(
+    session_factory: async_sessionmaker[AsyncSession], settings: Settings
+) -> None:
+    await _english_set(session_factory, "dv1", "Dragon Vault", ["1", "2"])
+    calls: list[dict[str, Any]] = []
+    first = await import_german(session_factory, settings, transport=wiki_transport(calls), pause=0)
+    assert first.added == 2
+
+    english_only = VAULT + "\nAuf Englisch erschienen; sie ist nie auf Deutsch erschienen."
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"parse": {"wikitext": english_only}})
+
+    again = await import_german(
+        session_factory, settings, transport=httpx.MockTransport(handler), pause=0
+    )
+
+    result = next(r for r in again.sets if r.set_id == "dv1")
+    assert (result.added, result.removed) == (0, 2)
+    assert result.note == "laut PokéWiki nie auf Deutsch erschienen"
+    async with session_factory() as session:
+        assert await session.scalar(select(Card).where(Card.language == "de")) is None
+
+
+def test_released_in_german_reads_the_wiki_text() -> None:
+    assert released_in_german(VAULT)
+    assert not released_in_german("Sie ist nur auf Englisch erhältlich.")
+    assert not released_in_german("Diese Erweiterung ist nicht auf Deutsch erschienen.")
