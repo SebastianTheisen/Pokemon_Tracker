@@ -329,6 +329,19 @@ RUNS_J: RunList = [
     ),
     ("Set-Seite · crawloop", "crawloop/pricecharting-scraper", {}),
 ]
+# Stufe K: Detail-Scraper je PriceCharting-Produkt – Firmen-genaue Noten, Verlauf, Bilder?
+PRODUCT_PAGES = [
+    "https://www.pricecharting.com/game/pokemon-scarlet-&-violet-151/charizard-ex-199",
+    "https://www.pricecharting.com/game/pokemon-japanese-paradigm-trigger/lugia-v-110",
+]
+RUNS_K: RunList = [
+    ("Produkt-Details · parsebird", "parsebird/pricecharting-product-scraper", {}),
+    (
+        "Produkt-Details · ecomscrape",
+        "ecomscrape/pricecharting-product-details-page-scraper",
+        {},
+    ),
+]
 STAGES = {
     "B": RUNS,
     "C": RUNS_C,
@@ -339,6 +352,7 @@ STAGES = {
     "H": RUNS_H,
     "I": RUNS_I,
     "J": RUNS_J,
+    "K": RUNS_K,
 }
 RUN_IDS: list[tuple[str, str]] = []
 # Stufe I: Produktseiten aus der günstigen Suche → danach Details über incognito_mode.
@@ -427,8 +441,10 @@ def run_actor(client: httpx.Client, actor: str, payload: dict[str, Any]) -> dict
     return run
 
 
-def set_page_payload(client: httpx.Client, actor: str) -> dict[str, Any]:
-    """Stufe J: Eingabe aus dem Schema – erstes URL-/Sammlungsfeld bekommt die Set-Seiten."""
+def set_page_payload(
+    client: httpx.Client, actor: str, urls: list[str] = SET_PAGES
+) -> dict[str, Any]:
+    """Stufe J/K: Eingabe aus dem Schema – erstes URL-/Sammlungsfeld bekommt die Seiten."""
     properties = actor_properties(client, actor)
     emit(f"- Eingabefelder: {short(sorted(properties), 400)}")
     for name, prop in properties.items():
@@ -439,23 +455,28 @@ def set_page_payload(client: httpx.Client, actor: str) -> dict[str, Any]:
         (
             name
             for name in properties
-            if re.search(r"url|collection|console|set", name, re.I)
+            if re.search(r"url|collection|console|set|product", name, re.I)
             and properties[name].get("type") == "array"
         ),
         None,
     )
     if target is not None:
         editor = properties[target].get("editor")
-        payload[target] = (
-            [{"url": url} for url in SET_PAGES] if editor == "requestListSources" else SET_PAGES
-        )
+        payload[target] = [{"url": url} for url in urls] if editor == "requestListSources" else urls
     if "mode" in properties:
         modes = [str(m) for m in properties["mode"].get("enum") or []]
         payload["mode"] = next((m for m in modes if re.search(r"set|console|collection", m)), None)
     for name in ("maxItems", "maxResults"):
         if name in properties:
             payload[name] = 400
-    for name in ("includeImages", "includeFullPrices"):
+    for name in (
+        "includeImages",
+        "includeFullPrices",
+        "scrapeProductDetails",
+        "includeRecentSales",
+        "includePriceHistory",
+        "includePopulation",
+    ):
         if name in properties:
             payload[name] = True
     return {key: value for key, value in payload.items() if value is not None}
@@ -466,8 +487,13 @@ def prepare_payload(client: httpx.Client, actor: str, payload: dict[str, Any]) -
     stage = os.environ.get("APIFY_SPIKE_STAGE", "B").upper()
     if stage == "J":
         payload = set_page_payload(client, actor)
+    elif stage == "K":
+        payload = set_page_payload(client, actor, PRODUCT_PAGES)
+        for name in ("maxItems", "maxResults"):
+            if name in payload:
+                payload[name] = len(PRODUCT_PAGES)
     emit(f"- Eingabe: `{short(payload, 400)}`")
-    if stage in ("D", "E", "F", "G", "H", "I", "J"):
+    if stage in ("D", "E", "F", "G", "H", "I", "J", "K"):
         payload = adapt_input(client, actor, payload)
     return payload
 
@@ -565,7 +591,7 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
             )
     full = (
         4000
-        if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("F", "G", "H", "I", "J")
+        if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("F", "G", "H", "I", "J", "K")
         else 900
     )
     emit(f"- Erster Eintrag vollständig: `{short(items[0], full)}`")
