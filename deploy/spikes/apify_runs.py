@@ -221,7 +221,21 @@ RUNS_E: RunList = [
         {"searchQueries": ["Charizard 30th"], "game": "Pokemon", "maxResults": 30},
     ),
 ]
-STAGES = {"B": RUNS, "C": RUNS_C, "D": RUNS_D, "E": RUNS_E}
+# Stufe F: PSA-Zertifikat nachschlagen (Lugia V PSA 10 JPN aus Testfoto 04: 73270136).
+PSA_CERT = os.environ.get("PSA_CERT", "73270136")
+RUNS_F: RunList = [
+    (
+        f"PSA-Zertifikat {PSA_CERT} · fanndev (Note, Population, Verkäufe)",
+        "fanndev/psa-card-cert-lookup-scraper",
+        {"certNumber": PSA_CERT, "maxItems": 1},
+    ),
+    (
+        f"PSA-Zertifikat {PSA_CERT} · lulzasaur (Population)",
+        "lulzasaur/psa-pop-scraper",
+        {"certNumber": PSA_CERT},
+    ),
+]
+STAGES = {"B": RUNS, "C": RUNS_C, "D": RUNS_D, "E": RUNS_E, "F": RUNS_F}
 RUN_IDS: list[tuple[str, str]] = []
 
 
@@ -310,7 +324,7 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
     emit(f"## {title}\n")
     emit(f"- Anbieter: `{actor}`")
     emit(f"- Eingabe: `{short(payload, 400)}`")
-    if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("D", "E"):
+    if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("D", "E", "F"):
         payload = adapt_input(client, actor, payload)
     started = time.monotonic()
     run = run_actor(client, actor, payload)
@@ -357,7 +371,8 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
                 if value not in (None, "")
             )
         )
-    emit(f"- Erster Eintrag vollständig: `{short(items[0], 900)}`")
+    full = 4000 if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() == "F" else 900
+    emit(f"- Erster Eintrag vollständig: `{short(items[0], full)}`")
     emit()
 
 

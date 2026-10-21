@@ -23,11 +23,15 @@ final showcaseProvider = FutureProvider.autoDispose.family<List<CollectionItem>,
   (ref, sort) async => (await ref.watch(apiProvider).items(sort: sort, limit: 12)).items,
 );
 
+/// Gewinner und Verlierer der letzten 7 Tage (eigene Rohkarten, Cardmarket-Trend).
+final moversProvider = FutureProvider.autoDispose<Movers>((ref) => ref.watch(apiProvider).movers());
+
 /// Nach Änderungen an der Sammlung alle abhängigen Anzeigen neu laden.
 void invalidateCollection(WidgetRef ref) => ref
   ..invalidate(dashboardProvider)
   ..invalidate(collectionHistoryProvider)
-  ..invalidate(showcaseProvider);
+  ..invalidate(showcaseProvider)
+  ..invalidate(moversProvider);
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -73,6 +77,7 @@ class DashboardScreen extends ConsumerWidget {
               if (summary.value case final data? when data.items == 0)
                 const _EmptyHint()
               else ...[
+                const _MoversSection(),
                 const _Showcase(title: 'Wertvollste Karten', sort: 'value_desc'),
                 const _Showcase(title: 'Zuletzt hinzugefügt', sort: 'added_desc'),
               ],
@@ -311,6 +316,72 @@ class ItemThumb extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// „Bewegungen (7 Tage)“: größte Gewinner und Verlierer – nur wenn es welche gibt.
+class _MoversSection extends ConsumerWidget {
+  const _MoversSection();
+
+  static const _shown = 3;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final movers = ref.watch(moversProvider).value;
+    if (movers == null || movers.isEmpty) return const SizedBox.shrink();
+    return Column(
+      key: const Key('movers'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 20, bottom: 4),
+          child: Text(
+            'Bewegungen (${movers.days} Tage)',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
+        ),
+        for (final mover in [...movers.gainers.take(_shown), ...movers.losers.take(_shown)])
+          _MoverTile(mover: mover),
+      ],
+    );
+  }
+}
+
+class _MoverTile extends StatelessWidget {
+  const _MoverTile({required this.mover});
+
+  final Mover mover;
+
+  @override
+  Widget build(BuildContext context) {
+    final up = !mover.change.startsWith('-');
+    final color = up ? AppColors.gain : AppColors.loss;
+    final pct = mover.changePct.replaceAll('.', ',');
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      onTap: () => context.push('/card/${mover.card.id}'),
+      leading: CardImage(url: mover.card.image(), width: 32),
+      title: Text(mover.card.displayName, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(
+        [
+          '${money(mover.before)} → ${money(mover.now)}',
+          if (mover.quantity > 1) '${mover.quantity}×',
+          if (mover.variant == 'reverse') 'Reverse Holo',
+        ].join(' · '),
+      ),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            signedMoney(mover.change),
+            style: TextStyle(color: color, fontWeight: FontWeight.w700),
+          ),
+          Text('${up ? '+' : ''}$pct %', style: TextStyle(color: color, fontSize: 12)),
+        ],
       ),
     );
   }

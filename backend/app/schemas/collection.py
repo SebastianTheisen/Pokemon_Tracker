@@ -25,6 +25,7 @@ from app.services.collection import (
     SetOverview,
     ValuedItem,
 )
+from app.services.movers import Mover, Movers
 from app.services.valuation import ItemValue
 
 Money = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)]
@@ -340,3 +341,42 @@ class SealedOfferOut(BaseModel):
 class ProductFromCardmarket(BaseModel):
     cardmarket_product_id: int = Field(gt=0)
     language: CatalogLanguage
+
+
+class MoverOut(BaseModel):
+    """Eine Karte, deren Cardmarket-Trend sich im Zeitraum deutlich bewegt hat."""
+
+    card: CardOut
+    variant: str
+    quantity: int
+    before: Decimal = Field(description="Trend je Stück zu Beginn des Zeitraums")
+    now: Decimal = Field(description="Trend je Stück jetzt")
+    change: Decimal = Field(description="Veränderung des Gesamtwerts (alle Exemplare)")
+    change_pct: Decimal
+    since: datetime
+
+
+class MoversOut(BaseModel):
+    days: int
+    gainers: list[MoverOut]
+    losers: list[MoverOut]
+
+    @classmethod
+    def build(cls, movers: Movers) -> MoversOut:
+        def out(mover: Mover) -> MoverOut:
+            return MoverOut(
+                card=CardOut.model_validate(mover.card),
+                variant=mover.variant,
+                quantity=mover.quantity,
+                before=mover.before,
+                now=mover.now,
+                change=mover.change,
+                change_pct=mover.change_pct,
+                since=mover.since,
+            )
+
+        return cls(
+            days=movers.days,
+            gainers=[out(m) for m in movers.gainers],
+            losers=[out(m) for m in movers.losers],
+        )

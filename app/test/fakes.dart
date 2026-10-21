@@ -219,6 +219,11 @@ class FakeApi extends Api {
   Future<CollectionSummary> dashboard() async =>
       CollectionSummary.fromJson(summaryJson(top: itemJson()));
 
+  Json moversJson = {'days': 7, 'gainers': <Json>[], 'losers': <Json>[]};
+
+  @override
+  Future<Movers> movers({int days = 7}) async => Movers.fromJson(moversJson);
+
   @override
   Future<CollectionHistory> collectionHistory({int days = 90}) async =>
       CollectionHistory.fromJson({'points': <Json>[], 'markers': <Json>[]});

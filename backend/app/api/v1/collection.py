@@ -21,6 +21,7 @@ from app.schemas.collection import (
     ItemPage,
     ItemUpdate,
     MarkerOut,
+    MoversOut,
     ProductOut,
     SetOverviewOut,
     SummaryOut,
@@ -124,6 +125,12 @@ async def _item_out(collection: CollectionService, item_id: uuid.UUID) -> ItemOu
 
 
 # --------------------------------------------------------------- Übersichten
+
+
+@router.get("/collection/movers")
+async def movers(collection: Collection, days: Annotated[int, Query(ge=1, le=90)] = 7) -> MoversOut:
+    """Größte Gewinner und Verlierer der eigenen Rohkarten (Cardmarket-Trend, ab 1 € und 5 %)."""
+    return MoversOut.build(await collection.price_movers(days=days))
 
 
 @router.get("/collection/summary")

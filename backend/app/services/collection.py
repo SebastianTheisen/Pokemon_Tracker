@@ -35,6 +35,7 @@ from app.models import (
 )
 from app.providers.pricing import CONDITIONS
 from app.services.errors import ConflictError, InvalidInputError, NotFoundError
+from app.services.movers import Movers, price_movers
 from app.services.pricing import CardPrices, PriceService
 from app.services.sealed import sealed_prices
 from app.services.valuation import CENT, ItemKind, ItemValue, item_kind, unit_value, value_item
@@ -473,6 +474,12 @@ class CollectionService:
         key, reverse = sorters[sort]
         valued.sort(key=key, reverse=reverse)
         return valued[offset : offset + limit], len(valued)
+
+    async def price_movers(self, *, days: int = 7, limit: int = 5) -> Movers:
+        """Gewinner und Verlierer der eigenen Rohkarten (Cardmarket-Trend) im Zeitraum."""
+        return await price_movers(
+            self._session, self._owner.id, now=self._now(), days=days, limit=limit
+        )
 
     async def summary(self) -> CollectionSummary:
         """Kennzahlen für Übersicht und Dashboard."""

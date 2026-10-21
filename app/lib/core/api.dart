@@ -410,6 +410,10 @@ class Api {
   Future<CollectionSummary> dashboard() async =>
       CollectionSummary.fromJson(await _get('/dashboard'));
 
+  /// Größte Gewinner und Verlierer der eigenen Rohkarten im Zeitraum (Cardmarket-Trend).
+  Future<Movers> movers({int days = 7}) async =>
+      Movers.fromJson(await _get('/collection/movers', query: {'days': days}));
+
   Future<CollectionHistory> collectionHistory({int days = 90}) async =>
       CollectionHistory.fromJson(await _get('/collection/history', query: {'days': days}));
 

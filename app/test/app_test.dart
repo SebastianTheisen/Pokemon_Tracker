@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kartenkiste/models/json.dart';
 
 import 'fakes.dart';
 
 void main() {
+  moversTests();
+
   testWidgets('ohne Sitzung: Anmeldung, falsches und richtiges Passwort', (tester) async {
     final api = FakeApi();
     await pumpApp(tester, api);
@@ -291,5 +294,35 @@ void main() {
     expect(api.lastItemBody?['grade'], '10 BL');
     expect(api.lastItemBody?.containsKey('condition'), isFalse);
     expect(api.calls, contains('confirm:scan1:c1'));
+  });
+}
+
+void moversTests() {
+  testWidgets('Startseite zeigt Gewinner und Verlierer der Woche', (tester) async {
+    Json mover(String change, String pct) => {
+      'card': cardJson(),
+      'variant': 'normal',
+      'quantity': 2,
+      'before': '10.00',
+      'now': '15.00',
+      'change': change,
+      'change_pct': pct,
+      'since': '2026-10-14T00:00:00Z',
+    };
+    final api = FakeApi(loggedIn: true)
+      ..moversJson = {
+        'days': 7,
+        'gainers': [mover('10.00', '50.0')],
+        'losers': [mover('-2.00', '-10.0')],
+      };
+    await pumpApp(tester, api);
+
+    final section = find.byKey(const Key('movers'));
+    await tester.scrollUntilVisible(section, 200, scrollable: find.byType(Scrollable).first);
+    expect(find.text('Bewegungen (7 Tage)'), findsOneWidget);
+    expect(find.text('+10,00\u00a0€'), findsOneWidget);
+    expect(find.text('+50,0 %'), findsOneWidget);
+    expect(find.text('−2,00\u00a0€'), findsOneWidget);
+    expect(find.text('-10,0 %'), findsOneWidget);
   });
 }

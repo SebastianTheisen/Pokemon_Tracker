@@ -1236,3 +1236,54 @@ String variantLabel(String variant) => switch (variant) {
   _ when variant.startsWith('graded:') => variant.substring('graded:'.length),
   _ => variant,
 };
+
+/// Karte, deren Cardmarket-Trend sich im Zeitraum deutlich bewegt hat.
+class Mover {
+  const Mover({
+    required this.card,
+    required this.variant,
+    required this.quantity,
+    required this.before,
+    required this.now,
+    required this.change,
+    required this.changePct,
+  });
+
+  factory Mover.fromJson(Json json) => Mover(
+    card: CardInfo.fromJson(json.obj('card')),
+    variant: json.str('variant'),
+    quantity: json.integer('quantity'),
+    before: json.str('before'),
+    now: json.str('now'),
+    change: json.str('change'),
+    changePct: json.str('change_pct'),
+  );
+
+  final CardInfo card;
+  final String variant;
+  final int quantity;
+
+  /// Trend je Stück zu Beginn des Zeitraums bzw. jetzt.
+  final String before;
+  final String now;
+
+  /// Veränderung des Gesamtwerts (alle Exemplare) und in Prozent.
+  final String change;
+  final String changePct;
+}
+
+class Movers {
+  const Movers({required this.days, required this.gainers, required this.losers});
+
+  factory Movers.fromJson(Json json) => Movers(
+    days: json.integer('days'),
+    gainers: json.list('gainers', Mover.fromJson),
+    losers: json.list('losers', Mover.fromJson),
+  );
+
+  final int days;
+  final List<Mover> gainers;
+  final List<Mover> losers;
+
+  bool get isEmpty => gainers.isEmpty && losers.isEmpty;
+}
