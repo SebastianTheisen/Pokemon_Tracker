@@ -229,4 +229,95 @@ def main() -> None:
             emit()
 
 
-main()
+POKEMON_SEARCHES = [
+    "pokemon",
+    "pokemon card",
+    "pokemon tcg",
+    "pokemon price",
+    "pokemon japanese",
+    "pokemon sealed",
+    "psa",
+    "psa population",
+    "graded card",
+    "trading card",
+    "tcg",
+    "card grading",
+    "card scanner",
+    "collectibles price",
+    "pricecharting",
+    "tcgplayer",
+    "snkrdunk",
+    "mercari japan",
+    "yuyu tei",
+    "card rush",
+]
+POKEMON_WORDS = re.compile(r"pok[eé]mon|\btcg\b|trading card|\bpsa\b|graded|collectible", re.I)
+# Wofür ein Dienst taugen könnte – Stichworte in Titel/Beschreibung.
+TOPICS = {
+    "💶 Preise": r"price|preis|sold|market|value|comps|trend",
+    "🏅 Grading/PSA": r"\bpsa\b|bgs|cgc|grad|population|\bpop\b|cert",
+    "🇯🇵 Japan": r"japan|snkrdunk|mercari|yuyu|card ?rush|surugaya|jp\b",
+    "📦 Sealed": r"sealed|booster|display|etb|box",
+    "🗂 Katalog/Bilder": r"database|catalog|card list|set list|image|scan",
+    "🛒 Marktplatz": r"ebay|cardmarket|tcgplayer|vinted|kleinanzeigen|mercari|pricecharting",
+}
+
+
+def main_pokemon() -> None:
+    emit("# Spike Apify: Store-Suche Pokémon\n")
+    token = os.environ.get("PT_APIFY_TOKEN", "").strip()
+    if not token:
+        emit("❌ `PT_APIFY_TOKEN` fehlt – zuerst `bash deploy/phase5_apify_token.sh`.")
+        return
+    headers = {"Authorization": f"Bearer {token}", "User-Agent": "Kartenkiste/0.1 (Spike)"}
+    with httpx.Client(headers=headers, timeout=60) as client:
+        candidates: dict[str, Candidate] = {}
+        for term in POKEMON_SEARCHES:
+            for item in store_search(client, term):
+                actor_id = f"{item.get('username')}/{item.get('name')}"
+                text = f"{item.get('title')} {item.get('description')}"
+                if actor_id in candidates or not POKEMON_WORDS.search(text):
+                    continue
+                stats = item.get("stats") or {}
+                candidates[actor_id] = Candidate(
+                    actor_id=actor_id,
+                    kind="pokemon",
+                    title=str(item.get("title") or ""),
+                    description=str(item.get("description") or ""),
+                    users=int(stats.get("totalUsers") or 0),
+                    users_30_days=int(stats.get("totalUsers30Days") or 0),
+                    modified=str(item.get("modifiedAt") or "")[:10],
+                    pricing=pricing_text(item.get("currentPricingInfo")),
+                )
+        ranked = sorted(candidates.values(), key=lambda c: c.users_30_days, reverse=True)
+        emit(f"- Passende Dienste: {len(ranked)} (Suchbegriffe: {', '.join(POKEMON_SEARCHES)})\n")
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            list(pool.map(lambda c: load_schema(client, c), ranked[:MAX_DETAILS]))
+        for c in ranked:
+            text = f"{c.title} {c.description}"
+            c.notes = [label for label, pattern in TOPICS.items() if re.search(pattern, text, re.I)]
+            if re.search(r"ebay\.de|germany|deutsch|\"de\"", c.schema_text):
+                c.notes.append("🇩🇪 DE")
+        for label in TOPICS:
+            group = [c for c in ranked if label in c.notes]
+            emit(f"## {label} ({len(group)})\n")
+            emit("| Dienst | Themen | Nutzer 30 T. / ges. | Preis |")
+            emit("|---|---|---|---|")
+            for c in group[:40]:
+                emit(
+                    f"| `{c.actor_id}` | {' '.join(c.notes)} | {c.users_30_days} / {c.users} | "
+                    f"{short(c.pricing, 50)} |"
+                )
+            emit()
+        emit("## Beschreibungen (alle, nach Nutzern)\n")
+        for c in ranked:
+            emit(f"- `{c.actor_id}` ({c.users_30_days} Nutzer/30 T.) – {short(c.title, 90)}")
+            emit(f"  - {short(c.description, 300)}")
+            if c.fields:
+                emit(f"  - Eingabe: {short(', '.join(c.fields), 250)}")
+
+
+if os.environ.get("APIFY_STORE_TOPIC") == "pokemon":
+    main_pokemon()
+else:
+    main()
