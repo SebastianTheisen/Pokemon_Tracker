@@ -125,6 +125,111 @@ RUNS_C: RunList = [
 ]
 
 
+# Stufe D: beste Kandidaten aus der Store-Suche (docs/phase5/apify_store.md), alle ebay.de.
+# Feldnamen laut Store-Bericht; Auswahlwerte (z. B. „ebay.de“ vs. „DE“) passt
+# ``adapt_input`` anhand des Eingabeschemas automatisch an.
+EBAY_GRADED = "Glurak 183/165 PSA 10"
+GLURAK_JA_EN = GLURAK_JA.replace("/de/", "/en/")
+RUNS_D: RunList = [
+    (
+        "eBay.de · epicscrapers (mit Ausschlusswörtern)",
+        "epicscrapers/ebay-sold-listings-api",
+        {"keywords": [EBAY_GRADED], "site": "ebay.de", "maxItems": 20, "days": 90},
+    ),
+    (
+        "eBay.de · scrape.badger",
+        "scrape.badger/ebay-sold-items-scraper",
+        {"mode": "sold", "query": EBAY_GRADED, "domain": "ebay.de", "max_items": 20},
+    ),
+    (
+        "eBay.de · astronomical_reception (Median, Empfehlung)",
+        "astronomical_reception/ebay-sold-lite",
+        {
+            "searchQueries": [EBAY_GRADED],
+            "maxItemsPerQuery": 20,
+            "soldWithinDays": 90,
+            "ebaySite": "ebay.de",
+        },
+    ),
+    (
+        "eBay.de · memo23 (Titel muss Begriffe enthalten)",
+        "memo23/ebay-search-scraper-ppe",
+        {
+            "searchQueries": [EBAY_GRADED],
+            "marketplace": "ebay.de",
+            "mode": "sold",
+            "soldWithinDays": 90,
+            "titleMustInclude": ["183/165", "PSA 10"],
+            "maxItems": 20,
+        },
+    ),
+    (
+        "eBay.de · harvestlab (nur verkauft)",
+        "harvestlab/ebay-scraper",
+        {"searchQuery": EBAY_GRADED, "ebaySite": "ebay.de", "soldOnly": True, "maxItems": 20},
+    ),
+    (
+        "Cardmarket · Turtok-ex 151 deutsch NM (englische Seite)",
+        "phantom_coder/cardmarket-listings-scraper",
+        {"productUrl": TURTOK_151_EN, "language": "German", "minCondition": "NM", "maxResults": 10},
+    ),
+    (
+        "Cardmarket · Turtok-ex 151 alle Sprachen ab NM (englische Seite)",
+        "phantom_coder/cardmarket-listings-scraper",
+        {"productUrl": TURTOK_151_EN, "language": "any", "minCondition": "NM", "maxResults": 10},
+    ),
+    (
+        "Cardmarket · Glurak M6a per idProduct, englisch, ohne Filter",
+        "phantom_coder/cardmarket-listings-scraper",
+        {"productUrl": GLURAK_JA_EN, "language": "any", "minCondition": "PO", "maxResults": 5},
+    ),
+]
+STAGES = {"B": RUNS, "C": RUNS_C, "D": RUNS_D}
+
+
+def actor_properties(client: httpx.Client, actor: str) -> dict[str, Any]:
+    """Eingabefelder laut Schema des neuesten Builds (leer, wenn nicht lesbar)."""
+    data = client.get(f"{API}/acts/{actor.replace('/', '~')}").json().get("data") or {}
+    build_id = ((data.get("taggedBuilds") or {}).get("latest") or {}).get("buildId")
+    if not build_id:
+        return {}
+    build = client.get(f"{API}/actor-builds/{build_id}").json().get("data") or {}
+    schema = (build.get("actorDefinition") or {}).get("input") or build.get("inputSchema")
+    if isinstance(schema, str):
+        schema = json.loads(schema)
+    return (schema or {}).get("properties") or {}
+
+
+def adapt_input(client: httpx.Client, actor: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Auswahlwerte an das Schema anpassen (z. B. „ebay.de“ → „DE“), unbekannte Felder melden."""
+    properties = actor_properties(client, actor)
+    if not properties:
+        return payload
+    adapted = dict(payload)
+    for key, value in payload.items():
+        prop = properties.get(key)
+        if prop is None:
+            emit(f"- ⚠️ Feld `{key}` gibt es laut Schema nicht")
+            continue
+        enum = [str(e) for e in prop.get("enum") or []]
+        if isinstance(value, str) and enum and value not in enum:
+            wanted = value.lower().replace("ebay.", "")
+            match = next(
+                (
+                    e
+                    for e in enum
+                    if e.lower() in (value.lower(), wanted, f"ebay_{wanted}", f"ebay-{wanted}")
+                    or e.lower().endswith(f".{wanted}")
+                    or (wanted == "de" and "german" in e.lower())
+                ),
+                None,
+            )
+            emit(f"- Auswahl `{key}`: „{value}“ → „{match}“ (möglich: {short(enum, 160)})")
+            if match is not None:
+                adapted[key] = match
+    return adapted
+
+
 def emit(line: str = "") -> None:
     print(line, flush=True)
 
@@ -167,6 +272,8 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
     emit(f"## {title}\n")
     emit(f"- Anbieter: `{actor}`")
     emit(f"- Eingabe: `{short(payload, 400)}`")
+    if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() == "D":
+        payload = adapt_input(client, actor, payload)
     started = time.monotonic()
     run = run_actor(client, actor, payload)
     if run is None:
@@ -217,7 +324,7 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
 
 def main() -> None:
     stage = os.environ.get("APIFY_SPIKE_STAGE", "B").upper()
-    runs = RUNS_C if stage == "C" else RUNS
+    runs = STAGES.get(stage, RUNS)
     emit(f"# Spike Apify, Stufe {stage}: Testläufe\n")
     token = os.environ.get("PT_APIFY_TOKEN", "").strip()
     if not token:

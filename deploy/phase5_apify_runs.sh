@@ -2,13 +2,14 @@
 # Spike Apify, echte Testläufe (max. 0,10 $ je Lauf), dauert einige Minuten.
 #   bash deploy/phase5_apify_runs.sh      → Stufe B (docs/phase5/apify_runs.md)
 #   bash deploy/phase5_apify_runs.sh C    → Stufe C (docs/phase5/apify_runs_c.md)
+#   bash deploy/phase5_apify_runs.sh D    → Stufe D (docs/phase5/apify_runs_d.md)
 # Berichte enthalten keinen Token.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 stage="${1:-B}"
 out="docs/phase5/apify_runs.md"
-[[ "${stage}" == "C" ]] && out="docs/phase5/apify_runs_c.md"
+[[ "${stage}" != "B" ]] && out="docs/phase5/apify_runs_$(echo "${stage}" | tr '[:upper:]' '[:lower:]').md"
 mkdir -p docs/phase5
 docker compose exec -T -e APIFY_SPIKE_STAGE="${stage}" api python - < deploy/spikes/apify_runs.py > "${out}" 2>&1 \
   || echo "(Exit-Code $?)" >> "${out}"
