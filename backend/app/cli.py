@@ -8,6 +8,7 @@ Beispiele (im Container: ``docker compose exec api python -m app.cli ...``)::
     python -m app.cli sync-catalog --languages de en --full
     python -m app.cli remove-digital --dry-run     # Pocket-Sets (Handyspiel) anzeigen/löschen
     python -m app.cli import-german --dry-run      # fehlende deutsche Karten aus dem PokéWiki
+    python -m app.cli import-pricecharting --dry-run   # Korea/China-Sets von PriceCharting
     python -m app.cli search "nachtara 215"
     python -m app.cli refresh-prices               # Preis-Runde sofort ausführen
     python -m app.cli prices "nachtara 215" --language de
@@ -50,6 +51,8 @@ from app.models import (
     Role,
     User,
 )
+from app.providers.apify import ApifyClient
+from app.providers.fx import EcbRates
 from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
 from app.scanner.ocr import RapidOcrReader
@@ -74,6 +77,8 @@ from app.services.image_import import (
     render_report as render_image_report,
 )
 from app.services.price_health import SourceHealth
+from app.services.pricecharting_catalog import PriceChartingCatalog
+from app.services.pricecharting_catalog import render_report as render_pricecharting_report
 from app.services.pricing import PriceService
 from app.services.scan import ScanOutcome, ScanService
 from app.services.scan_eval import evaluate, load_expected, render_report
@@ -177,6 +182,26 @@ async def _import_german(
     """Fehlende deutsche Karten (Promos, Sondersets) aus dem PokéWiki ergänzen."""
     report = await import_german(factory, settings, dry_run=args.dry_run, limit=args.limit)
     print(render_german_report(report, dry_run=args.dry_run))
+
+
+async def _import_pricecharting(
+    factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
+) -> None:
+    """Koreanische und chinesische Sets (Karten, Bilder, Preise) von PriceCharting."""
+    token = settings.apify_token
+    if token is None or not token.get_secret_value():
+        print("PT_APIFY_TOKEN fehlt – zuerst bash deploy/phase5_apify_token.sh")
+        sys.exit(1)
+    catalog = PriceChartingCatalog(
+        factory,
+        settings,
+        EcbRates(user_agent=settings.http_user_agent, url=settings.ecb_rates_url),
+        lambda: ApifyClient(token.get_secret_value(), user_agent=settings.http_user_agent),
+    )
+    report = await catalog.run(args.languages, dry_run=args.dry_run, limit=args.limit)
+    print(render_pricecharting_report(report, dry_run=args.dry_run))
+    if report.errors:
+        sys.exit(1)
 
 
 async def _fill_images(
@@ -569,6 +594,16 @@ def _add_catalog_commands(commands: Any) -> None:
     german.add_argument("--dry-run", action="store_true", help="nur anzeigen, nichts anlegen")
     german.add_argument("--limit", type=int, help="höchstens so viele Sets (zum Testen)")
     german.set_defaults(handler=_import_german)
+
+    pricecharting = commands.add_parser(
+        "import-pricecharting", help="Korea/China: Sets mit Bildern und Preisen von PriceCharting"
+    )
+    pricecharting.add_argument(
+        "--languages", nargs="+", default=["ko", "zh-cn"], help="ko und/oder zh-cn"
+    )
+    pricecharting.add_argument("--dry-run", action="store_true", help="nur Set-Liste, kostenlos")
+    pricecharting.add_argument("--limit", type=int, help="höchstens so viele Sets (zum Testen)")
+    pricecharting.set_defaults(handler=_import_pricecharting)
 
 
 def _add_image_commands(commands: Any) -> None:

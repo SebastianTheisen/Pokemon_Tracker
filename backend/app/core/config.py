@@ -199,6 +199,14 @@ class Settings(BaseSettings):
         ge=0,
         description="Diesen Teil des Apify-Monatsbudgets nie für PriceCharting nutzen (eBay).",
     )
+    pricecharting_catalog_actor: str = Field(
+        default="incognito_mode/pricecharting-collection-scraper",
+        description="Apify-Dienst für komplette Sets (Kartenliste mit Bildern und Preisen).",
+    )
+    pricecharting_category_url: str = Field(
+        default="https://www.pricecharting.com/category/pokemon-cards",
+        description="Übersicht aller Pokémon-Sets bei PriceCharting (Set-Liste).",
+    )
     ecb_rates_url: str = Field(
         default="https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml",
         description="EZB-Referenzkurse (Umrechnung US-Dollar → Euro).",
@@ -254,6 +262,7 @@ class Settings(BaseSettings):
             "assets.pokemon.com",
             "www.pokemon-card.com",
             "asia.pokemon-card.com",
+            "storage.googleapis.com",  # Bilder von PriceCharting (Korea, China)
         ],
         description="Nur von diesen Hosts werden Katalogbilder geladen (Schutz vor SSRF).",
     )

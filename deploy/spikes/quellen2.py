@@ -196,6 +196,11 @@ def taiwan(client: httpx.Client) -> None:
         for part in around(listing.text, pattern, 300):
             emit(f"  - `{pattern}`: `{part}`")
     ids = re.findall(r"/tw/card-search/detail/(\d+)/", listing.text)
+    emit(f"- Karten-Links auf Seite 1: {len(set(ids))}")
+    if not ids:
+        scripts = sorted(set(re.findall(r'src="([^"]+\.js[^"]*)"', listing.text)))[:10]
+        emit(f"- Skripte (Liste per JavaScript geladen?): {scripts}")
+        emit(f"- Seitenanfang: `{snippet(listing.text, 2500)}`")
     if ids:
         detail = get(client, f"{base}/tw/card-search/detail/{ids[0]}/")
         if detail is not None:

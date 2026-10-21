@@ -47,6 +47,7 @@ class ImageSource(enum.StrEnum):
     POKEMON_COM = "pokemon.com"  # offizielle Bilder DE/EN
     POKEMON_CARD_JP = "pokemon-card.com"  # offizielle japanische Kartendatenbank
     POKEMON_CARD_TW = "asia.pokemon-card.com/tw"  # offizielle Datenbank Taiwan
+    PRICECHARTING = "pricecharting"  # Setliste von PriceCharting (Korea, China)
 
 
 class CardSet(UuidPrimaryKeyMixin, Base):
