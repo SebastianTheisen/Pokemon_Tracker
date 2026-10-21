@@ -1,149 +1,141 @@
-# Spike: Sealed-Bilder – warum kein Treffer?
+# Spike: Sealed-Bilder – Fehlschläge und Stichprobe
 
 - TCGplayer-Produkte (versiegelt, mit Bild): 7602
-- je Sprache: {'en': 4819, 'ja': 2783}
-- Arten bei TCGplayer: {'blister': 714, 'display': 385, 'booster_bundle': 184, 'case': 177, 'booster': 394, 'collection_box': 1061, 'elite_trainer_box': 324, 'tin': 604, 'other': 3759}
+- Schwelle 0.72 (unbekannte Art 0.9), Vorsprung 0.05
+
+**Mit Bild: 1914 von 5102 (37 %)**
 
 ## Je Cardmarket-Kategorie
 
 | Kategorie | Produkte | mit Bild | kein Kandidat | andere Art | zu unähnlich | zweideutig |
 |---|---|---|---|---|---|---|
-| Pokémon Box Set | 1120 | 461 | 0 | 42 | 613 | 4 |
-| Pokémon Booster | 795 | 239 | 0 | 11 | 543 | 2 |
-| Pokémon Coins | 692 | 94 | 0 | 0 | 598 | 0 |
-| Pokémon Display | 624 | 306 | 0 | 2 | 314 | 2 |
-| Pokémon Tins | 571 | 266 | 0 | 1 | 301 | 3 |
-| Pokémon Theme Decks | 560 | 198 | 2 | 1 | 356 | 3 |
-| Pokémon Blisters | 498 | 200 | 0 | 3 | 291 | 4 |
-| Pokémon Elite Trainer Boxes | 171 | 140 | 0 | 0 | 22 | 9 |
-| PCG Set | 30 | 0 | 0 | 0 | 30 | 0 |
+| Pokémon Box Set | 1120 | 494 | 0 | 24 | 600 | 2 |
+| Pokémon Booster | 795 | 256 | 0 | 21 | 517 | 1 |
+| Pokémon Coins | 692 | 59 | 0 | 0 | 633 | 0 |
+| Pokémon Display | 624 | 260 | 0 | 0 | 364 | 0 |
+| Pokémon Tins | 571 | 273 | 0 | 6 | 287 | 5 |
+| Pokémon Theme Decks | 560 | 216 | 2 | 3 | 334 | 5 |
+| Pokémon Blisters | 498 | 236 | 0 | 12 | 246 | 4 |
+| Pokémon Elite Trainer Boxes | 171 | 113 | 0 | 0 | 57 | 1 |
+| PCG Set | 30 | 1 | 0 | 0 | 29 | 0 |
 | Pokémon Lot | 28 | 2 | 2 | 0 | 24 | 0 |
 | Pokémon Trainer Kits | 13 | 4 | 0 | 0 | 9 | 0 |
 
-Schwelle 0.75, Vorsprung 0.05.
-Ähnlichkeit bei „zu unähnlich“ (beste gleiche Art): {'0.0': 38, '0.1': 470, '0.2': 812, '0.3': 426, '0.4': 252, '0.5': 422, '0.6': 487, '0.7': 194}
+Ähnlichkeit bei „zu unähnlich“: {'0.0': 132, '0.1': 706, '0.2': 614, '0.3': 493, '0.4': 312, '0.5': 293, '0.6': 395, '0.7': 155}
 
-## Erkannte Art je Cardmarket-Kategorie
+## Stichprobe Treffer (30, zum Gegenlesen)
 
-- Pokémon Box Set → collection_box: 1055
-- Pokémon Booster → booster: 794
-- Pokémon Display → display: 555
-- Pokémon Theme Decks → other: 542
-- Pokémon Tins → tin: 519
-- Pokémon Coins → other: 505
-- Pokémon Blisters → blister: 479
-- Pokémon Elite Trainer Boxes → elite_trainer_box: 168
-- Pokémon Coins → collection_box: 99
-- Pokémon Coins → blister: 82
-- Pokémon Display → booster_bundle: 41
-- Pokémon Box Set → display: 33
-- PCG Set → other: 29
-- Pokémon Display → case: 28
-- Pokémon Tins → display: 24
-- Pokémon Lot → other: 21
-- Pokémon Trainer Kits → other: 13
-- Pokémon Theme Decks → collection_box: 13
-- Pokémon Blisters → collection_box: 12
-- Pokémon Box Set → tin: 11
-- Pokémon Tins → other: 10
-- Pokémon Box Set → case: 10
-- Pokémon Box Set → booster_bundle: 9
-- Pokémon Lot → collection_box: 7
-- Pokémon Blisters → display: 6
-- Pokémon Tins → booster_bundle: 6
-- Pokémon Tins → elite_trainer_box: 5
-- Pokémon Theme Decks → display: 5
-- Pokémon Tins → collection_box: 4
-- Pokémon Coins → elite_trainer_box: 3
-- Pokémon Elite Trainer Boxes → collection_box: 3
-- Pokémon Tins → case: 3
-- Pokémon Coins → tin: 2
-- Pokémon Box Set → elite_trainer_box: 2
-- Pokémon Coins → case: 1
-- Pokémon Blisters → case: 1
-- PCG Set → collection_box: 1
-- Pokémon Booster → collection_box: 1
+- Kangaskhan EX Box (collection_box) → Kangaskhan EX Box · https://tcgplayer-cdn.tcgplayer.com/product/125732_200w.jpg
+- Scarlet & Violet: Spidops 1-Pack Blister (blister) → Scarlet & Violet Single Pack Blister [Spidops] · https://tcgplayer-cdn.tcgplayer.com/product/478765_200w.jpg
+- Mega Greninja ex Premium Collection (collection_box) → Mega Greninja ex Premium Collection · https://tcgplayer-cdn.tcgplayer.com/product/690660_200w.jpg
+- Phantasmal Flames: Hydrapple Premium Checklane Blister (blister) → Phantasmal Flames Premium Checklane Blister [Hydrapple] · https://tcgplayer-cdn.tcgplayer.com/product/654146_200w.jpg
+- White Flare Binder Collection (collection_box) → White Flare Binder Collection · https://tcgplayer-cdn.tcgplayer.com/product/630695_200w.jpg
+- Primal Clash: Earth's Pulse Theme Deck (other) → Primal Clash Theme Deck - "Earth's Pulse" [Groudon] · https://tcgplayer-cdn.tcgplayer.com/product/97753_200w.jpg
+- Sword & Shield: Rillaboom Theme Deck (other) → Sword & Shield Theme Deck [Rillaboom] · https://tcgplayer-cdn.tcgplayer.com/product/206037_200w.jpg
+- Mythical Pokémon Collection: Meloetta (collection_box) → Mythical Pokemon Collection Box [Meloetta] · https://tcgplayer-cdn.tcgplayer.com/product/126568_200w.jpg
+- Pokémon GO: Mewtwo V Battle Deck (other) → V Battle Deck [Mewtwo V] · https://tcgplayer-cdn.tcgplayer.com/product/270710_200w.jpg
+- Black Bolt Elite Trainer Box (elite_trainer_box) → Black Bolt Elite Trainer Box · https://tcgplayer-cdn.tcgplayer.com/product/630686_200w.jpg
+- Evolutions: Black Kyurem 3-Pack Blister (blister) → XY - Evolutions 3 Pack Blister [Black Kyurem] · https://tcgplayer-cdn.tcgplayer.com/product/224946_200w.jpg
+- Premium Trainer Box VSTAR (collection_box) → VStar Premium Trainer Box · https://tcgplayer-cdn.tcgplayer.com/product/678055_200w.jpg
+- Temporal Forces: Baxcalibur Premium Checklane Blister (blister) → Temporal Forces Premium Checklane Blister [Baxcalibur] · https://tcgplayer-cdn.tcgplayer.com/product/544679_200w.jpg
+- Empty Mysterious Powers Tins: Marshadow GX Tin (tin) → Mysterious Powers Tin [Marshadow GX] · https://tcgplayer-cdn.tcgplayer.com/product/148420_200w.jpg
+- Mega Evolution Booster Box (display) → Mega Evolution Booster Box · https://tcgplayer-cdn.tcgplayer.com/product/644298_200w.jpg
+- Jolteon GX Collection (collection_box) → Jolteon GX Special Collection · https://tcgplayer-cdn.tcgplayer.com/product/181709_200w.jpg
+- Pyroar Box (collection_box) → Pyroar Box · https://tcgplayer-cdn.tcgplayer.com/product/97741_200w.jpg
+- 10th Movie Commemoration Set (collection_box) → 10th Movie Commemoration Set · https://tcgplayer-cdn.tcgplayer.com/product/266002_200w.jpg
+- Fossil: LockDown Theme Deck (other) → Fossil Theme Deck - "LockDown" · https://tcgplayer-cdn.tcgplayer.com/product/107608_200w.jpg
+- Snorlax Pin Collection (collection_box) → Snorlax Pin Collection · https://tcgplayer-cdn.tcgplayer.com/product/210576_200w.jpg
+- Mega Zygarde ex Premium Collection (collection_box) → Mega Zygarde ex Premium Collection · https://tcgplayer-cdn.tcgplayer.com/product/682939_200w.jpg
+- Celebrations Special Collection: Pikachu V-UNION (collection_box) → Celebrations Collection [Pikachu V-UNION] · https://tcgplayer-cdn.tcgplayer.com/product/244726_200w.jpg
+- Team Up: Deoxys 3-Pack Blister (blister) → Team Up 3 Pack Blister [Deoxys] · https://tcgplayer-cdn.tcgplayer.com/product/181700_200w.jpg
+- Paldea Partners Tins: Meowscarada ex Tin (tin) → Paldea Partners Tin [Meowscarada ex] · https://tcgplayer-cdn.tcgplayer.com/product/504330_200w.jpg
+- Black Bolt Pokémon Center Elite Trainer Box (elite_trainer_box) → Black Bolt Pokemon Center Elite Trainer Box (Exclusive) · https://tcgplayer-cdn.tcgplayer.com/product/630687_200w.jpg
+- Black Bolt JP Deluxe Booster Box (display) → Black Bolt Deluxe Booster Box · https://tcgplayer-cdn.tcgplayer.com/product/637491_200w.jpg
+- Great Encounters Booster Box (display) → Great Encounters Booster Box · https://tcgplayer-cdn.tcgplayer.com/product/98544_200w.jpg
+- Grand Adventure Collection (collection_box) → Grand Adventure Collection · https://tcgplayer-cdn.tcgplayer.com/product/594896_200w.jpg
+- Guardians Rising: Lurantis 1-Pack Blister (blister) → Guardians Rising Single Pack Blister [Lurantis] · https://tcgplayer-cdn.tcgplayer.com/product/184341_200w.jpg
+- Rebel Clash Build & Battle Box (collection_box) → Rebel Clash Build & Battle Box · https://tcgplayer-cdn.tcgplayer.com/product/212821_200w.jpg
 
 ## Beispiele „andere Art“ (mit Preis)
 
-- **Arceus Poster Pack** (Pokémon Box Set, collection_box) `arceus pack poster`
-  → 1.00 Arceus Poster Pack [other] | 0.50 Arceus Poster Box [collection_box] | 0.33 Arceus 3 Pack Blister [Darkrai] [blister]
-- **League Battle Decks: Pikachu & Zekrom GX** (Pokémon Box Set, collection_box) `battle decks gx league pikachu zekrom`
-  → 1.00 League Battle Decks [Pikachu & Zekrom GX] [other] | 0.75 Code Card - League Battle Decks [Pikachu & Zekrom GX] [other] | 0.50 League Battle Decks [Reshiram & Charizard GX] [other]
-- **League Battle Decks: Reshiram & Charizard GX** (Pokémon Box Set, collection_box) `battle charizard decks gx league reshiram`
-  → 1.00 League Battle Decks [Reshiram & Charizard GX] [other] | 0.75 Code Card - League Battle Decks [Reshiram & Charizard GX] [other] | 0.50 League Battle Decks [Pikachu & Zekrom GX] [other]
-- **Battle Academy** (Pokémon Box Set, collection_box) `academy battle`
-  → 1.00 Pokemon TCG: Battle Academy [other] | 0.67 Pokemon TCG: Battle Academy 2024 [other] | 0.67 Pokemon TCG: Battle Academy 2022 [other]
-- **Trainer’s Toolkit 2020** (Pokémon Box Set, collection_box) `2020 s toolkit trainer`
-  → 1.00 Pokemon TCG: Trainer's Toolkit (2020) [other] | 0.60 Pokemon TCG: Trainer's Toolkit (2021) [other] | 0.60 Pokemon TCG: Trainer's Toolkit (2022) [other]
-- **Trainer's Toolkit 2021** (Pokémon Box Set, collection_box) `2021 s toolkit trainer`
-  → 1.00 Pokemon TCG: Trainer's Toolkit (2021) [other] | 0.80 Pokemon TCG: Trainer's Toolkit (2021) Case [case] | 0.60 Pokemon TCG: Trainer's Toolkit (2020) [other]
-- **Marnie Premium Tournament Collection Box Bundle** (Pokémon Box Set, booster_bundle) `bundle collection marnie premium tournament`
-  → 0.80 Marnie Premium Tournament Collection Box [collection_box] | 0.57 Code Card - Marnie Premium Tournament Collection Box [collection_box] | 0.50 Klara Premium Tournament Collection Box [collection_box]
-- **Celebrations Collector Chest** (Pokémon Box Set, collection_box) `celebrations chest collector`
-  → 1.00 Celebrations Collector Chest [other] | 0.75 Celebrations Collector Chest Case [case] | 0.67 Collector Chest [other]
-- **Poké Card Creator Pack** (Pokémon Booster, booster) `card creator pack poke`
-  → 1.00 Poke Card Creator Pack [other] | 0.29 Costco 6-Pack Poke balls [other] | 0.25 Code Card - Giratina 3-Pack Blister Pack [blister]
-- **Pikachu V Showcase** (Pokémon Box Set, collection_box) `pikachu showcase v`
-  → 1.00 Pikachu V Showcase [other] | 0.60 Code Card - Pikachu V Showcase [other] | 0.50 Pikachu V-UNION [other]
-- **Battle Academy 2022** (Pokémon Box Set, collection_box) `2022 academy battle`
-  → 1.00 Pokemon TCG: Battle Academy 2022 [other] | 0.75 Pokemon TCG: Battle Academy 2022 Case [case] | 0.67 Pokemon TCG: Battle Academy [other]
-- **10th Movie Commemoration Set** (Pokémon Box Set, collection_box) `10th commemoration movie set`
-  → 1.00 10th Movie Commemoration Set [other] | 0.60 11th Movie Commemoration Set [other] | 0.17 Pokemon TCG: Starter Gift Set [other]
+- **POP Series 1 Booster** (Pokémon Booster, booster) `1 booster pop series`
+  → 0.76 POP Series 1 Pack [other] | 0.43 POP Series 3 Pack [other] | 0.43 POP Series 2 Pack [other]
+- **POP Series 2 Booster** (Pokémon Booster, booster) `2 booster pop series`
+  → 0.73 POP Series 2 Pack [other] | 0.48 POP Series 3 Pack [other] | 0.46 POP Series 4 Pack [other]
+- **POP Series 3 Booster** (Pokémon Booster, booster) `3 booster pop series`
+  → 0.73 POP Series 3 Pack [other] | 0.48 POP Series 2 Pack [other] | 0.47 POP Series 4 Pack [other]
+- **POP Series 4 Booster** (Pokémon Booster, booster) `4 booster pop series`
+  → 0.74 POP Series 4 Pack [other] | 0.47 POP Series 3 Pack [other] | 0.46 POP Series 2 Pack [other]
+- **POP Series 5 Booster** (Pokémon Booster, booster) `5 booster pop series`
+  → 0.76 POP Series 5 Pack [other] | 0.44 POP Series 3 Pack [other] | 0.44 POP Series 2 Pack [other]
+- **POP Series 6 Booster** (Pokémon Booster, booster) `6 booster pop series`
+  → 0.77 POP Series 6 Pack [other] | 0.42 POP Series 3 Pack [other] | 0.41 POP Series 2 Pack [other]
+- **POP Series 7 Booster** (Pokémon Booster, booster) `7 booster pop series`
+  → 0.78 POP Series 7 Pack [other] | 0.41 POP Series 3 Pack [other] | 0.40 POP Series 2 Pack [other]
+- **POP Series 8 Booster** (Pokémon Booster, booster) `8 booster pop series`
+  → 0.76 POP Series 8 Pack [other] | 0.43 POP Series 3 Pack [other] | 0.42 POP Series 2 Pack [other]
+- **POP Series 9 Booster** (Pokémon Booster, booster) `9 booster pop series`
+  → 0.77 POP Series 9 Pack [other] | 0.41 POP Series 3 Pack [other] | 0.41 POP Series 2 Pack [other]
+- **EX Team Magma vs Team Aqua: Team Magma Theme Deck** (Pokémon Theme Decks, other) `aqua deck ex magma team vs`
+  → 0.76 Team Magma vs Team Aqua Booster Pack [booster] | 0.76 Team Magma vs Team Aqua Booster Box [display] | 0.45 Team Magma Theme Deck - "EX Team Magma" [Groudon] [other]
+- **EX Team Magma vs Team Aqua: Team Aqua Theme Deck** (Pokémon Theme Decks, other) `aqua deck ex magma team vs`
+  → 0.76 Team Magma vs Team Aqua Booster Pack [booster] | 0.76 Team Magma vs Team Aqua Booster Box [display] | 0.45 Team Magma Theme Deck - "EX Team Magma" [Groudon] [other]
+- **EX Collector's Tins: Rayquaza Tin** (Pokémon Tins, tin) `collector ex rayquaza s tin`
+  → 0.76 Pokemon TCG: EX Collector's Box [Rayquaza] [collection_box] | 0.55 EX Series Collector's Tin [tin] | 0.43 Fall 2009 Collector's Tin [Rayquaza LV.X] [tin]
 
 ## Beispiele „zu unähnlich“ (mit Preis)
 
-- **EX Deoxys Booster** (Pokémon Booster, booster) `booster deoxys ex`
-  → 0.67 Deoxys Booster Pack [booster] | 0.50 EX Dragon Booster Pack [booster] | 0.25 151 Booster Pack [booster]
-- **EX Emerald Booster** (Pokémon Booster, booster) `booster emerald ex`
-  → 0.67 Emerald Booster Pack [booster] | 0.50 EX Dragon Booster Pack [booster] | 0.25 151 Booster Pack [booster]
-- **Fossil Booster** (Pokémon Booster, booster) `booster fossil`
-  → 0.50 Fossil Booster Pack [1st Edition] [booster] | 0.50 Fossil Booster Pack [Unlimited Edition] [booster] | 0.33 151 Booster Pack [booster]
-- **Gym Challenge Booster** (Pokémon Booster, booster) `booster challenge gym`
-  → 0.60 Gym Challenge Booster Pack [Unlimited Edition] [booster] | 0.60 Gym Challenge Booster Pack [1st Edition] [booster] | 0.33 Gym Heroes Booster Pack [1st Edition] [booster]
-- **Neo Destiny Booster** (Pokémon Booster, booster) `booster destiny neo`
-  → 0.60 Neo Destiny Booster Pack [Unlimited Edition] [booster] | 0.60 Neo Destiny Booster Pack [1st Edition] [booster] | 0.33 Neo Revelation Booster Pack [1st Edition] [booster]
-- **Neo Genesis Booster** (Pokémon Booster, booster) `booster genesis neo`
-  → 0.60 Neo Genesis Booster Pack [1st Edition] [booster] | 0.60 Neo Genesis Booster Pack [Unlimited Edition] [booster] | 0.33 Neo Destiny Booster Pack [Unlimited Edition] [booster]
-- **Neo Revelation Booster** (Pokémon Booster, booster) `booster neo revelation`
-  → 0.60 Neo Revelation Booster Pack [1st Edition] [booster] | 0.60 Neo Revelation Booster Pack [Unlimited Edition] [booster] | 0.33 Neo Destiny Booster Pack [Unlimited Edition] [booster]
-- **Lightning Raichu GX Deck** (Pokémon Theme Decks, other) `deck gx lightning raichu`
-  → 0.29 BREAKthrough Theme Deck - "Burning Spark" [Raichu] [other] | 0.29 Battle Arena Deck: Rayquaza GX [other] | 0.25 Raichu [other]
 - **Zygarde EX Perfect Battle Deck** (Pokémon Theme Decks, other) `battle deck ex perfect zygarde`
-  → 0.50 ex Battle Deck [Ampharos ex] [other] | 0.50 ex Battle Deck [Lucario ex] [other] | 0.50 ex Battle Deck [Tinkaton ex] [other]
+  → 0.33 ex Battle Deck [Lucario ex] [other] | 0.33 ex Battle Deck [Greninja ex] [other] | 0.32 ex Battle Deck [Miraidon ex] [other]
 - **Water/Psychic Battle Strength Set** (Pokémon Theme Decks, other) `battle psychic set strength water`
-  → 0.25 Legendary Battle Decks [Set of 3] [other] | 0.25 League Battle Decks [Set of 2] [other] | 0.25 ex Battle Deck [Set of 2] [other]
-- **Neo Discovery Booster** (Pokémon Booster, booster) `booster discovery neo`
-  → 0.60 Neo Discovery Booster Pack [Unlimited Edition] [booster] | 0.60 Neo Discovery Booster Pack [1st Edition] [booster] | 0.33 Neo Destiny Booster Pack [Unlimited Edition] [booster]
-- **Sneak-Peek Tins: Tepig Tin** (Pokémon Tins, tin) `peek sneak tepig tin tins`
-  → 0.67 BW Sneak-Peek Tin [Tepig] [tin] | 0.43 BW Sneak-Peek Tin [Snivy] [tin] | 0.43 BW Sneak-Peek Tin [Oshawott] [tin]
+  → 0.18 Psychic Energy [other] | 0.18 Water Energy [other] | 0.18 Water Energy [other]
+- **BREAKthrough Booster** (Pokémon Booster, booster) `booster breakthrough`
+  → 0.70 BREAKthrough Sleeved Booster Pack [booster] | 0.65 XY BREAKthrough Booster Pack [booster] | 0.26 XY BREAKthrough Collector Chest [other]
+- **BREAKthrough Booster Box** (Pokémon Display, display) `breakthrough display`
+  → 0.66 XY BREAKthrough Booster Box [display] | 0.25 XY BREAKthrough Collector Chest [other] | 0.23 Delta Species Theme Deck - "Breakthrough" [other]
+- **EX Sandstorm: Oasis Theme Deck** (Pokémon Theme Decks, other) `deck ex oasis sandstorm`
+  → 0.34 Sandstorm Theme Deck - "Caravan" [other] | 0.18 ex Battle Deck [Lucario ex] [other] | 0.18 ex Battle Deck [Greninja ex] [other]
+- **EX Dragon: WindBlast Theme Deck** (Pokémon Theme Decks, other) `deck dragon ex windblast`
+  → 0.24 Dragon Theme Deck - "FireFang" [Salamence] [other] | 0.19 ex Battle Deck [Lucario ex] [other] | 0.19 ex Battle Deck [Greninja ex] [other]
+- **EX Dragon: FireFang Theme Deck** (Pokémon Theme Decks, other) `deck dragon ex firefang`
+  → 0.65 Dragon Theme Deck - "FireFang" [Salamence] [other] | 0.19 ex Battle Deck [Lucario ex] [other] | 0.19 ex Battle Deck [Greninja ex] [other]
+- **EX Hidden Legends: Forest Guardian Theme Deck** (Pokémon Theme Decks, other) `deck ex forest guardian hidden legends`
+  → 0.65 Hidden Legends Theme Deck - "Forest Guardian" [Dark Celebi] [other] | 0.23 Hidden Legends Theme Deck - "Wish Maker" [Jirachi] [other] | 0.20 Fates Collide Theme Deck - "Sky Guardian" [Lugia] [other]
+- **EX FireRed & LeafGreen: FireRed Theme Deck** (Pokémon Theme Decks, other) `deck ex firered leafgreen`
+  → 0.62 FireRed & LeafGreen Theme Deck - "LeafGreen" [Ivysaur] [other] | 0.19 ex Battle Deck [Lucario ex] [other] | 0.19 ex Battle Deck [Greninja ex] [other]
+- **EX FireRed & LeafGreen: LeafGreen Theme Deck** (Pokémon Theme Decks, other) `deck ex firered leafgreen`
+  → 0.62 FireRed & LeafGreen Theme Deck - "LeafGreen" [Ivysaur] [other] | 0.19 ex Battle Deck [Lucario ex] [other] | 0.19 ex Battle Deck [Greninja ex] [other]
+- **EX Team Rocket Returns: Jessie Theme Deck** (Pokémon Theme Decks, other) `deck ex jessie returns rocket team`
+  → 0.31 League Battle Deck [Team Rocket's Mewtwo ex] [other] | 0.30 Team Rocket Theme Deck - "Devastation" [other] | 0.30 Team Rocket Theme Deck - "Trouble" [other]
+- **EX Team Rocket Returns: James Theme Deck** (Pokémon Theme Decks, other) `deck ex james returns rocket team`
+  → 0.31 League Battle Deck [Team Rocket's Mewtwo ex] [other] | 0.30 Team Rocket Theme Deck - "Devastation" [other] | 0.30 Team Rocket Theme Deck - "Trouble" [other]
 
 ## Beispiele „zweideutig“ (mit Preis)
 
-- **EX Dragon Frontiers Booster** (Pokémon Booster, booster) `booster dragon ex frontiers`
-  → 0.75 Dragon Frontiers Booster Pack [booster] | 0.75 EX Dragon Booster Pack [booster] | 0.40 Dragon Majesty Booster Pack [booster]
-- **EX Dragon Frontiers Booster Box** (Pokémon Display, display) `display dragon ex frontiers`
-  → 0.75 Dragon Frontiers Booster Box [display] | 0.75 EX Dragon Booster Box [display] | 0.22 Mega Battle Deck Display (Mega Gengar ex/Mega Diancie ex) [display]
-- **Phantom Forces Booster** (Pokémon Booster, booster) `booster forces phantom`
-  → 0.75 XY Phantom Forces Booster Pack [booster] | 0.75 Phantom Forces Sleeved Booster Pack [booster] | 0.50 Temporal Forces Booster Pack [booster]
-- **EX Ruby & Sapphire: Sapphire Theme Deck** (Pokémon Theme Decks, other) `deck ex ruby sapphire`
-  → 0.80 EX Ruby & Sapphire Theme Deck - "Ruby" [Blaziken] [other] | 0.80 EX Ruby & Sapphire Theme Deck - "Sapphire" [Swampert] [other] | 0.33 Lightning Energy (Ruby & Sapphire) [other]
 - **EX Ruby & Sapphire: Ruby Theme Deck** (Pokémon Theme Decks, other) `deck ex ruby sapphire`
-  → 0.80 EX Ruby & Sapphire Theme Deck - "Ruby" [Blaziken] [other] | 0.80 EX Ruby & Sapphire Theme Deck - "Sapphire" [Swampert] [other] | 0.33 Lightning Energy (Ruby & Sapphire) [other]
+  → 0.76 EX Ruby & Sapphire Theme Deck - "Ruby" [Blaziken] [other] | 0.74 EX Ruby & Sapphire Theme Deck - "Sapphire" [Swampert] [other] | 0.53 Lightning Energy (Ruby & Sapphire) [other]
+- **2009 Fall Collector's Tins: Charizard LV.X Tin** (Pokémon Tins, tin) `2009 charizard collector fall lv s tin`
+  → 0.73 Fall 2009 Collector's Tin [Rayquaza LV.X] [tin] | 0.71 Fall 2009 Collector's Tin [Garchomp LV.X] [tin] | 0.49 Spring 2009 Collector's Tin [Dialga LV.X] [tin]
 - **Charizard EX Box** (Pokémon Box Set, collection_box) `box charizard ex`
-  → 1.00 Charizard EX Box [collection_box] | 1.00 Charizard Ex Box [collection_box] | 0.60 Code Card - Charizard EX Box [collection_box]
+  → 1.00 Charizard EX Box [collection_box] | 1.00 Charizard Ex Box [collection_box] | 0.46 Charizard ex Premium Collection [collection_box]
 - **Tapu Koko Collection** (Pokémon Box Set, collection_box) `collection koko tapu`
-  → 0.75 Tapu Koko Figure Collection [collection_box] | 0.75 Tapu Koko Pin Collection [collection_box] | 0.50 Code Card - Tapu Koko Pin Collection [collection_box]
-- **Reshiram & Charizard GX Collection** (Pokémon Box Set, collection_box) `charizard collection gx reshiram`
-  → 0.80 Reshiram & Charizard GX Figure Collection [collection_box] | 0.80 Reshiram & Charizard GX Premium Collection [collection_box] | 0.60 Charizard GX Premium Collection [collection_box]
+  → 0.80 Tapu Koko Pin Collection [collection_box] | 0.75 Tapu Koko Figure Collection [collection_box] | 0.54 ex Battle Deck [Tapu Koko ex] [other]
 - **Battle Theme Deck: Victini** (Pokémon Theme Decks, other) `battle deck victini`
-  → 0.75 V Battle Deck [Victini V] [other] | 0.75 ex Battle Deck [Victini ex] [other] | 0.50 Code Card - V Battle Deck [Victini V] [other]
-- **Chilling Reign: Pokémon Center Ice Rider Calyrex Elite Trainer Box** (Pokémon Elite Trainer Boxes, elite_trainer_box) `calyrex center chilling etb ice reign rider`
-  → 0.88 Chilling Reign Pokemon Center Elite Trainer Box [Ice Rider Calyrex] (Exclusive) [elite_trainer_box] | 0.86 Chilling Reign Elite Trainer Box [Ice Rider Calyrex] [elite_trainer_box] | 0.78 Code Card - Chilling Reign Pokemon Center Elite Trainer Box [Ice Rider Calyrex] [elite_trainer_box]
-- **Chilling Reign: Pokémon Center Shadow Rider Calyrex Elite Trainer Box** (Pokémon Elite Trainer Boxes, elite_trainer_box) `calyrex center chilling etb reign rider shadow`
-  → 0.88 Chilling Reign Pokemon Center Elite Trainer Box [Shadow Rider Calyrex] (Exclusive) [elite_trainer_box] | 0.86 Chilling Reign Elite Trainer Box [Shadow Rider Calyrex] [elite_trainer_box] | 0.67 Chilling Reign Pokemon Center Elite Trainer Box [Ice Rider Calyrex] (Exclusive) [elite_trainer_box]
-- **Scarlet & Violet Koraidon Pokémon Center Elite Trainer Box** (Pokémon Elite Trainer Boxes, elite_trainer_box) `center etb koraidon scarlet violet`
-  → 0.83 Scarlet & Violet Pokemon Center Elite Trainer Box (Exclusive) [Koraidon] [elite_trainer_box] | 0.80 Scarlet & Violet Elite Trainer Box [Koraidon] [elite_trainer_box] | 0.62 Code Card - Scarlet & Violet Pokemon Center Elite Trainer Box (Exclusive) [Koraidon] [elite_trainer_box]
+  → 0.81 ex Battle Deck [Victini ex] [other] | 0.78 V Battle Deck [Victini V] [other] | 0.45 Victini ex/Miraidon ex Battle Decks [Set of 2] [other]
+- **Let's Play Pokémon TCG Theme Decks** (Pokémon Theme Decks, other) `deck let play s`
+  → 0.83 Let's Play Theme Deck [Pikachu] [other] | 0.80 Let's Play Theme Deck [Eevee] [other] | 0.18 Emerging Powers Theme Deck - "Power Play" [Krookodile] [other]
+- **XY: Xerneas Pin 3-Pack Blister** (Pokémon Blisters, blister) `3 blister pack pin xerneas xy`
+  → 0.84 XY Collector Pin 3 Pack Blisters [Xerneas] [blister] | 0.83 XY 3 Pack Blister [Xerneas] [blister] | 0.48 XY Collector Pin 3 Pack Blisters [Yveltal] [blister]
+- **XY: Yveltal Pin 3-Pack Blister** (Pokémon Blisters, blister) `3 blister pack pin xy yveltal`
+  → 0.84 XY Collector Pin 3 Pack Blisters [Yveltal] [blister] | 0.83 XY 3 Pack Blister [Yveltal] [blister] | 0.48 XY Collector Pin 3 Pack Blisters [Xerneas] [blister]
+- **Divergent Powers Tins: Hisuian Typhlosion V Tin (EU Version)** (Pokémon Tins, tin) `divergent eu hisuian powers tin typhlosion v version`
+  → 0.75 Divergent Powers Tin [Hisuian Typhlosion V] (International Version) [tin] | 0.72 Divergent Powers Tin [Hisuian Typhlosion V] [tin] | 0.53 Divergent Powers Tin [Hisuian Decidueye V] (International Version) [tin]
+- **Divergent Powers Tins: Hisuian Decidueye V Tin (EU Version)** (Pokémon Tins, tin) `decidueye divergent eu hisuian powers tin v version`
+  → 0.75 Divergent Powers Tin [Hisuian Decidueye V] (International Version) [tin] | 0.71 Divergent Powers Tin [Hisuian Decidueye V] [tin] | 0.53 Divergent Powers Tin [Hisuian Samurott V] (International Version) [tin]
+- **Divergent Powers Tins: Hisuian Samurott V Tin (EU Version)** (Pokémon Tins, tin) `divergent eu hisuian powers samurott tin v version`
+  → 0.75 Divergent Powers Tin [Hisuian Samurott V] (International Version) [tin] | 0.72 Divergent Powers Tin [Hisuian Samurott V] [tin] | 0.53 Divergent Powers Tin [Hisuian Decidueye V] (International Version) [tin]
+- **Pokémon GO: Melmetal V Battle Deck** (Pokémon Theme Decks, other) `battle deck go melmetal v`
+  → 0.75 V Battle Deck [Melmetal V] [other] | 0.65 Pokemon GO Melmetal V/Mewtwo V Battle Decks [Set of 2] [other] | 0.52 ex Battle Deck [Melmetal ex] [other]
 
 ## Beispiele „kein Kandidat“ (mit Preis)
 
@@ -153,4 +145,4 @@ Schwelle 0.75, Vorsprung 0.05.
   → –
 
 
-_Lauf: 2026-10-21 17:38 UTC, Stand 8c82438_
+_Lauf: 2026-10-21 18:01 UTC, Stand d123d26_

@@ -1,9 +1,9 @@
 # Phase 5 – App gebaut und ausgeliefert
 
-- Datum: 2026-10-21 17:32 UTC
-- Git-Stand: d7dcb24
+- Datum: 2026-10-21 17:53 UTC
+- Git-Stand: d123d26
 - Flutter 3.47.7 • channel stable • https://github.com/flutter/flutter.git
-- Build-Dauer (Web + APK): 23 s
+- Build-Dauer (Web + APK): 96 s
 - APK: 57M (nicht neu gebaut) · Web-App: 42M
 - Adresse: `https://kartenkiste.<tailnet>.ts.net`
 - Startseite: `<title>Kartenkiste</title>` · Deep-Link-Status: 200 (Erwartung 200)
