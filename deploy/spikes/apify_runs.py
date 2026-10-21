@@ -282,6 +282,38 @@ RUNS_H: RunList = [
         for language in ("ko", "ja")
     ),
 ]
+# Stufe I: PriceCharting (US-Preise, inkl. Japanisch/Gradings?) – welche Sprachen, Felder,
+# Bilder? Suchbegriffe wie beim Scan: Name, Nummer, Set, Sprache.
+PRICECHARTING_QUERIES = [
+    "Charizard ex 199 151",  # Englisch
+    "Lugia V Paradigm Trigger Japanese",  # Japanisch
+    "Pikachu Korean",  # Koreanisch
+    "Pikachu Chinese",  # Chinesisch
+    "Glurak German",  # Deutsch
+    "Prismatic Evolutions Elite Trainer Box",  # Sealed
+]
+RUNS_I: RunList = [
+    *(
+        (
+            f"PriceCharting · gio21 · {query}",
+            "gio21/pricecharting-scraper",
+            {"searchQueries": [query], "maxItems": 5},
+        )
+        for query in PRICECHARTING_QUERIES
+    ),
+    (
+        "PriceCharting · crawloop · Suche mit Bildern und Gradings",
+        "crawloop/pricecharting-scraper",
+        {
+            "mode": "search",
+            "searchQueries": PRICECHARTING_QUERIES[:3],
+            "category": "pokemon",
+            "maxItems": 6,
+            "includeImages": True,
+            "includeFullPrices": True,
+        },
+    ),
+]
 STAGES = {
     "B": RUNS,
     "C": RUNS_C,
@@ -290,6 +322,7 @@ STAGES = {
     "F": RUNS_F,
     "G": RUNS_G,
     "H": RUNS_H,
+    "I": RUNS_I,
 }
 RUN_IDS: list[tuple[str, str]] = []
 
@@ -385,7 +418,7 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
             f"- Sprachen laut Schema: {short(language.get('enum'), 200)} "
             f"(Standard {language.get('default')})"
         )
-    if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("D", "E", "F", "G", "H"):
+    if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("D", "E", "F", "G", "H", "I"):
         payload = adapt_input(client, actor, payload)
     started = time.monotonic()
     run = run_actor(client, actor, payload)
@@ -432,6 +465,14 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
                 if value not in (None, "")
             )
         )
+    if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() == "I":
+        for item in items[:10]:
+            emit(
+                f"  - {short(field(item, 'name', 'title', 'product'), 70)} · "
+                f"{short(field(item, 'console', 'set', 'category'), 50)} · "
+                f"Preise {short(field(item, 'price', 'loose', 'ungraded'), 160)} · "
+                f"Bild {short(field(item, 'image', 'img'), 80)}"
+            )
     if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() == "H":
         for item in items[:10]:
             emit(
@@ -449,7 +490,7 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
                 f"ID {short(field(item, 'idproduct', 'productid', 'product_id', 'id'), 30)} · "
                 f"Bild {short(field(item, 'image', 'img', 'picture', 'photo'), 140)}"
             )
-    full = 4000 if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("F", "G", "H") else 900
+    full = 4000 if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("F", "G", "H", "I") else 900
     emit(f"- Erster Eintrag vollständig: `{short(items[0], full)}`")
     emit()
 
