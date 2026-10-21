@@ -294,7 +294,7 @@ class ItemThumb extends StatelessWidget {
           children: [
             Stack(
               children: [
-                CardImage(url: card?.image(), width: width),
+                CardImage(url: item.image, width: width, contain: card == null),
                 if (item.quantity > 1 || item.kind == 'graded')
                   Positioned(
                     right: 4,

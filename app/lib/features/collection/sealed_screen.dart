@@ -133,7 +133,9 @@ class _OfferTile extends StatelessWidget {
     ];
     return ListTile(
       key: Key('sealed-${offer.cardmarketProductId}'),
-      leading: const Icon(Icons.inventory_2_outlined),
+      leading: offer.imageUrl == null
+          ? const Icon(Icons.inventory_2_outlined)
+          : CardImage(url: offer.imageUrl, width: 40, contain: true),
       title: Text(offer.name),
       subtitle: Text(
         [

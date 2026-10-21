@@ -336,6 +336,7 @@ class SealedOfferOut(BaseModel):
     low: Decimal | None
     value: Decimal | None = Field(description="Median aus Trend, Ø 7 und Ø 30 Tagen")
     url: str
+    image_url: str | None = Field(default=None, description="Bild aus dem TCGplayer-Katalog")
 
 
 class ProductFromCardmarket(BaseModel):

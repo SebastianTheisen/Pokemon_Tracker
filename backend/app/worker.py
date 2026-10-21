@@ -52,6 +52,7 @@ from app.services.image_import import last_finished_run, last_run_incomplete, ru
 from app.services.price_health import SourceHealth
 from app.services.pricing import PriceService, tracked_card_ids
 from app.services.scan import prune_reference_files, purge_scan_logs
+from app.services.sealed_images import refresh_sealed_images
 
 log = structlog.get_logger(__name__)
 
@@ -243,6 +244,7 @@ async def cardmarket_forever(
         log.info("worker.cardmarket_scheduled", next_run=due.isoformat())
         await asyncio.sleep(max((due - datetime.now(UTC)).total_seconds(), 0))
         summary = await run_catalog_import(session_factory, settings, tcgdex=client)
+        await refresh_sealed_images(session_factory, settings)  # wöchentlich, Fehler egal
         if summary.error:
             await asyncio.sleep(3600)  # nicht in einer Fehlerschleife hämmern
 

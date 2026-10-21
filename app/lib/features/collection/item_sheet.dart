@@ -157,7 +157,11 @@ class _ItemFormState extends ConsumerState<ItemForm> {
           children: [
             Row(
               children: [
-                CardImage(url: card?.image(), width: 52),
+                CardImage(
+                  url: card?.image() ?? _item?.product?.imageUrl,
+                  width: 52,
+                  contain: card == null,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(

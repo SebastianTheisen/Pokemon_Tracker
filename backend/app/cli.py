@@ -73,6 +73,7 @@ from app.services.price_health import SourceHealth
 from app.services.pricing import PriceService
 from app.services.scan import ScanOutcome, ScanService
 from app.services.scan_eval import evaluate, load_expected, render_report
+from app.services.sealed_images import refresh_sealed_images
 from app.worker import refresh_tracked_prices
 
 MIN_PASSWORD_LENGTH = 10
@@ -184,6 +185,13 @@ async def _cardmarket_import(
             base_url=settings.tcgdex_base_url, user_agent=settings.http_user_agent
         ) as client:
             summary = await run_catalog_import(factory, settings, tcgdex=client)
+    images = await refresh_sealed_images(factory, settings, force=args.images)
+    if images is not None:
+        print(
+            f"Bilder Versiegeltes: {images.matched} von {images.sealed} zugeordnet "
+            f"({dict(images.by_category.most_common())}), Produkte ergänzt: "
+            f"{images.products_updated}"
+        )
     print(
         f"Produkte: {summary.products}, Preise: {summary.prices}, Ausgaben: "
         f"{summary.expansions} (mit Zwillingen: {summary.expansions_with_twins}), "
@@ -531,6 +539,9 @@ def _add_cardmarket_commands(commands: Any) -> None:
         "--no-link", action="store_true", help="Sets nicht bei TCGdex nachfragen (schneller)"
     )
     cardmarket.add_argument("--out", help="Status zusätzlich als Markdown-Datei")
+    cardmarket.add_argument(
+        "--images", action="store_true", help="Bilder für Versiegeltes jetzt abgleichen"
+    )
     cardmarket.set_defaults(handler=_cardmarket_import)
     cardmarket_info = commands.add_parser(
         "cardmarket-status", help="Stand des Cardmarket-Katalogs und unsichere Sets"

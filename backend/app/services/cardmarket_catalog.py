@@ -1125,6 +1125,8 @@ def render_status(status: CatalogStatus) -> str:
         )
         if run.guide_created_at:
             lines.append(f"- Preisführer vom {run.guide_created_at:%Y-%m-%d %H:%M %z}")
+        if run.sealed_images is not None:
+            lines.append(f"- Bilder für Versiegeltes zugeordnet: {run.sealed_images}")
     lines.append(f"- Produkte: {status.products}, mit Preis: {status.prices}")
     sources = ", ".join(f"{k}: {v}" for k, v in sorted(status.sets_by_source.items()))
     lines.append(f"- Sets: {status.sets_total} (Ausgabe von {sources})")

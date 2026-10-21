@@ -626,6 +626,7 @@ class SealedOffer {
     this.trend,
     this.low,
     this.value,
+    this.imageUrl,
   });
 
   factory SealedOffer.fromJson(Json json) => SealedOffer(
@@ -637,6 +638,7 @@ class SealedOffer {
     low: json.strOrNull('low'),
     value: json.strOrNull('value'),
     url: json.str('url'),
+    imageUrl: json.strOrNull('image_url'),
   );
 
   final int cardmarketProductId;
@@ -649,6 +651,9 @@ class SealedOffer {
   /// Wert je Stück: Median aus Trend, Ø 7 und Ø 30 Tagen.
   final String? value;
   final String url;
+
+  /// Bild aus dem TCGplayer-Katalog (englische bzw. japanische Verpackung).
+  final String? imageUrl;
 }
 
 class Folder {
@@ -740,6 +745,9 @@ class CollectionItem {
   final String kind; // raw | graded | sealed
   final CardInfo? card;
   final Product? product;
+
+  /// Bild der Position: Kartenbild bzw. Bild des versiegelten Produkts.
+  String? get image => card?.image() ?? product?.imageUrl;
   final String variant;
   final String? condition;
   final int quantity;

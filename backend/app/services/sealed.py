@@ -77,6 +77,7 @@ class SealedOffer:
     low: Decimal | None
     value: Decimal | None
     url: str
+    image_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -119,6 +120,7 @@ async def search_sealed(
                 low=metrics.get("low"),
                 value=basis[1] if basis else None,
                 url=product_url(product.id_product),
+                image_url=product.image_url,
             )
         )
     return offers
@@ -176,11 +178,13 @@ async def product_from_cardmarket(
     if existing is not None:
         if existing.cardmarket_product_id is None:
             existing.cardmarket_product_id = cardmarket_product_id
+        existing.image_url = existing.image_url or source.image_url
         return existing
     product = Product(
         kind=kind_for(source.category_name, source.name),
         language=language,
         name=source.name[:200],
+        image_url=source.image_url,
         cardmarket_product_id=cardmarket_product_id,
         created_by_id=user.id,
     )

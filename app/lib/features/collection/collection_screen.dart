@@ -314,7 +314,7 @@ class _ItemTile extends ConsumerWidget {
     return ListTile(
       onTap: item.card == null ? null : () => context.push('/card/${item.card!.id}'),
       onLongPress: readOnly ? null : () => _edit(context, ref),
-      leading: CardImage(url: item.card?.image(), width: 40),
+      leading: CardImage(url: item.image, width: 40, contain: item.card == null),
       title: Row(
         children: [
           Flexible(child: Text(item.title, overflow: TextOverflow.ellipsis)),

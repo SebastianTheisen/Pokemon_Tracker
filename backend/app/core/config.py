@@ -121,6 +121,10 @@ class Settings(BaseSettings):
     card_details_concurrency: int = Field(default=4, ge=1, le=16)
 
     cardmarket_set_link_concurrency: int = Field(default=4, ge=1, le=16)
+    sealed_images_url: str = "https://tcgcsv.com/tcgplayer"
+    sealed_images_interval_days: int = Field(
+        default=7, ge=0, description="Bilder für Versiegeltes alle n Tage abgleichen; 0 = aus."
+    )
     cardmarket_set_recheck_days: int = Field(
         default=14,
         ge=1,

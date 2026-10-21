@@ -54,6 +54,9 @@ class CmProduct(Base):
     # Kategorie laut Download: 51 = Einzelkarte, sonst versiegelt (Booster, Display, …).
     id_category: Mapped[int | None] = mapped_column(Integer)
     category_name: Mapped[str | None] = mapped_column(String(60))
+    # Versiegeltes: Bild aus dem TCGplayer-Katalog (tcgcsv.com), über den Namen zugeordnet.
+    image_url: Mapped[str | None] = mapped_column(String(500))
+    tcgplayer_product_id: Mapped[int | None] = mapped_column(Integer)
 
 
 class CmPrice(Base):
@@ -100,3 +103,5 @@ class CmImport(Base):
     catalog_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     guide_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error: Mapped[str | None] = mapped_column(String(500))
+    # Gesetzt, wenn dieser Lauf auch die Bilder für Versiegeltes abgeglichen hat (Anzahl).
+    sealed_images: Mapped[int | None] = mapped_column(Integer)

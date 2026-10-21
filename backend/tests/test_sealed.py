@@ -79,6 +79,7 @@ async def test_search_create_and_value_in_collection(
             "low": "89.00",
             "value": "99.00",  # Median aus 95, 99, 110
             "url": f"https://www.cardmarket.com/de/Pokemon/Products?idProduct={ETB}",
+            "image_url": None,
         }
     ]
     created = await client.post(

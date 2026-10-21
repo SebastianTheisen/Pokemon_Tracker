@@ -79,10 +79,13 @@ class EmptyView extends StatelessWidget {
 
 /// Kartenbild im Kartenformat (63:88) mit Platzhalter.
 class CardImage extends StatelessWidget {
-  const CardImage({required this.url, this.width = 56, super.key});
+  const CardImage({required this.url, this.width = 56, this.contain = false, super.key});
 
   final String? url;
   final double width;
+
+  /// Ganzes Bild zeigen statt zuschneiden (Verpackungen haben kein Kartenformat).
+  final bool contain;
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +103,7 @@ class CardImage extends StatelessWidget {
             ? placeholder
             : Image.network(
                 url!,
-                fit: BoxFit.cover,
+                fit: contain ? BoxFit.contain : BoxFit.cover,
                 // Web: Bilder fremder Server ohne CORS über ein <img>-Element laden.
                 webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
                 errorBuilder: (_, _, _) => placeholder,
