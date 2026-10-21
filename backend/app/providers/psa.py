@@ -5,8 +5,10 @@ die Public API ist der vorgesehene Weg – mit kostenlosem Token, aber begrenzte
 Tag. Deshalb merkt sich Kartenkiste jedes Zertifikat (:mod:`app.services.psa`).
 
 Die Antwort von ``GET /cert/GetByCertNumber/{nummer}`` steckt in ``PSACert`` und enthält u. a.
-``Year``, ``Brand`` (Set), ``CardNumber``, ``Subject`` (Karte), ``Variety``, ``CardGrade``
-bzw. ``GradeDescription`` („GEM MT 10“), ``TotalPopulation`` und ``PopulationHigher``.
+``YearIssued`` (früher ``Year``), ``Brand`` (Set), ``CardNumber``, ``Subject`` (Karte),
+``Variety``, ``CardGrade`` bzw. ``GradeDescription`` („GEM MT 10“). ``TotalPopulation`` und
+``PopulationHigher`` sind in der öffentlichen API meist leer. Unbekannte oder ungültige
+Nummern: HTTP 200 mit ``IsValidRequest: false`` bzw. ``ServerMessage: "No data found"``.
 Feldnamen werden ohne Rücksicht auf Groß-/Kleinschreibung gelesen.
 """
 
@@ -89,7 +91,7 @@ def normalize_grade(*texts: str | None) -> str | None:
 
 def parse_cert(payload: object, cert: str) -> PsaCert | None:
     """Antwort der API → :class:`PsaCert`; ``None``, wenn PSA das Zertifikat nicht kennt."""
-    if not isinstance(payload, dict):
+    if not isinstance(payload, dict) or _field(payload, "IsValidRequest") is False:
         return None
     data = _field(payload, "PSACert")
     if not isinstance(data, dict):
@@ -100,7 +102,7 @@ def parse_cert(payload: object, cert: str) -> PsaCert | None:
     card_grade = _text(_field(data, "CardGrade"))
     return PsaCert(
         cert=_text(_field(data, "CertNumber")) or cert,
-        year=_text(_field(data, "Year")),
+        year=_text(_field(data, "YearIssued")) or _text(_field(data, "Year")),
         brand=_text(_field(data, "Brand")),
         card_number=_text(_field(data, "CardNumber")),
         subject=_text(_field(data, "Subject")),
@@ -125,7 +127,11 @@ class PsaClient:
     ) -> None:
         self._client = httpx.AsyncClient(
             base_url=base_url.rstrip("/"),
-            headers={"Authorization": f"bearer {token}", "User-Agent": user_agent},
+            headers={
+                "Authorization": f"bearer {token}",
+                "Accept": "application/json",
+                "User-Agent": user_agent,
+            },
             timeout=20.0,
             transport=transport,
         )

@@ -37,6 +37,9 @@ def test_grade_and_parsing() -> None:
     assert (wrapped.grade, wrapped.population, wrapped.language_hint) == ("10", 1234, "ja")
     assert flat.subject == "FA/LUGIA V"
     assert parse_cert({"IsValidRequest": True, "ServerMessage": "No data found"}, "1") is None
+    assert parse_cert({"IsValidRequest": False, "ServerMessage": "Invalid CertNo"}, "x") is None
+    current = parse_cert({"PSACert": {**CERT, "YearIssued": "2022"}}, "73270136")
+    assert current is not None and current.year == "2022"
     assert parse_cert(["kaputt"], "1") is None
 
 
