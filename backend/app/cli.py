@@ -213,7 +213,9 @@ async def _import_pricecharting(
         EcbRates(user_agent=settings.http_user_agent, url=settings.ecb_rates_url),
         lambda: ApifyClient(token.get_secret_value(), user_agent=settings.http_user_agent),
     )
-    report = await catalog.run(args.languages, dry_run=args.dry_run, limit=args.limit)
+    report = await catalog.run(
+        args.languages, dry_run=args.dry_run, limit=args.limit, extra=args.sets or ()
+    )
     print(render_pricecharting_report(report, dry_run=args.dry_run))
     if report.errors:
         sys.exit(1)
@@ -624,6 +626,9 @@ def _add_catalog_commands(commands: Any) -> None:
         "--languages", nargs="+", default=["ko", "zh-cn"], help="ko und/oder zh-cn"
     )
     pricecharting.add_argument("--dry-run", action="store_true", help="nur Set-Liste, kostenlos")
+    pricecharting.add_argument(
+        "--sets", nargs="+", help="zusätzliche Sets, z. B. pokemon-korean-electric-breaker"
+    )
     pricecharting.add_argument("--limit", type=int, help="höchstens so viele Sets (zum Testen)")
     pricecharting.set_defaults(handler=_import_pricecharting)
 

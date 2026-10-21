@@ -53,6 +53,12 @@ _CONSOLE = re.compile(r"/console/(pokemon-(korean|chinese)-[a-z0-9&%._-]+)", re.
 _PRODUCT = re.compile(r"^(?P<name>.+?)\s*#\s*(?P<number>[A-Za-z0-9-]+)\s*$")
 CENT = Decimal("0.01")
 CHEERIO_SCRAPER = "apify/cheerio-scraper"
+# Die Übersicht zeigt nicht alle Sets – Set-Seiten verlinken weitere ihrer Sprache.
+EXTRA_LIST_PAGES = (
+    "pokemon-korean-promo",
+    "pokemon-chinese-promo",
+    "pokemon-korean-30th-celebration",
+)
 LINKS_PAGE_FUNCTION = """async function pageFunction(context) {
     const { $ } = context;
     return { links: $('a[href*="/console/pokemon-"]').map((i, a) => $(a).attr('href')).get() };
@@ -157,14 +163,17 @@ class PriceChartingCatalog:
             run = await client.run_actor(
                 CHEERIO_SCRAPER,
                 {
-                    "startUrls": [{"url": self._settings.pricecharting_category_url}],
+                    "startUrls": [
+                        {"url": self._settings.pricecharting_category_url},
+                        *({"url": CONSOLE_URL + slug} for slug in EXTRA_LIST_PAGES),
+                    ],
                     "pageFunction": LINKS_PAGE_FUNCTION,
                     "proxyConfiguration": {"useApifyProxy": True},
-                    "maxRequestsPerCrawl": 1,
+                    "maxRequestsPerCrawl": 1 + len(EXTRA_LIST_PAGES),
                 },
                 max_charge_usd=0.05,
                 timeout_seconds=300,
-                max_items=5,
+                max_items=10,
             )
         links = [link for item in run.items for link in item.get("links") or []]
         if not links:
@@ -177,10 +186,21 @@ class PriceChartingCatalog:
         *,
         dry_run: bool = False,
         limit: int | None = None,
+        extra: Sequence[str] = (),
     ) -> CatalogReport:
+        """``extra``: zusätzliche Set-Slugs (z. B. ``pokemon-korean-electric-breaker``)."""
         report = CatalogReport()
         try:
-            report.consoles = (await self.discover(languages))[:limit]
+            found = await self.discover(languages)
+            known = {console.slug for console in found}
+            found += [
+                console
+                for console in parse_consoles(
+                    "\n".join(f"/console/{slug}" for slug in extra), languages
+                )
+                if console.slug not in known
+            ]
+            report.consoles = found[:limit]
         except (httpx.HTTPError, ApifyError) as exc:
             report.errors.append(f"Set-Liste: {type(exc).__name__}: {exc}")
             return report
