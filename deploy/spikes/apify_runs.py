@@ -235,7 +235,32 @@ RUNS_F: RunList = [
         {"certNumber": PSA_CERT},
     ),
 ]
-STAGES = {"B": RUNS, "C": RUNS_C, "D": RUNS_D, "E": RUNS_E, "F": RUNS_F}
+# Stufe G: Versiegeltes direkt von Cardmarket – mit Bild und Cardmarket-Produkt-ID?
+# (Dann Bild exakt je Produkt statt Namensvergleich mit TCGplayer.)
+SEALED_QUERIES = ["Prismatic Evolutions Elite Trainer Box", "Surging Sparks Booster Box"]
+RUNS_G: RunList = [
+    (
+        "Versiegeltes · unfenced-group (Katalog, Sealed)",
+        "unfenced-group/cardmarket-scraper",
+        {
+            "game": "pokemon",
+            "searchQuery": "Elite Trainer Box",
+            "productType": "sealed",
+            "maxResults": 20,
+        },
+    ),
+    (
+        "Versiegeltes · lulzasaur (Suche)",
+        "lulzasaur/cardmarket-scraper",
+        {"searchQueries": SEALED_QUERIES, "game": "Pokemon", "maxResults": 10},
+    ),
+    (
+        "Versiegeltes · ahmed_jasarevic (Suche)",
+        "ahmed_jasarevic/cardmarket-scraper",
+        {"searchQueries": SEALED_QUERIES, "game": "Pokemon", "maxResults": 10},
+    ),
+]
+STAGES = {"B": RUNS, "C": RUNS_C, "D": RUNS_D, "E": RUNS_E, "F": RUNS_F, "G": RUNS_G}
 RUN_IDS: list[tuple[str, str]] = []
 
 
@@ -324,7 +349,7 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
     emit(f"## {title}\n")
     emit(f"- Anbieter: `{actor}`")
     emit(f"- Eingabe: `{short(payload, 400)}`")
-    if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("D", "E", "F"):
+    if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("D", "E", "F", "G"):
         payload = adapt_input(client, actor, payload)
     started = time.monotonic()
     run = run_actor(client, actor, payload)
@@ -371,7 +396,16 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
                 if value not in (None, "")
             )
         )
-    full = 4000 if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() == "F" else 900
+    if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() == "G":
+        with_image = [i for i in items if field(i, "image", "img", "picture", "photo")]
+        emit(f"- Mit Bild: {len(with_image)} von {len(items)}")
+        for item in items[:10]:
+            emit(
+                f"  - {short(field(item, 'name', 'title', 'product'), 80)} · "
+                f"ID {short(field(item, 'idproduct', 'productid', 'product_id', 'id'), 30)} · "
+                f"Bild {short(field(item, 'image', 'img', 'picture', 'photo'), 140)}"
+            )
+    full = 4000 if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("F", "G") else 900
     emit(f"- Erster Eintrag vollständig: `{short(items[0], full)}`")
     emit()
 

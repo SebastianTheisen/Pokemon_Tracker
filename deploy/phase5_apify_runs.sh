@@ -5,6 +5,7 @@
 #   bash deploy/phase5_apify_runs.sh D    → Stufe D (docs/phase5/apify_runs_d.md)
 #   bash deploy/phase5_apify_runs.sh E    → Stufe E (docs/phase5/apify_runs_e.md)
 #   bash deploy/phase5_apify_runs.sh F [Zertifikatsnummer] → PSA-Abfrage (apify_runs_f.md)
+#   bash deploy/phase5_apify_runs.sh G    → Versiegeltes mit Bild von Cardmarket (apify_runs_g.md)
 # Berichte enthalten keinen Token.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
