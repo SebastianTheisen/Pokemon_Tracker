@@ -16,7 +16,14 @@ from app.models.collection import (
     WishlistItem,
 )
 from app.models.images import ImageImportRun, ImageProbe, OfficialCard
-from app.models.pricing import CardPriceLink, EbayFetch, PriceCheck, PricePoint, PsaCertRecord
+from app.models.pricing import (
+    CardPriceLink,
+    EbayFetch,
+    PriceChartingDetail,
+    PriceCheck,
+    PricePoint,
+    PsaCertRecord,
+)
 from app.models.scanner import CardReferenceImage, ScanLog, ScanMode
 from app.models.settings import UserSettings
 from app.models.user import Role, User
@@ -46,6 +53,7 @@ __all__ = [
     "OfficialCard",
     "PasswordResetToken",
     "PortfolioSnapshot",
+    "PriceChartingDetail",
     "PriceCheck",
     "PricePoint",
     "Product",

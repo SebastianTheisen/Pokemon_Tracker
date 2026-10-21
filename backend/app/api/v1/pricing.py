@@ -15,7 +15,7 @@ from app.api.deps import (
     PriceServiceDep,
     SessionDep,
 )
-from app.models import UserSettings
+from app.models import PriceChartingDetail, UserSettings
 from app.schemas.pricing import (
     ApifyStatusOut,
     CardmarketChoiceIn,
@@ -33,6 +33,7 @@ from app.schemas.pricing import (
     EbaySoldIn,
     EbaySoldOut,
     EbaySoldRowIn,
+    PriceChartingDetailsOut,
     PriceHistoryOut,
     PriceSourceOut,
     PriceTargetIn,
@@ -74,6 +75,19 @@ async def card_prices(
     card = await catalog_search.get_card(session, card_id)
     await prices.refresh(card, viewed=True)
     return CardPricesOut.build(await prices.get_prices(card, user))
+
+
+@router.get("/cards/{card_id}/pricecharting")
+async def card_pricecharting(
+    card_id: uuid.UUID, session: SessionDep, _user: CurrentUser
+) -> PriceChartingDetailsOut:
+    """US-Markt (PriceCharting): POP-Report, Verkäufe je Note, letzte Verkäufe.
+
+    Gefüllt, sobald die Karte über die Produktseite abgerufen wurde (Slabs, Karten aus dem
+    Korea/China-Import); sonst ``available = false``.
+    """
+    await catalog_search.get_card(session, card_id)  # 404 für unbekannte Karten
+    return PriceChartingDetailsOut.build(await session.get(PriceChartingDetail, card_id))
 
 
 @router.get("/cards/{card_id}/price-history")

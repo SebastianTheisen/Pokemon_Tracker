@@ -25,6 +25,10 @@ final pricesProvider = FutureProvider.autoDispose.family<CardPrices, String>(
   (ref, id) => ref.watch(apiProvider).prices(id),
 );
 
+final pricechartingProvider = FutureProvider.autoDispose.family<PriceChartingDetails, String>(
+  (ref, id) => ref.watch(apiProvider).pricecharting(id),
+);
+
 final priceHistoryProvider = FutureProvider.autoDispose
     .family<PriceHistory, ({String cardId, String variant})>(
       (ref, key) => ref.watch(apiProvider).priceHistory(key.cardId, variant: key.variant),
@@ -295,6 +299,7 @@ class _CardBodyState extends ConsumerState<_CardBody> {
           ),
           const SectionTitle('Preisverlauf (Cardmarket-Trend)'),
           _History(cardId: card.id, variant: _variant),
+          _UsMarket(cardId: card.id),
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -582,4 +587,86 @@ class _History extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// US-Markt (PriceCharting): Verkäufe je Note, POP-Report, letzte Verkäufe – nur wenn
+/// die Karte schon über die Produktseite abgerufen wurde (Slabs, Korea/China).
+class _UsMarket extends ConsumerWidget {
+  const _UsMarket({required this.cardId});
+
+  final String cardId;
+
+  static const _shownSales = 5;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final details = ref.watch(pricechartingProvider(cardId)).value;
+    if (details == null || !details.available) return const SizedBox.shrink();
+    const muted = TextStyle(color: AppColors.textMuted, fontSize: 12);
+    final volume = details.salesVolume.entries.toList()..sort((a, b) => b.value - a.value);
+    return Column(
+      key: const Key('us-market'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionTitle('US-Markt (PriceCharting)'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (volume.isNotEmpty) ...[
+                const Text('Verkäufe je Note', style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final entry in volume.take(10)) Tag('${entry.key}: ${entry.value}×'),
+                  ],
+                ),
+                const SizedBox(height: 12),
+              ],
+              for (final company in details.population.entries) ...[
+                Text(
+                  '${company.key}-Population: ${_population(company.value)}',
+                  style: const TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 4),
+              ],
+              if (details.recentSales.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                const Text('Letzte Verkäufe', style: TextStyle(fontWeight: FontWeight.w600)),
+                for (final sale in details.recentSales.take(_shownSales))
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      '${sale.grade} · ${money(sale.priceUsd.toStringAsFixed(2), currency: 'USD')}',
+                    ),
+                    subtitle: Text(
+                      [sale.date, sale.title].whereType<String>().join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: sale.url == null ? null : const Icon(Icons.open_in_new, size: 16),
+                    onTap: sale.url == null ? null : () => openLink(context, sale.url!),
+                  ),
+              ],
+              Text('US-Dollar, meist eBay.com · Stand ${date(details.fetchedAt)}', style: muted),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// „10: 27.631 · 9: 47.519 · 8: 17.805“ – höchste Noten zuerst.
+  static String _population(Map<String, int> grades) {
+    final entries = grades.entries.where((e) => e.value > 0).toList()
+      ..sort((a, b) => (double.tryParse(b.key) ?? 0).compareTo(double.tryParse(a.key) ?? 0));
+    return entries.take(4).map((e) => '${e.key}: ${_thousands(e.value)}').join(' · ');
+  }
+
+  static String _thousands(int value) =>
+      value.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
 }

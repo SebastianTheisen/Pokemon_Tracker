@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -126,6 +127,27 @@ class PsaCertRecord(Base):
 
     cert: Mapped[str] = mapped_column(String(12), primary_key=True)
     data: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PriceChartingDetail(Base):
+    """Details einer Karte bei PriceCharting (Produktseite über Apify, siehe
+    :mod:`app.providers.pricing.pricecharting`): POP-Report je Firma und Note, Zahl der
+    Verkäufe je Note, letzte Verkäufe (gekürzt), Preisverlauf (Rohdaten) und Bilder."""
+
+    __tablename__ = "pricecharting_details"
+
+    card_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cards.id", ondelete="CASCADE"), primary_key=True
+    )
+    product_url: Mapped[str | None] = mapped_column(String(500))
+    population: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    sales_volume: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    recent_sales: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    price_history: Mapped[Any] = mapped_column(JSONB, nullable=True)
+    images: Mapped[list[str] | None] = mapped_column(JSONB)
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

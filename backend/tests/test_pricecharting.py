@@ -135,6 +135,29 @@ def test_quotes_are_converted_to_euro() -> None:
 
 DETAIL = {
     "url": "https://www.pricecharting.com/game/pokemon-japanese-paradigm-trigger/lugia-v-110",
+    "images": ["https://storage.googleapis.com/images.pricecharting.com/a/1600.jpg"],
+    "salesVolume": {"PSA 10": 30, "Ungraded": 60},
+    "populationReport": {"PSA": {"9": 47519, "10": 27631}},
+    "recentSales": {
+        "PSA 10": [
+            {
+                "date": "2026-10-19",
+                "title": "Lugia V PSA 10",
+                "price": 1040,
+                "source": "ebay",
+                "url": "https://www.ebay.com/itm/1",
+            },
+        ],
+        "Ungraded": [
+            {
+                "date": "2026-10-20",
+                "title": "Lugia V 110 NM",
+                "price": 735,
+                "source": "ebay",
+                "url": "https://www.ebay.com/itm/2",
+            },
+        ],
+    },
     "fullPrices": {
         "Ungraded": 741.17,
         "Grade 9": 562.5,
@@ -424,3 +447,45 @@ def test_pricecharting_metric_for_company_and_grade(
     company: GradingCompany, grade: str, metric: str | None
 ) -> None:
     assert pricecharting_metric(company, grade) == metric
+
+
+async def test_slab_details_are_stored_and_served(
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    client: AsyncClient,
+    register_user: RegisterUser,
+) -> None:
+    card = await _japanese_card(session_factory)
+    user = await register_user("details@example.com")
+    empty = await client.get(f"/api/v1/cards/{card.id}/pricecharting", headers=user.headers)
+    assert empty.json() == {
+        "available": False, "fetched_at": None, "product_url": None, "population": {},
+        "sales_volume": {}, "recent_sales": [], "images": [],
+    }  # fmt: skip
+    added = await client.post(
+        "/api/v1/collection/items",
+        json={"card_id": str(card.id), "grading_company": "PSA", "grade": "10"},
+        headers=user.headers,
+    )
+    assert added.status_code == 201, added.text
+    lugia = item(
+        "Lugia V #110", "Pokemon Japanese Paradigm Trigger", "#110", 741.17, url=DETAIL["url"]
+    )
+    pricecharting = provider(settings, apify_transport([lugia]))
+    async with session_factory() as session:
+        loaded = await session.get_one(Card, card.id)
+        service = await _service(session, settings, FakeProvider(), pricecharting)
+        await service.refresh(loaded)
+        await session.commit()
+
+    response = await client.get(f"/api/v1/cards/{card.id}/pricecharting", headers=user.headers)
+
+    data = response.json()
+    assert data["available"] is True
+    assert data["population"] == {"PSA": {"9": 47519, "10": 27631}}
+    assert data["sales_volume"] == {"PSA 10": 30, "Ungraded": 60}
+    assert [(s["grade"], s["date"], s["price_usd"]) for s in data["recent_sales"]] == [
+        ("Ungraded", "2026-10-20", 735.0),
+        ("PSA 10", "2026-10-19", 1040.0),
+    ]
+    assert data["images"] == DETAIL["images"]

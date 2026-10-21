@@ -21,6 +21,7 @@ void main() {
   cardmarketEditionTests();
   ebayFetchTests();
   sealedTests();
+  usMarketTests();
 
   test('gefilterter Cardmarket-Link nur mit Produkt-ID', () {
     const product = 'https://www.cardmarket.com/de/Pokemon/Products?idProduct=574273';
@@ -327,5 +328,45 @@ void sealedTests() {
     expect(api.calls, containsAllInOrder(['productFromCardmarket:700001:de', 'addItem']));
     expect(api.lastItemBody, {'product_id': 'p1', 'quantity': 2});
     expect(find.textContaining('Hinzugefügt: 2× Prismatic'), findsOneWidget);
+  });
+}
+
+void usMarketTests() {
+  testWidgets('US-Markt: Verkäufe je Note, POP und letzte Verkäufe auf der Karte', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..pricechartingJson = {
+        'available': true,
+        'fetched_at': '2026-10-21T22:00:00Z',
+        'product_url': 'https://www.pricecharting.com/game/x/y',
+        'population': {
+          'PSA': {'9': 47519, '10': 27631},
+        },
+        'sales_volume': {'PSA 10': 30, 'Ungraded': 60},
+        'recent_sales': [
+          {
+            'grade': 'PSA 10',
+            'date': '2026-10-20',
+            'title': 'Nachtara VMAX PSA 10',
+            'price_usd': 1040.0,
+            'source': 'ebay',
+            'url': 'https://www.ebay.com/itm/1',
+          },
+        ],
+        'images': <String>[],
+      };
+    await pumpApp(tester, api);
+    final topCard = find.text('Nachtara VMAX').first;
+    await tester.ensureVisible(topCard);
+    await tester.pumpAndSettle();
+    await tester.tap(topCard);
+    await tester.pumpAndSettle();
+
+    final section = find.byKey(const Key('us-market'));
+    await tester.scrollUntilVisible(section, 300, scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(find.text('US-Markt (PriceCharting)'), findsOneWidget);
+    expect(find.text('Ungraded: 60×'), findsOneWidget);
+    expect(find.textContaining('PSA-Population: 10: 27.631 · 9: 47.519'), findsOneWidget);
+    expect(find.textContaining('PSA 10 ·'), findsOneWidget);
   });
 }

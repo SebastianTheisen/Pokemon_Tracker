@@ -1373,3 +1373,68 @@ class Movers {
 
   bool get isEmpty => gainers.isEmpty && losers.isEmpty;
 }
+
+/// Ein Verkauf in den USA (PriceCharting, meist eBay.com) – Preis in US-Dollar.
+class MarketSale {
+  const MarketSale({
+    required this.grade,
+    required this.priceUsd,
+    this.date,
+    this.title,
+    this.source,
+    this.url,
+  });
+
+  factory MarketSale.fromJson(Json json) => MarketSale(
+    grade: json.str('grade'),
+    priceUsd: json.number('price_usd'),
+    date: json.strOrNull('date'),
+    title: json.strOrNull('title'),
+    source: json.strOrNull('source'),
+    url: json.strOrNull('url'),
+  );
+
+  final String grade;
+  final double priceUsd;
+  final String? date;
+  final String? title;
+  final String? source;
+  final String? url;
+}
+
+/// US-Markt laut PriceCharting: POP-Report, Verkäufe je Note, letzte Verkäufe.
+class PriceChartingDetails {
+  const PriceChartingDetails({
+    required this.available,
+    this.fetchedAt,
+    this.productUrl,
+    this.population = const {},
+    this.salesVolume = const {},
+    this.recentSales = const [],
+  });
+
+  factory PriceChartingDetails.fromJson(Json json) => PriceChartingDetails(
+    available: json.flag('available'),
+    fetchedAt: json.timeOrNull('fetched_at'),
+    productUrl: json.strOrNull('product_url'),
+    population: {
+      for (final entry in (json['population'] as Json? ?? const {}).entries)
+        entry.key: {
+          for (final grade in (entry.value as Json).entries)
+            grade.key: (grade.value as num).toInt(),
+        },
+    },
+    salesVolume: {
+      for (final entry in (json['sales_volume'] as Json? ?? const {}).entries)
+        entry.key: (entry.value as num).toInt(),
+    },
+    recentSales: json.list('recent_sales', MarketSale.fromJson),
+  );
+
+  final bool available;
+  final DateTime? fetchedAt;
+  final String? productUrl;
+  final Map<String, Map<String, int>> population;
+  final Map<String, int> salesVolume;
+  final List<MarketSale> recentSales;
+}

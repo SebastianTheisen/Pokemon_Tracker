@@ -14,9 +14,11 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 
 from app.core.config import CatalogLanguage
+from app.models import PriceChartingDetail
 from app.providers.pricing import Condition
 from app.services.cardmarket_catalog import CardmarketChoice, ChoiceResult
 from app.services.price_health import SourceStatus
+from app.services.pricecharting_details import latest_sales
 from app.services.pricing import CardPrices, ConditionPrice, Offer, PriceHistory
 
 Factor = Annotated[Decimal, Field(gt=0, le=3, max_digits=4, decimal_places=2)]
@@ -351,3 +353,47 @@ class ApifyStatusOut(BaseModel):
     budget_usd: float | None
     remaining_usd: float | None
     cycle_end: datetime | None
+
+
+class SaleOut(BaseModel):
+    grade: str
+    date: str | None
+    title: str | None
+    price_usd: float
+    source: str | None
+    url: str | None
+
+
+class PriceChartingDetailsOut(BaseModel):
+    """US-Markt laut PriceCharting: POP-Report, Verkäufe je Note, letzte Verkäufe."""
+
+    available: bool
+    fetched_at: datetime | None = None
+    product_url: str | None = None
+    population: dict[str, dict[str, int]] = Field(default_factory=dict)
+    sales_volume: dict[str, int] = Field(default_factory=dict)
+    recent_sales: list[SaleOut] = Field(default_factory=list)
+    images: list[str] = Field(default_factory=list)
+
+    @classmethod
+    def build(cls, detail: PriceChartingDetail | None) -> PriceChartingDetailsOut:
+        if detail is None:
+            return cls(available=False)
+        population = {
+            str(company): {str(grade): int(count) for grade, count in grades.items()}
+            for company, grades in (detail.population or {}).items()
+            if isinstance(grades, dict)
+        }
+        return cls(
+            available=True,
+            fetched_at=detail.fetched_at,
+            product_url=detail.product_url,
+            population=population,
+            sales_volume={
+                str(label): int(count)
+                for label, count in (detail.sales_volume or {}).items()
+                if isinstance(count, int)
+            },
+            recent_sales=[SaleOut(**sale.__dict__) for sale in latest_sales(detail)],
+            images=list(detail.images or []),
+        )

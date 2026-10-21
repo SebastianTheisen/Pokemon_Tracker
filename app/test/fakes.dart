@@ -255,6 +255,13 @@ class FakeApi extends Api {
   @override
   Future<CardPrices> prices(String cardId) async => CardPrices.fromJson(pricesJson);
 
+  /// US-Markt (PriceCharting): Standard „nicht vorhanden“ (Abschnitt unsichtbar).
+  Json pricechartingJson = {'available': false};
+
+  @override
+  Future<PriceChartingDetails> pricecharting(String cardId) async =>
+      PriceChartingDetails.fromJson(pricechartingJson);
+
   /// Cardmarket-Ausgabe: Standard eindeutig (keine Auswahl sichtbar).
   Json cardmarketJson = cardmarketChoiceJson();
 

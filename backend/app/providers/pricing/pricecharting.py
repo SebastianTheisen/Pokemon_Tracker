@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
+import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -224,6 +225,12 @@ class PriceChartingProvider:
         self._client_factory = client_factory
         self._now = clock
         self.max_age_hours = settings.pricecharting_max_age_days * 24
+        # Zuletzt geholte Produktseite je Karte – der Preis-Service speichert sie.
+        self._fetched_details: dict[uuid.UUID, dict[str, Any]] = {}
+
+    def take_details(self, card_id: uuid.UUID) -> dict[str, Any] | None:
+        """Details des letzten Abrufs dieser Karte (einmalig abholbar)."""
+        return self._fetched_details.pop(card_id, None)
 
     async def fetch(self, card: CardRef) -> list[PriceQuote]:
         """Bekannte Produktseite → Details (günstig, exakt); sonst Suche, bei Slabs danach
@@ -246,6 +253,7 @@ class PriceChartingProvider:
                 url = product_url
             detail = await self._details(client, url)
         if detail is not None:
+            self._fetched_details[card.card_id] = detail
             quotes = quotes_from_details(detail, per_euro=rate.per_euro, fetched_at=self._now())
             if quotes:
                 return quotes

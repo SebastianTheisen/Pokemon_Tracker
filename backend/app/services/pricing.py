@@ -60,6 +60,7 @@ from app.services.cardmarket_catalog import (
     resolve_product,
 )
 from app.services.price_health import SourceHealth
+from app.services.pricecharting_details import store_details
 from app.services.user_settings import (
     effective_factors,
     effective_language_factors,
@@ -283,6 +284,9 @@ class PriceService:
             # TCGdex verknüpft manche Sets mit der falschen Sprachfassung bei Cardmarket.
             quotes = await correct_cardmarket_quotes(self._session, card, card_ref(card), quotes)
         stored = await self._store(card, quotes)
+        take_details = getattr(provider, "take_details", None)
+        if callable(take_details) and (details := take_details(card.id)) is not None:
+            await store_details(self._session, card.id, details, fetched_at=self._now())
         return "fetched", True, None if quotes else "keine Preise", stored
 
     async def _needs_fallback(self, card: Card) -> bool:

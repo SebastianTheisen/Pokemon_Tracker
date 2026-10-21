@@ -378,6 +378,10 @@ class Api {
   Future<CardPrices> prices(String cardId) async =>
       CardPrices.fromJson(await _get('/cards/$cardId/prices'));
 
+  /// US-Markt (PriceCharting): POP-Report, Verkäufe je Note, letzte Verkäufe.
+  Future<PriceChartingDetails> pricecharting(String cardId) async =>
+      PriceChartingDetails.fromJson(await _get('/cards/$cardId/pricecharting'));
+
   /// Cardmarket-Produkt der Karte und dieselbe Karte in anderen Sprachfassungen.
   Future<CardmarketChoice> cardmarketChoice(String cardId) async =>
       CardmarketChoice.fromJson(await _get('/cards/$cardId/cardmarket'));
