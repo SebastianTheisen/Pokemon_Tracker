@@ -52,6 +52,11 @@ MAX_CHARGE_PER_BATCH = 0.2
 _CONSOLE = re.compile(r"/console/(pokemon-(korean|chinese)-[a-z0-9&%._-]+)", re.I)
 _PRODUCT = re.compile(r"^(?P<name>.+?)\s*#\s*(?P<number>[A-Za-z0-9-]+)\s*$")
 CENT = Decimal("0.01")
+CHEERIO_SCRAPER = "apify/cheerio-scraper"
+LINKS_PAGE_FUNCTION = """async function pageFunction(context) {
+    const { $ } = context;
+    return { links: $('a[href*="/console/pokemon-"]').map((i, a) => $(a).attr('href')).get() };
+}"""
 
 ApifyFactory = Callable[[], ApifyClient]
 
@@ -131,15 +136,40 @@ class PriceChartingCatalog:
         self._now = clock
 
     async def discover(self, languages: Sequence[str]) -> list[Console]:
-        async with httpx.AsyncClient(
-            headers={"User-Agent": self._settings.http_user_agent},
-            timeout=60,
-            follow_redirects=True,
-            transport=self._transport,
-        ) as client:
-            response = await client.get(self._settings.pricecharting_category_url)
-            response.raise_for_status()
-        return parse_consoles(response.text, languages)
+        """Set-Liste: direkt abrufen; sperrt PriceCharting den Server (403), über Apify."""
+        try:
+            async with httpx.AsyncClient(
+                headers={"User-Agent": self._settings.http_user_agent},
+                timeout=60,
+                follow_redirects=True,
+                transport=self._transport,
+            ) as client:
+                response = await client.get(self._settings.pricecharting_category_url)
+                response.raise_for_status()
+            return parse_consoles(response.text, languages)
+        except httpx.HTTPStatusError as exc:
+            log.info("pricecharting_catalog.direct_blocked", status=exc.response.status_code)
+        return parse_consoles(await self._links_via_apify(), languages)
+
+    async def _links_via_apify(self) -> str:
+        """Links der Übersichtsseite über den Apify-Standarddienst „Cheerio Scraper“."""
+        async with self._apify() as client:
+            run = await client.run_actor(
+                CHEERIO_SCRAPER,
+                {
+                    "startUrls": [{"url": self._settings.pricecharting_category_url}],
+                    "pageFunction": LINKS_PAGE_FUNCTION,
+                    "proxyConfiguration": {"useApifyProxy": True},
+                    "maxRequestsPerCrawl": 1,
+                },
+                max_charge_usd=0.05,
+                timeout_seconds=300,
+                max_items=5,
+            )
+        links = [link for item in run.items for link in item.get("links") or []]
+        if not links:
+            raise ApifyError("Set-Liste über Apify leer")
+        return "\n".join(str(link) for link in links)
 
     async def run(
         self,
@@ -151,7 +181,7 @@ class PriceChartingCatalog:
         report = CatalogReport()
         try:
             report.consoles = (await self.discover(languages))[:limit]
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, ApifyError) as exc:
             report.errors.append(f"Set-Liste: {type(exc).__name__}: {exc}")
             return report
         if dry_run or not report.consoles:

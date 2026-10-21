@@ -55,11 +55,11 @@ GEM_PACK = {
 }
 
 
-def transport(calls: list[str]) -> httpx.MockTransport:
+def transport(calls: list[str], *, blocked: bool = False) -> httpx.MockTransport:
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(f"{request.method} {request.url.host}{request.url.path}")
         if request.url.host == "www.pricecharting.com":
-            return httpx.Response(200, text=CATEGORY)
+            return httpx.Response(403) if blocked else httpx.Response(200, text=CATEGORY)
         if request.url.host == "www.ecb.europa.eu":
             return httpx.Response(200, text=ECB)
         path = request.url.path
@@ -67,6 +67,15 @@ def transport(calls: list[str]) -> httpx.MockTransport:
             body: Any = {
                 "data": {"current": {"monthlyUsageUsd": 1}, "limits": {"maxMonthlyUsageUsd": 8}}
             }
+        elif "cheerio-scraper" in path:
+            body = {"data": {"id": "c", "status": "SUCCEEDED", "defaultDatasetId": "links"}}
+        elif path.endswith("/datasets/links/items"):
+            hrefs = [
+                "/console/pokemon-korean-electric-breaker",
+                "https://www.pricecharting.com/console/pokemon-chinese-gem-pack",
+                "/console/pokemon-japanese-paradigm-trigger",
+            ]
+            body = [{"links": hrefs}]
         elif path.endswith("/runs"):
             collections = json.loads(request.content)["collections"]
             assert collections == [
@@ -91,9 +100,13 @@ def transport(calls: list[str]) -> httpx.MockTransport:
 
 
 def catalog(
-    factory: async_sessionmaker[AsyncSession], settings: Settings, calls: list[str]
+    factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    calls: list[str],
+    *,
+    blocked: bool = False,
 ) -> PriceChartingCatalog:
-    mock = transport(calls)
+    mock = transport(calls, blocked=blocked)
     return PriceChartingCatalog(
         factory,
         settings,
@@ -177,3 +190,16 @@ async def test_import_creates_sets_cards_and_prices(
     async with session_factory() as session:
         cards = (await session.scalars(select(Card).where(Card.language == "zh-cn"))).all()
         assert len(cards) == 2
+
+
+async def test_set_list_via_apify_when_server_is_blocked(
+    session_factory: async_sessionmaker[AsyncSession], settings: Settings
+) -> None:
+    calls: list[str] = []
+    report = await catalog(session_factory, settings, calls, blocked=True).run(dry_run=True)
+
+    assert [(c.slug, c.language) for c in report.consoles] == [
+        ("pokemon-korean-electric-breaker", "ko"),
+        ("pokemon-chinese-gem-pack", "zh-cn"),
+    ]
+    assert any("cheerio-scraper" in call for call in calls)
