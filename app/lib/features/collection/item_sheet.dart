@@ -62,6 +62,20 @@ class _ItemFormState extends ConsumerState<ItemForm> {
   bool _busy = false;
 
   bool get _isEdit => _item != null;
+
+  /// Nur Fassungen anbieten, die es von der Karte gibt (laut TCGdex). Unbekannt → beide.
+  /// Preise unterscheiden nur „normal“ (bei Holo-Karten die Holo-Fassung) und Reverse Holo.
+  List<ButtonSegment<String>> _variantSegments() {
+    final variants = (widget.card ?? _item?.card)?.variants;
+    final holoOnly =
+        variants != null && (variants['holo'] ?? false) && !(variants['normal'] ?? false);
+    return [
+      ButtonSegment(value: 'normal', label: Text(holoOnly ? 'Holo' : 'Normal')),
+      if (variants == null || (variants['reverse'] ?? true) || _variant == 'reverse')
+        const ButtonSegment(value: 'reverse', label: Text('Reverse Holo')),
+    ];
+  }
+
   bool get _isSealed => _item?.kind == 'sealed';
 
   @override
@@ -288,12 +302,10 @@ class _ItemFormState extends ConsumerState<ItemForm> {
   Widget _extras(List<Folder> folders) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      if (!_isSealed) ...[
+      if (!_isSealed && _variantSegments().length > 1) ...[
         SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(value: 'normal', label: Text('Normal')),
-            ButtonSegment(value: 'reverse', label: Text('Reverse Holo')),
-          ],
+          key: const Key('item-variant'),
+          segments: _variantSegments(),
           selected: {_variant},
           onSelectionChanged: (value) => setState(() => _variant = value.first),
         ),

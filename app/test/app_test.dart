@@ -6,6 +6,7 @@ import 'fakes.dart';
 
 void main() {
   moversTests();
+  variantTests();
 
   testWidgets('ohne Sitzung: Anmeldung, falsches und richtiges Passwort', (tester) async {
     final api = FakeApi();
@@ -324,5 +325,35 @@ void moversTests() {
     expect(find.text('+50,0 %'), findsOneWidget);
     expect(find.text('−2,00\u00a0€'), findsOneWidget);
     expect(find.text('-10,0 %'), findsOneWidget);
+  });
+}
+
+void variantTests() {
+  testWidgets('Holo-Karte ohne Reverse: Fassungen gezeigt, keine Auswahl beim Hinzufügen', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true)
+      ..cardVariants = {'normal': false, 'reverse': false, 'holo': true, 'firstEdition': false}
+      ..cardIllustrator = 'Ryota Murayama';
+    await pumpApp(tester, api);
+    final topCard = find.text('Nachtara VMAX').first;
+    await tester.ensureVisible(topCard);
+    await tester.pumpAndSettle();
+    await tester.tap(topCard);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('card-variants')), findsOneWidget);
+    expect(find.text('Holo'), findsWidgets);
+    expect(find.text('Illustration: Ryota Murayama'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('add-to-collection')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Weitere Angaben'));
+    await tester.pumpAndSettle();
+    expect(find.text('Kaufpreis (Stück)'), findsOneWidget); // aufgeklappt
+    expect(find.byKey(const Key('item-variant')), findsNothing); // gibt nur Holo
+    await tester.tap(find.byKey(const Key('item-save')));
+    await tester.pumpAndSettle();
+    expect(api.lastItemBody?['variant'], 'normal');
   });
 }

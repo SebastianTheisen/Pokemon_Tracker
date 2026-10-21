@@ -219,6 +219,8 @@ class CardInfo {
     this.imageLanguage,
     this.rarity,
     this.translatedName,
+    this.variants,
+    this.illustrator,
   });
 
   factory CardInfo.fromJson(Json json) => CardInfo(
@@ -233,6 +235,8 @@ class CardInfo {
     source: json.str('source'),
     cardSet: SetSummary.fromJson(json.obj('card_set')),
     translatedName: json.strOrNull('translated_name'),
+    variants: json.objOrNull('variants')?.map((key, value) => MapEntry(key, value == true)),
+    illustrator: json.strOrNull('illustrator'),
   );
 
   final String id;
@@ -251,8 +255,28 @@ class CardInfo {
   /// Deutscher Name bei japanischen, koreanischen und chinesischen Karten (sonst `null`).
   final String? translatedName;
 
+  /// Welche Fassungen es gibt (normal, reverse, holo, firstEdition); `null` = unbekannt.
+  final Map<String, bool>? variants;
+  final String? illustrator;
+
   /// Lesbarer Name: übersetzt, falls vorhanden.
   String get displayName => translatedName ?? name;
+
+  /// Fassungen als Text, z. B. „Holo · Reverse Holo“ (`null`, wenn unbekannt).
+  String? get variantText {
+    final known = variants;
+    if (known == null) return null;
+    final labels = [
+      for (final (key, label) in [
+        ('normal', 'Normal'),
+        ('holo', 'Holo'),
+        ('reverse', 'Reverse Holo'),
+        ('firstEdition', '1. Edition'),
+      ])
+        if (known[key] ?? false) label,
+    ];
+    return labels.isEmpty ? null : labels.join(' · ');
+  }
 
   /// Originalname, wenn er sich vom angezeigten Namen unterscheidet (z. B. „ピカチュウex“).
   String? get originalName => translatedName == null ? null : name;

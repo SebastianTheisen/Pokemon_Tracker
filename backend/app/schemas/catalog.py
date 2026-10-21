@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.models import CardSource
 from app.services.card_names import translate_card_name
@@ -46,6 +46,10 @@ class CardOut(BaseModel):
     image_url: str | None
     image_language: str | None = None
     rarity: str | None
+    variants: dict[str, bool] | None = Field(
+        default=None, description="Welche Fassungen es gibt, z. B. {normal, reverse, holo}"
+    )
+    illustrator: str | None = None
     source: CardSource
     card_set: SetSummary
 

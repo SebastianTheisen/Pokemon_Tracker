@@ -229,6 +229,17 @@ class _CardBodyState extends ConsumerState<_CardBody> {
                         'Nr. ${card.number}',
                         style: const TextStyle(color: AppColors.textMuted),
                       ),
+                      if (card.variantText case final variants?)
+                        Text(
+                          variants,
+                          key: const Key('card-variants'),
+                          style: const TextStyle(color: AppColors.textMuted),
+                        ),
+                      if (card.illustrator case final illustrator?)
+                        Text(
+                          'Illustration: $illustrator',
+                          style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                        ),
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 6,

@@ -30,8 +30,12 @@ Json cardJson({
   String number = '215',
   String language = 'de',
   String? translatedName,
+  Map<String, bool>? variants,
+  String? illustrator,
 }) => {
   'id': id,
+  'variants': variants,
+  'illustrator': illustrator,
   'translated_name': translatedName,
   'external_id': 'swsh7-$number',
   'language': language,
@@ -239,7 +243,13 @@ class FakeApi extends Api {
   }
 
   @override
-  Future<CardInfo> card(String id) async => CardInfo.fromJson(cardJson(id: id));
+  /// Kartendetails für [card] (Varianten, Illustrator) – Standard unbekannt.
+  Map<String, bool>? cardVariants;
+  String? cardIllustrator;
+
+  @override
+  Future<CardInfo> card(String id) async =>
+      CardInfo.fromJson(cardJson(id: id, variants: cardVariants, illustrator: cardIllustrator));
 
   @override
   Future<CardPrices> prices(String cardId) async => CardPrices.fromJson(pricesJson);

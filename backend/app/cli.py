@@ -53,6 +53,7 @@ from app.providers.tcgdex import TcgdexClient
 from app.scanner.ocr import RapidOcrReader
 from app.scanner.runtime import ScannerRuntime
 from app.services.admin import AdminService
+from app.services.card_details import sync_card_details
 from app.services.cardmarket_catalog import catalog_status as cardmarket_status
 from app.services.cardmarket_catalog import render_status as render_cardmarket_status
 from app.services.cardmarket_catalog import run_catalog_import
@@ -206,6 +207,24 @@ async def _cardmarket_status(
     if args.out:
         await asyncio.to_thread(Path(args.out).write_text, text, encoding="utf-8")
     print(text)
+
+
+async def _sync_card_details(
+    factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
+) -> None:
+    """Fehlende Kartendetails (Seltenheit, Varianten, Illustrator) aus TCGdex holen."""
+    async with TcgdexClient(
+        base_url=settings.tcgdex_base_url, user_agent=settings.http_user_agent
+    ) as client:
+        report = await sync_card_details(
+            factory, client, concurrency=settings.card_details_concurrency, limit=args.limit
+        )
+    print(
+        f"Offen: {report.pending}, aktualisiert: {report.updated}, "
+        f"bei TCGdex unbekannt: {report.not_found}, Fehler: {report.failed}"
+    )
+    for error in report.errors:
+        print(f"    ! {error}")
 
 
 async def _image_status(
@@ -548,6 +567,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_image_commands(commands)
 
     _add_cardmarket_commands(commands)
+
+    details = commands.add_parser(
+        "sync-card-details", help="Kartendetails (Seltenheit, Varianten) aus TCGdex holen"
+    )
+    details.add_argument("--limit", type=int, help="höchstens so viele Karten (zum Testen)")
+    details.set_defaults(handler=_sync_card_details)
 
     prices = commands.add_parser(
         "refresh-prices", help="Preise aller vorgemerkten Karten jetzt aktualisieren"

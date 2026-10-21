@@ -23,6 +23,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UuidPrimaryKeyMixin
@@ -115,6 +116,12 @@ class Card(UuidPrimaryKeyMixin, TimestampMixin, Base):
     # Nutzer innerhalb der Ausgabe ein anderes Produkt gewählt hat – dieses.
     cardmarket_product_id: Mapped[int | None] = mapped_column(Integer)
     cardmarket_product_override: Mapped[int | None] = mapped_column(Integer)
+    # Kartendetails aus TCGdex (Hintergrund-Abgleich, :mod:`app.services.card_details`):
+    # welche Varianten es gibt ({"normal": true, "reverse": true, "holo": false, …}),
+    # Illustrator und Zeitpunkt des letzten Abgleichs.
+    variants: Mapped[dict[str, bool] | None] = mapped_column(JSONB)
+    illustrator: Mapped[str | None] = mapped_column(String(120))
+    details_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source: Mapped[CardSource] = mapped_column(
         Enum(
             CardSource,

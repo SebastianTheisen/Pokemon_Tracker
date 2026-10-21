@@ -114,6 +114,12 @@ class Settings(BaseSettings):
     cardmarket_catalog_interval_hours: int = Field(
         default=24, ge=0, description="Katalog + Preisführer im Worker alle n Stunden; 0 = aus."
     )
+    # --- Kartendetails aus TCGdex (Seltenheit, Varianten, Illustrator) ---------
+    card_details_interval_hours: int = Field(
+        default=24, ge=0, description="Fehlende Kartendetails im Worker alle n Stunden; 0 = aus."
+    )
+    card_details_concurrency: int = Field(default=4, ge=1, le=16)
+
     cardmarket_set_link_concurrency: int = Field(default=4, ge=1, le=16)
     cardmarket_set_recheck_days: int = Field(
         default=14,

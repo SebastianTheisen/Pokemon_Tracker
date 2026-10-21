@@ -19,6 +19,10 @@ wenn noch nie einer fertig wurde; er dauert wegen der sanften Abfrage einige Stu
 Alle ``PT_CARDMARKET_CATALOG_INTERVAL_HOURS`` Stunden lädt der Worker den offiziellen
 Cardmarket-Katalog samt Preisführer und verknüpft neue Sets mit ihrer Cardmarket-Ausgabe
 (:mod:`app.services.cardmarket_catalog`).
+
+Alle ``PT_CARD_DETAILS_INTERVAL_HOURS`` Stunden holt er fehlende Kartendetails aus TCGdex
+(Seltenheit, Varianten, Illustrator; :mod:`app.services.card_details`). Der erste Lauf
+betrifft den ganzen Katalog und dauert einige Stunden, danach nur neue Karten.
 """
 
 from __future__ import annotations
@@ -41,6 +45,7 @@ from app.providers.pricing import PriceProvider
 from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
 from app.scanner.storage import ReferenceStore
+from app.services.card_details import sync_card_details
 from app.services.cardmarket_catalog import last_successful_import, run_catalog_import
 from app.services.collection import CollectionService, users_with_items
 from app.services.image_import import last_finished_run, last_run_incomplete, run_image_import
@@ -242,6 +247,27 @@ async def cardmarket_forever(
             await asyncio.sleep(3600)  # nicht in einer Fehlerschleife hämmern
 
 
+CARD_DETAILS_START_DELAY = timedelta(minutes=10)
+
+
+async def card_details_forever(
+    session_factory: async_sessionmaker[AsyncSession], settings: Settings, client: TcgdexClient
+) -> None:
+    """Endlosschleife: fehlende Kartendetails nachladen, dann warten."""
+    if settings.card_details_interval_hours <= 0:
+        log.info("worker.card_details_disabled")
+        return
+    await asyncio.sleep(CARD_DETAILS_START_DELAY.total_seconds())
+    while True:
+        try:
+            await sync_card_details(
+                session_factory, client, concurrency=settings.card_details_concurrency
+            )
+        except Exception:
+            log.exception("worker.card_details_failed")
+        await asyncio.sleep(timedelta(hours=settings.card_details_interval_hours).total_seconds())
+
+
 async def run_forever(settings: Settings) -> None:
     """Endlosschleife: bis zur nächsten Uhrzeit schlafen, Runde ausführen, wiederholen."""
     engine = create_engine(settings.database_url)
@@ -258,6 +284,7 @@ async def run_forever(settings: Settings) -> None:
             # Bild-Import läuft unabhängig (dauert Stunden); Referenz halten, am Ende beenden.
             images = asyncio.create_task(image_import_forever(session_factory, settings))
             cardmarket = asyncio.create_task(cardmarket_forever(session_factory, settings, client))
+            details = asyncio.create_task(card_details_forever(session_factory, settings, client))
             try:
                 while True:
                     next_run = next_run_after(
@@ -276,6 +303,7 @@ async def run_forever(settings: Settings) -> None:
             finally:
                 images.cancel()
                 cardmarket.cancel()
+                details.cancel()
     finally:
         await engine.dispose()
 
