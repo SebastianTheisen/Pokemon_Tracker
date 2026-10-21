@@ -260,7 +260,25 @@ RUNS_G: RunList = [
         {"searchQueries": SEALED_QUERIES, "game": "Pokemon", "maxResults": 10},
     ),
 ]
-STAGES = {"B": RUNS, "C": RUNS_C, "D": RUNS_D, "E": RUNS_E, "F": RUNS_F, "G": RUNS_G}
+# Stufe H: parselab (vermutlich TCGdex-Wrapper) – hat er Karten, die uns fehlen?
+# Koreanisch und Chinesisch fehlen bei uns fast ganz (Bestandsaufnahme), Japanisch teilweise.
+RUNS_H: RunList = [
+    (
+        f"Karten · parselab · {language} · Pikachu",
+        "parselab/pokemon-tcg-cards-scraper",
+        {"language": language, "names": ["Pikachu"], "maxItems": 10},
+    )
+    for language in ("ko", "zh-cn", "ja")
+]
+STAGES = {
+    "B": RUNS,
+    "C": RUNS_C,
+    "D": RUNS_D,
+    "E": RUNS_E,
+    "F": RUNS_F,
+    "G": RUNS_G,
+    "H": RUNS_H,
+}
 RUN_IDS: list[tuple[str, str]] = []
 
 
@@ -349,7 +367,7 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
     emit(f"## {title}\n")
     emit(f"- Anbieter: `{actor}`")
     emit(f"- Eingabe: `{short(payload, 400)}`")
-    if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("D", "E", "F", "G"):
+    if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("D", "E", "F", "G", "H"):
         payload = adapt_input(client, actor, payload)
     started = time.monotonic()
     run = run_actor(client, actor, payload)
@@ -396,6 +414,14 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
                 if value not in (None, "")
             )
         )
+    if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() == "H":
+        for item in items[:10]:
+            emit(
+                f"  - {short(field(item, 'name'), 60)} · Set {short(field(item, 'set'), 60)} · "
+                f"Nr. {short(field(item, 'number', 'localid'), 20)} · "
+                f"Bild {short(field(item, 'image'), 90)} · "
+                f"Cardmarket {short(field(item, 'cardmarket'), 120)}"
+            )
     if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() == "G":
         with_image = [i for i in items if field(i, "image", "img", "picture", "photo")]
         emit(f"- Mit Bild: {len(with_image)} von {len(items)}")
@@ -405,7 +431,7 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
                 f"ID {short(field(item, 'idproduct', 'productid', 'product_id', 'id'), 30)} · "
                 f"Bild {short(field(item, 'image', 'img', 'picture', 'photo'), 140)}"
             )
-    full = 4000 if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("F", "G") else 900
+    full = 4000 if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("F", "G", "H") else 900
     emit(f"- Erster Eintrag vollständig: `{short(items[0], full)}`")
     emit()
 
