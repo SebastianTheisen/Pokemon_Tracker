@@ -39,7 +39,7 @@ _KIND_RULES: tuple[tuple[re.Pattern[str], ProductKind], ...] = tuple(
         (r"\bcase\b", ProductKind.CASE),
         (r"bundle", ProductKind.BOOSTER_BUNDLE),
         (r"blister", ProductKind.BLISTER),
-        (r"\btin\b", ProductKind.TIN),
+        (r"\btins?\b", ProductKind.TIN),  # Kategorie „Pokémon Tins“
         (r"booster", ProductKind.BOOSTER),
         (r"box|collection|kollektion", ProductKind.COLLECTION_BOX),
     )

@@ -8,7 +8,8 @@ Bilder zeigen die englische bzw. japanische Verpackung.
 Zuordnung über den Namen, aber unscharf – die Kataloge benennen anders:
 
 * Wörter statt Text, Satzzeichen und Füllwörter weg, Mehrzahl = Einzahl („Tins“ = „Tin“),
-  Kürzel der Serien-Epochen („XY“, „BW“, „EX“ …) zählen nicht – mal stehen sie da, mal nicht,
+  Kürzel der Serien-Epochen („XY“, „BW“, „EX“ am Anfang …) zählen nicht – mal stehen sie da,
+  mal nicht,
 * gleiche Bedeutung gleich schreiben: „Booster Box“ = „Display“, „Booster Pack“ = „Booster“,
   „Elite Trainer Box“ = „ETB“ …,
 * seltene Wörter zählen mehr als häufige (gewichtete Jaccard-Ähnlichkeit, Gewicht nach
@@ -65,8 +66,9 @@ _STOPWORDS = frozenset(
         "exclusive",
         "unlimited",
         "edition",
-        # Kürzel der Serien-Epochen („XY BREAKthrough“ = „BREAKthrough“)
-        "ex",
+        "s",  # Rest von „Collector's“
+        # Kürzel der Serien-Epochen („XY BREAKthrough“ = „BREAKthrough“); „EX“ nur am Anfang
+        # (_ERA_PREFIX), sonst ist „Reshiram ex Box“ ein anderes Produkt als „Reshiram Box“.
         "xy",
         "bw",
         "sm",
@@ -89,6 +91,7 @@ _SINGULAR = {
 }
 # Einzelwörter nach den Wortgruppen: „POP Series 1 Pack“ = „… Booster“, „EU Version“ = …
 _WORDS = {"pack": "booster", "eu": "international"}
+_ERA_PREFIX = re.compile(r"^\s*ex\b", re.I)  # „EX Dragon: …“, „EX Trainer Kit“
 _BRACKETS = re.compile(r"\[[^\]]*\]|\([^)]*\)")
 _CODE_CARD = re.compile(r"^\s*code card\b", re.I)
 # Reihenfolge zählt (längere Begriffe zuerst).
@@ -124,7 +127,7 @@ class ImageReport:
 
 def tokens(name: str) -> frozenset[str]:
     """Vergleichsform eines Produktnamens als Wortmenge."""
-    text = name.casefold().replace("é", "e").replace("&", " ")
+    text = _ERA_PREFIX.sub(" ", name).casefold().replace("é", "e").replace("&", " ")
     text = re.sub(r"[^a-z0-9]+", " ", text)
     text = f" {' '.join(_SINGULAR.get(word, word) for word in text.split())} "
     for phrase, replacement in _SYNONYMS:

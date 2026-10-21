@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import Settings
 from app.models import CmProduct, Product, ProductKind
 from app.services.cardmarket_catalog import run_catalog_import
+from app.services.sealed import kind_for
 from app.services.sealed_images import Matcher, TcgProduct, refresh_sealed_images, tokens
 from tests.test_cardmarket_catalog import catalog_transport
 
@@ -142,6 +143,29 @@ def test_matcher_second_round_from_the_analysis() -> None:
     )
     # Ein anderes Deck derselben Serie bleibt ohne Bild statt falsch.
     assert best("EX Dragon: Sky Rage Theme Deck", ProductKind.OTHER) is None
+
+
+def test_matcher_third_round_ex_only_as_era_prefix() -> None:
+    """Lauf 3: „EX“ vorn ist die Epoche, „ex“ im Namen eine eigene Kartenart."""
+    matcher = Matcher(
+        [
+            tcg(1, "Reshiram Box"),
+            tcg(2, "Reshiram ex Box"),
+            tcg(3, "Spring 2017 Collector's Chest Tin"),
+            tcg(4, "Spring 2018 Collector's Chest Tin"),
+        ]
+    )
+
+    def best(name: str, kind: ProductKind) -> int | None:
+        hit = matcher.best(name, kind, ["en"])
+        return hit.product_id if hit else None
+
+    assert best("Reshiram Box", ProductKind.COLLECTION_BOX) == 1
+    assert best("Reshiram ex Box", ProductKind.COLLECTION_BOX) == 2
+    assert tokens("EX Trainer Kit 2") == {"trainer", "kit", "2"}
+    # Cardmarket-Kategorie „Pokémon Tins“ ergibt die Art Tin.
+    assert kind_for("Pokémon Tins", "Spring 2017 Collector Chest") == ProductKind.TIN
+    assert best("Spring 2017 Collector Chest", ProductKind.TIN) == 3
 
 
 def test_unknown_kind_needs_nearly_identical_name() -> None:
