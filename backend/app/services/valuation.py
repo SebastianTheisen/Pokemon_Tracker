@@ -8,7 +8,7 @@ Reihenfolge je Stück:
 3. Nur Rohkarten: **Schätzung** = NM-Basis × Zustandsfaktor (gekennzeichnet). Basis ist
    Cardmarket, ohne Cardmarket-Preis der umgerechnete US-Preis von PriceCharting.
 4. Gegradete Karten: **Median der ausgelesenen eBay-Verkäufe** mit gleicher Firma und Note,
-   sonst der **PriceCharting-Preis der Note** (US-Preis umgerechnet; Note 10 nur bei PSA).
+   sonst der **PriceCharting-Preis der Note** (US-Preis umgerechnet; Note 10 je Firma).
 5. Versiegelte Produkte: **Cardmarket-Preisführer** (Median aus Trend, Ø 7, Ø 30), wenn das
    Produkt mit Cardmarket verknüpft ist.
 6. Sonst **kein Wert**.
@@ -16,6 +16,7 @@ Reihenfolge je Stück:
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -150,15 +151,28 @@ def _graded_value(company: str, grade: str | None, prices: CardPrices) -> ItemVa
     return ItemValue("external", median, median, source=EBAY_SOLD, basis=basis)
 
 
-# Noten bei PriceCharting: 7, 8, 9, 9.5 firmenübergreifend, 10 nur als „PSA 10“.
-_PRICECHARTING_GRADES = {"7": "grade_7", "8": "grade_8", "9": "grade_9", "9.5": "grade_9_5"}
+# Noten bei PriceCharting: 1–9.5 firmenübergreifend, 10 je Firma (Detailseite: auch BGS,
+# CGC, SGC, TAG, ACE; Black Label / Pristine extra). Aus der Suche gibt es nur „PSA 10“.
+_COMPANIES_10 = frozenset({"PSA", "BGS", "CGC", "SGC", "TAG", "ACE"})
+
+
+def pricecharting_metric(company: str, grade: str | None) -> str | None:
+    """Kennzahl für Firma und Note, z. B. BGS „10 BL“ → ``bgs_10_black``."""
+    company = company.upper()
+    if grade in ("10", "10 BL"):
+        if company not in _COMPANIES_10:
+            return None
+        if grade == "10 BL":
+            return {"BGS": "bgs_10_black", "CGC": "cgc_10_pristine"}.get(company)
+        return f"{company.lower()}_10"
+    if grade and re.fullmatch(r"\d(\.5)?", grade):
+        return "grade_" + grade.replace(".", "_")
+    return None
 
 
 def _pricecharting_graded(company: str, grade: str | None, prices: CardPrices) -> ItemValue:
     """Preis der Note laut PriceCharting (US-Verkäufe, in Euro umgerechnet)."""
-    metric = _PRICECHARTING_GRADES.get(grade or "")
-    if grade == "10" and company.upper() == "PSA":
-        metric = "psa_10"
+    metric = pricecharting_metric(company, grade)
     offer = next(
         (o for o in prices.offers if o.source == PRICECHARTING and o.variant == GRADED_VARIANT),
         None,
@@ -166,7 +180,7 @@ def _pricecharting_graded(company: str, grade: str | None, prices: CardPrices) -
     value = offer.metrics.get(metric) if offer is not None and metric else None
     if value is None:
         return NO_VALUE
-    label = "PSA 10" if metric == "psa_10" else f"Note {grade}"
+    label = f"{company.upper()} {grade}" if grade in ("10", "10 BL") else f"Note {grade}"
     return ItemValue(
         "external",
         value,

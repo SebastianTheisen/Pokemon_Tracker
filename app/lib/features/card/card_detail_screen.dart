@@ -43,14 +43,28 @@ const metricLabels = {
   'direct_low': 'Direkt ab',
   'low3': 'Ø 3 günstigste',
   'median': 'Median',
-  // PriceCharting (US-Verkäufe, in Euro umgerechnet)
+  // PriceCharting (US-Verkäufe, in Euro umgerechnet); Noten siehe [metricLabel]
   'ungraded': 'Roh',
-  'grade_7': 'Note 7',
-  'grade_8': 'Note 8',
-  'grade_9': 'Note 9',
-  'grade_9_5': 'Note 9,5',
-  'psa_10': 'PSA 10',
 };
+
+/// Beschriftung einer Kennzahl – auch PriceCharting-Noten wie `grade_9_5` („Note 9,5“),
+/// `bgs_10_black` („BGS 10 Black Label“) oder `cgc_10_pristine` („CGC 10 Pristine“).
+String metricLabel(String key) {
+  final known = metricLabels[key];
+  if (known != null) return known;
+  final grade = RegExp(r'^grade_(\d+)(_5)?$').firstMatch(key);
+  if (grade != null) return 'Note ${grade.group(1)}${grade.group(2) != null ? ',5' : ''}';
+  final company = RegExp(r'^([a-z]+)_10(_black|_pristine)?$').firstMatch(key);
+  if (company != null) {
+    final suffix = switch (company.group(2)) {
+      '_black' => ' Black Label',
+      '_pristine' => ' Pristine',
+      _ => '',
+    };
+    return '${company.group(1)!.toUpperCase()} 10$suffix';
+  }
+  return key;
+}
 
 String sourceLabel(String source) => switch (source) {
   'cardmarket' => 'Cardmarket',
@@ -510,7 +524,7 @@ class _OfferTile extends StatelessWidget {
                   Text(
                     entry.key == 'count'
                         ? '${double.parse(entry.value).round()} Verkäufe'
-                        : '${metricLabels[entry.key] ?? entry.key}: '
+                        : '${metricLabel(entry.key)}: '
                               '${money(entry.value, currency: offer.currency)}',
                     style: const TextStyle(fontSize: 13),
                   ),

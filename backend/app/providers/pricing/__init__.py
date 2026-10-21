@@ -38,6 +38,8 @@ class CardRef:
     english_name: str | None = None
     english_set_name: str | None = None
     release_date: date | None = None
+    graded: bool = False  # liegt bei jemandem als Slab in der Sammlung
+    pricecharting_url: str | None = None  # bekannte PriceCharting-Produktseite
 
 
 @dataclass(frozen=True)

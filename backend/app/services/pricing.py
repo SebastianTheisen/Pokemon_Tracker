@@ -296,6 +296,9 @@ class PriceService:
         )
         if not has_cardmarket or corrected:
             return True
+        return await self._is_graded(card)
+
+    async def _is_graded(self, card: Card) -> bool:
         graded = await self._session.scalar(
             select(
                 exists().where(
@@ -317,11 +320,24 @@ class PriceService:
                 name, set_name = english.name, english.card_set.name
         if name is None:
             name = translate_card_name(card.name, card.language, target="en")
+        # Bekannte Produktseite (Set-Import Korea/China oder frühere Suche) → kein Suchen.
+        product_url = await self._session.scalar(
+            select(PricePoint.source_url)
+            .where(
+                PricePoint.card_id == card.id,
+                PricePoint.source == PRICECHARTING,
+                PricePoint.source_url.like("%/game/%"),
+            )
+            .order_by(PricePoint.source_updated_at.desc())
+            .limit(1)
+        )
         return dataclasses.replace(
             card_ref(card),
             english_name=name,
             english_set_name=set_name,
             release_date=card.card_set.release_date,
+            graded=await self._is_graded(card),
+            pricecharting_url=product_url,
         )
 
     async def _store(self, card: Card, quotes: Sequence[PriceQuote]) -> int:

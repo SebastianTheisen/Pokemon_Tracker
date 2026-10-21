@@ -189,6 +189,10 @@ class Settings(BaseSettings):
     pricecharting_actor: str = Field(
         default="gio21/pricecharting-scraper", description="Apify-Dienst für die Suche."
     )
+    pricecharting_detail_actor: str = Field(
+        default="parsebird/pricecharting-product-scraper",
+        description="Apify-Dienst für Produktseiten (Preise je Firma und Note, ~0,003 $).",
+    )
     pricecharting_max_items: int = Field(default=3, ge=1, le=10)
     pricecharting_max_charge_usd: float = Field(default=0.03, gt=0, le=1)
     pricecharting_max_age_days: int = Field(

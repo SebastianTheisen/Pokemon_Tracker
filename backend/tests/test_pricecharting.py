@@ -23,12 +23,13 @@ from app.providers.pricing.pricecharting import (
     ApifyBudgetError,
     PriceChartingProvider,
     choose,
+    quotes_from_details,
     quotes_from_item,
     search_query,
 )
 from app.services.price_health import SourceHealth
 from app.services.pricing import CardPrices, Offer, PriceService
-from app.services.valuation import unit_value
+from app.services.valuation import pricecharting_metric, unit_value
 from tests.conftest import RegisterUser
 from tests.pricing_helpers import FakeProvider, cardmarket
 
@@ -132,8 +133,28 @@ def test_quotes_are_converted_to_euro() -> None:
 # ------------------------------------------------------------ Quelle (Apify)
 
 
+DETAIL = {
+    "url": "https://www.pricecharting.com/game/pokemon-japanese-paradigm-trigger/lugia-v-110",
+    "fullPrices": {
+        "Ungraded": 741.17,
+        "Grade 9": 562.5,
+        "Grade 9.5": 675.48,
+        "PSA 10": 1050,
+        "BGS 10": 2500,
+        "BGS 10 Black": 10000,
+        "CGC 10 Pristine": 1800,
+        "Grade 7": None,
+        "Box Only": 5,
+    },
+}
+
+
 def apify_transport(
-    items: list[dict[str, Any]], *, used: float = 1.0, calls: list[str] | None = None
+    items: list[dict[str, Any]],
+    *,
+    used: float = 1.0,
+    calls: list[str] | None = None,
+    details: list[dict[str, Any]] | None = None,
 ) -> httpx.MockTransport:
     def handler(request: httpx.Request) -> httpx.Response:
         if calls is not None:
@@ -149,17 +170,22 @@ def apify_transport(
                 }
             }
         elif path.endswith("/runs"):
-            assert json.loads(request.content)["searchQueries"] == ["Lugia V 110 Japanese"]
+            detail = "parsebird" in path
+            payload = json.loads(request.content)
+            if not detail:
+                assert payload["searchQueries"] == ["Lugia V 110 Japanese"]
             body = {
                 "data": {
                     "id": "run1",
                     "status": "SUCCEEDED",
-                    "defaultDatasetId": "ds1",
-                    "usageTotalUsd": 0.005,
+                    "defaultDatasetId": "details" if detail else "ds1",
+                    "usageTotalUsd": 0.003 if detail else 0.005,
                 }
             }
         elif path.endswith("/datasets/ds1/items"):
             body = items
+        elif path.endswith("/datasets/details/items"):
+            body = [DETAIL] if details is None else details
         else:
             return httpx.Response(404)
         return httpx.Response(200, content=json.dumps(body).encode())
@@ -342,3 +368,59 @@ def test_slab_value_from_pricecharting_grade(
     if expected is not None:
         assert value.source == "pricecharting"
         assert value.basis is not None and "umgerechnet" in value.basis
+
+
+# ------------------------------------------------------- Details (parsebird)
+
+
+def test_detail_metrics_per_company() -> None:
+    quotes = {
+        q.metric: q.value
+        for q in quotes_from_details(DETAIL, per_euro=Decimal("1.25"), fetched_at=NOW)
+    }
+    assert set(quotes) == {
+        "ungraded", "grade_9", "grade_9_5", "psa_10", "bgs_10", "bgs_10_black", "cgc_10_pristine"
+    }  # fmt: skip
+    assert quotes["bgs_10_black"] == Decimal("8000")
+
+
+async def test_known_product_page_uses_details_without_search(settings: Settings) -> None:
+    calls: list[str] = []
+    known = ref(pricecharting_url=DETAIL["url"])
+
+    quotes = await provider(settings, apify_transport([], calls=calls)).fetch(known)
+
+    runs = [call for call in calls if call.endswith("/runs")]
+    assert len(runs) == 1 and "parsebird" in runs[0]  # keine Suche
+    assert {q.metric for q in quotes} >= {"ungraded", "bgs_10"}
+
+
+async def test_slab_without_known_page_searches_then_loads_details(settings: Settings) -> None:
+    calls: list[str] = []
+    lugia = item(
+        "Lugia V #110", "Pokemon Japanese Paradigm Trigger", "#110", 741.17,
+        url=DETAIL["url"],
+    )  # fmt: skip
+
+    quotes = await provider(settings, apify_transport([lugia], calls=calls)).fetch(ref(graded=True))
+
+    runs = [call for call in calls if call.endswith("/runs")]
+    assert len(runs) == 2 and "gio21" in runs[0] and "parsebird" in runs[1]
+    assert "bgs_10_black" in {q.metric for q in quotes}
+
+
+@pytest.mark.parametrize(
+    ("company", "grade", "metric"),
+    [
+        (GradingCompany.BGS, "10", "bgs_10"),
+        (GradingCompany.BGS, "10 BL", "bgs_10_black"),
+        (GradingCompany.CGC, "10 BL", "cgc_10_pristine"),
+        (GradingCompany.SGC, "10", "sgc_10"),
+        (GradingCompany.OTHER, "10", None),
+        (GradingCompany.PSA, "9.5", "grade_9_5"),
+    ],
+)
+def test_pricecharting_metric_for_company_and_grade(
+    company: GradingCompany, grade: str, metric: str | None
+) -> None:
+    assert pricecharting_metric(company, grade) == metric
