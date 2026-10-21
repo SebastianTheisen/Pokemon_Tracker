@@ -4,8 +4,8 @@
 
 | Sprache | Sets | Karten | fehlen laut Set-Größe | Sets ohne Größe | ohne Bild | ohne Cardmarket | ohne Preis |
 |---|---|---|---|---|---|---|---|
-| en | 220 | 23770 | 228 | 0 | 771 (3 %) | 2962 (12 %) | 23767 (99 %) |
-| de | 155 | 20233 | 753 | 0 | 225 (1 %) | 1371 (6 %) | 20226 (99 %) |
+| en | 205 | 21290 | 228 | 0 | 612 (2 %) | 482 (2 %) | 21287 (99 %) |
+| de | 144 | 18980 | 458 | 0 | 70 (0 %) | 118 (0 %) | 18973 (99 %) |
 | ja | 186 | 15315 | 3349 | 0 | 2552 (16 %) | 4511 (29 %) | 15309 (99 %) |
 | zh-tw | 98 | 8074 | 1519 | 0 | 4 (0 %) | 3464 (42 %) | 8073 (99 %) |
 | zh-cn | 56 | 877 | 6076 | 0 | 48 (5 %) | 48 (5 %) | 877 (100 %) |
@@ -33,15 +33,14 @@
 | ko | S12a | VSTAR 유니버스 | 2022-12-02 | 172 | 0 |
 | ko | SV2a | 포켓몬 카드 151 | 2023-06-16 | 165 | 0 |
 | en | jumbo | Jumbo cards | 2000-02-01 | 160 | 0 |
-| de | B2 | Traumhafte Parade | 2026-01-29 | 155 | 0 |
-| zh-cn | csm1.5 | 战斗精英 | 2022-12-16 | 151 | 0 |
+| zh-cn | CSM1cC | 横空出世 泽 | 2020-10-28 | 151 | 0 |
 | zh-cn | CSM1bC | 横空出世 苍 | 2020-10-28 | 151 | 0 |
 | zh-cn | csm2.5 | 精彩的比赛 | 2023-03-13 | 151 | 0 |
 | zh-cn | CSM1aC | 横空出世 赫 | 2020-10-28 | 151 | 0 |
-| zh-cn | CSM1cC | 横空出世 泽 | 2020-10-28 | 151 | 0 |
-| ko | SM8b | GX 울트라샤이니 ULTIMATE | 2018-10-05 | 150 | 0 |
+| zh-cn | csm1.5 | 战斗精英 | 2022-12-16 | 151 | 0 |
 | zh-cn | CSM2aC | 交相辉映 沐 | 2023-01-18 | 150 | 0 |
 | zh-cn | CSM2bC | 交相辉映 魁 | 2023-01-18 | 150 | 0 |
+| ko | SM8b | GX 울트라샤이니 ULTIMATE | 2018-10-05 | 150 | 0 |
 | zh-cn | CSM2cC | 交相辉映 唤 | 2023-01-18 | 150 | 0 |
 | zh-cn | CS1bC | 极巨争锋 焰 | 2023-05-19 | 136 | 0 |
 | zh-cn | CS1aC | 横空出世 赫 | 2023-05-19 | 135 | 0 |
@@ -55,10 +54,11 @@
 | zh-cn | CSV6C | 真实玄虚 | 2025-11-07 | 128 | 0 |
 | zh-cn | CSV2C | 奇迹启程 | 2025-03-21 | 128 | 0 |
 | zh-cn | CS5bC | 勇魅群星 勇 | 2024-06-18 | 128 | 0 |
+| zh-cn | CSV1C | 亘古开来 | 2025-01-17 | 127 | 0 |
 
 ## 2b. Sets ohne Cardmarket-Ausgabe (→ keine Preise)
 
-Je Sprache: ja: 97, ko: 92, zh-tw: 60, zh-cn: 49, en: 32, de: 19
+Je Sprache: ja: 97, ko: 92, zh-tw: 60, zh-cn: 49, en: 17, de: 8
 
 | Sprache | Set | Name | Erschienen | Karten |
 |---|---|---|---|---|
@@ -67,41 +67,41 @@ Je Sprache: ja: 97, ko: 92, zh-tw: 60, zh-cn: 49, en: 32, de: 19
 | zh-cn | CBB5C | 宝石包 Vol.5 | 2026-04-24 | 0 |
 | zh-cn | CSV8C | 璀璨诡幻 | 2026-03-13 | 0 |
 | zh-cn | CBB4C | 宝石包 Vol.4 | 2026-02-26 | 0 |
-| en | B2a | Paldean Wonders | 2026-02-26 | 131 |
-| de | B2a | Paldean Wonders | 2026-02-26 | 129 |
-| de | B2 | Traumhafte Parade | 2026-01-29 | 0 |
-| en | B2 | Fantastical Parade | 2026-01-29 | 234 |
 | zh-cn | CSV7C | 利刃猛醒 | 2026-01-16 | 0 |
-| de | B1a | Feuerrote Flammen | 2025-12-17 | 0 |
-| en | B1a | Crimson Blaze | 2025-12-17 | 103 |
 | zh-cn | CSV6C | 真实玄虚 | 2025-11-07 | 0 |
-| en | B1 | Mega Rising | 2025-10-30 | 331 |
 | zh-cn | CBB3C | 宝石包Vol.3 | 2025-09-26 | 0 |
 | zh-cn | CSV5C | 黑晶炽诚 | 2025-09-12 | 0 |
-| de | A4a | Verborgene Quelle | 2025-08-28 | 0 |
-| en | A4a | Secluded Springs | 2025-08-28 | 105 |
-| en | A4 | Wisdom of Sea and Sky | 2025-07-30 | 241 |
 | zh-cn | CSV4C | 嘉奖回合 | 2025-07-18 | 0 |
-| en | A3b | Eevee Grove | 2025-06-26 | 107 |
-| en | A3a | Extradimensional Crisis | 2025-05-29 | 103 |
 | zh-cn | CSV3C | 无畏太晶 | 2025-05-16 | 0 |
 | zh-cn | CBB2C | 宝石包Vol.2 | 2025-05-16 | 0 |
-| de | A3 | Hüter des Firmaments | 2025-04-30 | 239 |
-| en | A3 | Celestial Guardians | 2025-04-30 | 239 |
-| en | A2b | Shining Revelry | 2025-03-27 | 111 |
-| de | A2b | Glänzendes Festival | 2025-03-27 | 111 |
 | zh-cn | CSV2C | 奇迹启程 | 2025-03-21 | 0 |
-| de | A2a | Licht des Triumphs | 2025-02-28 | 96 |
-| en | A2a | Triumphant Light | 2025-02-28 | 96 |
-| de | A2 | Kollision von Raum und Zeit | 2025-01-30 | 207 |
-| en | A2 | Space-Time Smackdown | 2025-01-30 | 207 |
 | zh-cn | CSV1C | 亘古开来 | 2025-01-17 | 0 |
-| de | A1a | Mysteriöse Insel | 2024-12-17 | 86 |
-| en | A1a | Mythical Island | 2024-12-17 | 86 |
 | zh-cn | CS6.5C | 胜象星引 | 2024-11-15 | 0 |
-| en | A1 | Genetic Apex | 2024-10-30 | 286 |
-| de | A1 | Unschlagbare Gene | 2024-10-30 | 286 |
-| en | P-A | Promos-A | 2024-10-30 | 100 |
+| zh-cn | CS6aC | 碧海暗影 啸 | 2024-09-20 | 0 |
+| zh-cn | CS6bC | 碧海暗影 逐 | 2024-09-20 | 0 |
+| ja | SVLN | スターターセット テラスタイプ：ステラ ニンフィアex | 2024-08-30 | 22 |
+| ja | SVLS | スターターセット テラスタイプ：ステラ ソウブレイズex | 2024-08-30 | 22 |
+| zh-cn | CS5.5C | 暗影夺辉 | 2024-08-02 | 0 |
+| ja | SVK | デッキビルドBOX ステラミラクル | 2024-07-19 | 44 |
+| ko | SV6 | 변환의 가면 | 2024-06-21 | 0 |
+| zh-cn | CS5bC | 勇魅群星 勇 | 2024-06-18 | 0 |
+| zh-cn | CS5aC | 勇魅群星 魅 | 2024-06-18 | 0 |
+| ko | SV5a | 크림슨헤이즈 | 2024-05-24 | 0 |
+| ko | CSA | 트리플렛비트 | 2024-04-26 | 0 |
+| ja | CS3a | トリプレットビート | 2024-04-26 | 0 |
+| ja | CS3b | トリプレットビート | 2024-04-26 | 0 |
+| ja | CS1b | トリプレットビート | 2024-04-26 | 0 |
+| ko | CS4a | 트리플렛비트 | 2024-04-26 | 0 |
+| ko | CS2b | 트리플렛비트 | 2024-04-26 | 0 |
+| zh-tw | CS1a | 三連音爆 | 2024-04-26 | 0 |
+| ja | CS2b | トリプレットビート | 2024-04-26 | 0 |
+| ja | CS4 | トリプレットビート | 2024-04-26 | 0 |
+| ja | CS3.5 | トリプレットビート | 2024-04-26 | 0 |
+| ja | CS4a | トリプレットビート | 2024-04-26 | 0 |
+| ko | CS1b | 트리플렛비트 | 2024-04-26 | 0 |
+| ko | CS2.5 | 트리플렛비트 | 2024-04-26 | 0 |
+| zh-tw | CS2.5 | 三連音爆 | 2024-04-26 | 0 |
+| zh-tw | CS4a | 三連音爆 | 2024-04-26 | 0 |
 
 ## 3. Cardmarket-Einzelkarten ohne passende Karte bei uns
 
@@ -176,4 +176,4 @@ Neueste Korrekturen:
 |---|---|---|---|---|---|---|---|---|---|
 
 
-_Lauf: 2026-10-21 18:36 UTC, Stand e6ae103_
+_Lauf: 2026-10-21 20:22 UTC, Stand 968eac4_
