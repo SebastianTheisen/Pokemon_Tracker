@@ -31,11 +31,11 @@ from typing import Any
 
 import httpx
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
-from app.models import Card, CardSet, CardSource
+from app.models import Card, CardSet, CardSource, CollectionItem
 from app.services.catalog_numbers import normalize_number
 from app.services.catalog_sync import fill_image_fallbacks
 
@@ -331,3 +331,41 @@ def render_report(report: GermanReport, *, dry_run: bool) -> str:
             f"{result.page or '–'}{f' – {result.note}' if result.note else ''}"
         )
     return "\n".join(lines)
+
+
+@dataclass
+class RemovalReport:
+    cards_removed: int = 0
+    cards_kept: int = 0  # liegen in einer Sammlung
+    sets_removed: int = 0
+
+
+async def remove_imported(
+    session: AsyncSession, set_ids: Sequence[str], *, dry_run: bool = False
+) -> RemovalReport:
+    """PokéWiki-Karten dieser Sets wieder entfernen (z. B. nie auf Deutsch erschienen).
+
+    Nur Karten mit Herkunft ``pokewiki``; Karten in Sammlungen bleiben, leere deutsche Sets
+    werden gelöscht. Commit macht der Aufrufer.
+    """
+    report = RemovalReport()
+    german_sets = select(CardSet.id).where(
+        CardSet.language == "de", CardSet.external_id.in_(list(set_ids))
+    )
+    imported = (Card.source == CardSource.POKEWIKI) & Card.set_id.in_(german_sets)
+    in_collection = exists().where(CollectionItem.card_id == Card.id)
+    report.cards_kept = int(
+        await session.scalar(select(func.count()).where(imported, in_collection)) or 0
+    )
+    report.cards_removed = int(
+        await session.scalar(select(func.count()).where(imported, ~in_collection)) or 0
+    )
+    empty_sets = select(CardSet.id).where(
+        CardSet.id.in_(german_sets), ~exists().where(Card.set_id == CardSet.id)
+    )
+    if dry_run:
+        return report
+    await session.execute(delete(Card).where(imported, ~in_collection))
+    report.sets_removed = len((await session.scalars(empty_sets)).all())
+    await session.execute(delete(CardSet).where(CardSet.id.in_(empty_sets)))
+    return report

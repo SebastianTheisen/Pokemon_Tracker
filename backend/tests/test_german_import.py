@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
 from app.models import Card, CardSet, CardSource
-from app.services.german_import import import_german, match_rows, parse_rows
+from app.services.german_import import import_german, match_rows, parse_rows, remove_imported
 
 PROMOS = """{{ErweiterungPrevNext}} Zu den '''XY Black Star Promos''' gehören …
 {{Setheader|level=nein}}
@@ -126,3 +126,23 @@ async def test_import_adds_missing_german_cards(
 
     again = await import_german(session_factory, settings, transport=wiki_transport(calls), pause=0)
     assert again.added == 0  # nichts doppelt
+
+
+async def test_remove_imported_cards_of_a_set(
+    session_factory: async_sessionmaker[AsyncSession], settings: Settings
+) -> None:
+    await _english_set(session_factory, "xyp", "XY Black Star Promos", ["XY01", "XY02", "XY03"])
+    await _english_set(session_factory, "dv1", "Dragon Vault", ["1", "2"])
+    calls: list[dict[str, Any]] = []
+    await import_german(session_factory, settings, transport=wiki_transport(calls), pause=0)
+
+    async with session_factory() as session:
+        preview = await remove_imported(session, ["dv1"], dry_run=True)
+        assert (preview.cards_removed, preview.cards_kept) == (2, 0)
+        report = await remove_imported(session, ["dv1"])
+        await session.commit()
+        assert (report.cards_removed, report.sets_removed) == (2, 1)
+        german = (
+            await session.scalars(select(Card.external_id).where(Card.language == "de"))
+        ).all()
+        assert sorted(str(x) for x in german) == ["xyp-XY01", "xyp-XY02", "xyp-XY03"]  # anderes Set

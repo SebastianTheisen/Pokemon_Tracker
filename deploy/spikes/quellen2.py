@@ -124,6 +124,61 @@ def wiki(client: httpx.Client) -> None:
                 )
 
 
+GERMAN_CHECK = [
+    "Base Set 2 (TCG)",
+    "Legendary Collection (TCG)",
+    "Southern Islands (TCG)",
+    "Pokémon Rumble (TCG)",
+    "Poké Card Creator Pack (TCG)",
+    "Best of Game (TCG)",
+    "Double Crisis (TCG)",
+    "Legendary Treasures (TCG)",
+    "Gym Heroes (TCG)",
+    "Drachengruft (TCG)",
+    "XY Black Star Promos (TCG)",
+    "McDonald's Kollektion 2015 (TCG)",
+]
+
+
+def wiki_release(client: httpx.Client) -> None:
+    """Infobox je Set: Steht drin, ob/wann es auf Deutsch erschienen ist?"""
+    emit("## PokéWiki – deutsche Veröffentlichung je Set (Infobox)\n")
+    for title in GERMAN_CHECK:
+        page = get(
+            client,
+            WIKI_API,
+            params={
+                "action": "parse",
+                "page": title,
+                "prop": "wikitext",
+                "redirects": 1,
+                "format": "json",
+                "formatversion": 2,
+            },
+        )
+        if page is None:
+            continue
+        text = (page.json().get("parse") or {}).get("wikitext") or ""
+        infobox = re.search(r"\{\{\s*Infobox[^\n]*(?:\n\s*\|[^\n]*)*", text)
+        fields = (
+            re.findall(r"\|\s*([^=|\n]+?)\s*=\s*([^|\n]*)", infobox.group(0)) if infobox else []
+        )
+        release = [
+            f"{key}={value.strip()[:40]}"
+            for key, value in fields
+            if re.search(
+                r"datum|erschien|deutsch|release|ver(ö|oe)ffentlich|land|sprache", key, re.I
+            )
+        ]
+        hints = around(
+            text, r"nicht auf Deutsch|nur auf Englisch|nicht in Deutschland|nie auf Deutsch", 160
+        )
+        emit(f"- **{title}**: Felder {release or [k for k, _ in fields][:12]}")
+        for hint in hints[:2]:
+            emit(f"  - Hinweis: `{hint}`")
+    emit()
+
+
 def pokemon_de(client: httpx.Client) -> None:
     emit("## pokemon.com/de – offizielle Kartendatenbank\n")
     base = "https://www.pokemon.com"
@@ -219,7 +274,7 @@ def taiwan(client: httpx.Client) -> None:
 def main() -> None:
     emit("# Erkundung 2: Aufbau der Quellen für die Importe\n")
     with httpx.Client(headers={"User-Agent": UA}, timeout=30, follow_redirects=True) as client:
-        for section in (wiki, pokemon_de, japan, taiwan):
+        for section in (wiki_release, wiki, pokemon_de, japan, taiwan):
             try:
                 section(client)
             except Exception as exc:  # Erkundung: Fehler berichten, weitermachen

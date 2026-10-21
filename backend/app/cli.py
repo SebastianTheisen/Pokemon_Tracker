@@ -66,7 +66,7 @@ from app.services.catalog_search import search_cards
 from app.services.catalog_sync import fill_image_fallbacks, remove_digital_sets, sync_catalog
 from app.services.collection import CollectionService, ItemFilter, ItemInput
 from app.services.errors import ServiceError
-from app.services.german_import import import_german
+from app.services.german_import import import_german, remove_imported
 from app.services.german_import import render_report as render_german_report
 from app.services.image_import import (
     ALL_SOURCES,
@@ -182,6 +182,21 @@ async def _import_german(
     """Fehlende deutsche Karten (Promos, Sondersets) aus dem PokéWiki ergänzen."""
     report = await import_german(factory, settings, dry_run=args.dry_run, limit=args.limit)
     print(render_german_report(report, dry_run=args.dry_run))
+
+
+async def _remove_german(
+    factory: async_sessionmaker[AsyncSession], _settings: Settings, args: argparse.Namespace
+) -> None:
+    """PokéWiki-Karten einzelner Sets wieder entfernen (nie auf Deutsch erschienen)."""
+    async with factory() as session:
+        report = await remove_imported(session, args.sets, dry_run=args.dry_run)
+        if not args.dry_run:
+            await session.commit()
+    verb = "würden entfernt" if args.dry_run else "entfernt"
+    print(
+        f"PokéWiki-Karten {verb}: {report.cards_removed}, behalten (in Sammlungen): "
+        f"{report.cards_kept}, leere deutsche Sets gelöscht: {report.sets_removed}"
+    )
 
 
 async def _import_pricecharting(
@@ -594,6 +609,13 @@ def _add_catalog_commands(commands: Any) -> None:
     german.add_argument("--dry-run", action="store_true", help="nur anzeigen, nichts anlegen")
     german.add_argument("--limit", type=int, help="höchstens so viele Sets (zum Testen)")
     german.set_defaults(handler=_import_german)
+
+    undo = commands.add_parser(
+        "remove-german", help="PokéWiki-Karten einzelner Sets entfernen (z. B. base4 lc si1)"
+    )
+    undo.add_argument("--sets", nargs="+", required=True, help="englische Set-IDs von TCGdex")
+    undo.add_argument("--dry-run", action="store_true", help="nur zählen")
+    undo.set_defaults(handler=_remove_german)
 
     pricecharting = commands.add_parser(
         "import-pricecharting", help="Korea/China: Sets mit Bildern und Preisen von PriceCharting"
