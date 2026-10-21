@@ -411,6 +411,15 @@ def run_actor(client: httpx.Client, actor: str, payload: dict[str, Any]) -> dict
     return run
 
 
+def remember_product_url(actor: str, item: dict[str, Any]) -> None:
+    """Stufe I: Produktseite des ersten Suchtreffers für den Detail-Abruf merken."""
+    if actor != "gio21/pricecharting-scraper" or len(FOUND_URLS) >= DETAIL_URLS:
+        return
+    url = item.get("url") or item.get("productUrl") or item.get("link")
+    if isinstance(url, str) and "pricecharting.com" in url:
+        FOUND_URLS.append(url)
+
+
 def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]) -> None:
     emit(f"## {title}\n")
     emit(f"- Anbieter: `{actor}`")
@@ -449,11 +458,7 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
         emit()
         return
     emit(f"- Felder: {short(sorted(items[0]), 600)}")
-    if actor == "gio21/pricecharting-scraper" and len(FOUND_URLS) < DETAIL_URLS:
-        first = items[0]
-        url = first.get("url") or first.get("productUrl") or first.get("link")
-        if isinstance(url, str) and "pricecharting.com" in url:
-            FOUND_URLS.append(url)
+    remember_product_url(actor, items[0])
     languages = Counter(str(field(i, "language", "lang")) for i in items)
     conditions = Counter(str(field(i, "condition")) for i in items)
     emit(f"- Sprachen: {dict(languages)} · Zustände: {dict(conditions)}")
