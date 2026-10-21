@@ -420,9 +420,8 @@ async def test_daily_refresh_tracks_collection_and_wishlist_cards(
     async with session_factory() as session:
         tracked = set(await tracked_card_ids(session, settings, datetime.now(UTC)))
 
-    # Rohkarte wurde beim Hinzufügen angesehen/abgerufen; gegradete Karte nicht.
-    assert {raw.id, wished.id} <= tracked
-    assert graded.id not in tracked
+    # Slabs zählen mit: ihre Notenpreise (PriceCharting) brauchen die tägliche Runde.
+    assert {raw.id, graded.id, wished.id} <= tracked
 
 
 async def test_patch_rejects_nulls_and_grade_on_raw_cards(

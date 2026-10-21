@@ -182,6 +182,27 @@ class Settings(BaseSettings):
     )
     apify_max_charge_usd: float = Field(default=0.15, gt=0, le=2)
     apify_run_timeout_seconds: int = Field(default=120, ge=30, le=600)
+    # --- PriceCharting (US-Preise über Apify, nur wo Cardmarket fehlt bzw. für Slabs) ---
+    pricecharting_enabled: bool = Field(
+        default=True, description="PriceCharting nutzen, wenn ein Apify-Token gesetzt ist."
+    )
+    pricecharting_actor: str = Field(
+        default="gio21/pricecharting-scraper", description="Apify-Dienst für die Suche."
+    )
+    pricecharting_max_items: int = Field(default=3, ge=1, le=10)
+    pricecharting_max_charge_usd: float = Field(default=0.03, gt=0, le=1)
+    pricecharting_max_age_days: int = Field(
+        default=30, ge=1, le=365, description="So lange gilt ein Abruf je Karte."
+    )
+    pricecharting_reserve_usd: float = Field(
+        default=2.0,
+        ge=0,
+        description="Diesen Teil des Apify-Monatsbudgets nie für PriceCharting nutzen (eBay).",
+    )
+    ecb_rates_url: str = Field(
+        default="https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml",
+        description="EZB-Referenzkurse (Umrechnung US-Dollar → Euro).",
+    )
     extra_price_providers: list[str] = Field(
         default_factory=list,
         description=(

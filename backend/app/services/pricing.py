@@ -26,7 +26,7 @@ from decimal import Decimal
 from typing import Literal
 
 import structlog
-from sqlalchemy import func, select, union
+from sqlalchemy import exists, func, select, union
 from sqlalchemy.dialects.postgresql import distinct_on, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,7 +47,13 @@ from app.providers.pricing import (
     PriceProvider,
     PriceQuote,
 )
+from app.providers.pricing.pricecharting import (
+    PRICECHARTING,
+    RAW_METRIC,
+    RAW_VARIANT,
+)
 from app.providers.pricing.tcgdex_prices import CARDMARKET, TCGPLAYER
+from app.services.card_names import translate_card_name
 from app.services.cardmarket_catalog import (
     correct_cardmarket_quotes,
     product_url,
@@ -62,7 +68,7 @@ from app.services.user_settings import (
 
 log = structlog.get_logger(__name__)
 
-VERIFIED_SOURCES = frozenset({CARDMARKET, TCGPLAYER})
+VERIFIED_SOURCES = frozenset({CARDMARKET, TCGPLAYER, PRICECHARTING})
 # NM-Basis = Median dieser Werte (Nutzerentscheidung 17.10.2026): robust gegen Ausreißer
 # wie einen Trend unter dem günstigsten Angebot. Ersatz, wenn keiner vorhanden ist: ``avg``.
 NM_MEDIAN_METRICS = ("trend", "avg7", "avg30")
@@ -70,7 +76,9 @@ NM_FALLBACK_METRIC = "avg"
 CENT = Decimal("0.01")
 
 Clock = Callable[[], datetime]
-FetchOutcome = Literal["fetched", "fresh", "retry_later", "paused", "failed", "not_available"]
+FetchOutcome = Literal[
+    "fetched", "fresh", "retry_later", "paused", "failed", "not_available", "not_needed"
+]
 
 
 def _utc_now() -> datetime:
@@ -200,6 +208,9 @@ class PriceService:
         report = RefreshReport()
         now = self._now()
         for provider in self._providers:
+            if getattr(provider, "fallback_only", False) and not await self._needs_fallback(card):
+                report.outcomes[provider.name] = "not_needed"  # Cardmarket hat einen Preis
+                continue
             check = await self._session.get(PriceCheck, (card.id, provider.name))
             outcome = self._decide(provider, check, now=now, force=force)
             ok = check.ok if check else False
@@ -226,10 +237,13 @@ class PriceService:
     ) -> FetchOutcome:
         if self._health.is_paused(provider.name):
             return "paused"
-        if force or check is None:
+        # Quellen mit eigener Gültigkeit (bezahlte Abrufe) holen auch bei ``force`` nicht neu.
+        own_age: int | None = getattr(provider, "max_age_hours", None)
+        if check is None or (force and own_age is None):
             return "fetched"
         age = now - check.checked_at
-        if check.ok and age < timedelta(hours=self._settings.price_max_age_hours):
+        max_age = own_age or self._settings.price_max_age_hours
+        if check.ok and age < timedelta(hours=max_age):
             return "fresh"
         if not check.ok and age < timedelta(minutes=self._settings.price_failure_retry_minutes):
             return "retry_later"
@@ -240,9 +254,15 @@ class PriceService:
     ) -> tuple[FetchOutcome, bool, str | None, int]:
         """Ruft eine Quelle mit Zeitlimit ab und speichert neue Werte."""
         try:
+            reference = (
+                await self._context_ref(card)
+                if getattr(provider, "needs_context", False)
+                else card_ref(card)
+            )
             quotes = await asyncio.wait_for(
-                provider.fetch(card_ref(card)),
-                timeout=self._settings.price_provider_timeout_seconds,
+                provider.fetch(reference),
+                timeout=getattr(provider, "timeout_seconds", None)
+                or self._settings.price_provider_timeout_seconds,
             )
         except PriceNotAvailableError:
             self._health.record_success(provider.name)
@@ -264,6 +284,45 @@ class PriceService:
             quotes = await correct_cardmarket_quotes(self._session, card, card_ref(card), quotes)
         stored = await self._store(card, quotes)
         return "fetched", True, None if quotes else "keine Preise", stored
+
+    async def _needs_fallback(self, card: Card) -> bool:
+        """Ergänzende Quelle nötig? Ja ohne Cardmarket-Preis (oder mit korrigiertem
+        Cardmarket-Link, dessen Werte fehlen) und für Karten, die jemand als Slab besitzt."""
+        has_cardmarket = await self._session.scalar(
+            select(exists().where(PricePoint.card_id == card.id, PricePoint.source == CARDMARKET))
+        )
+        corrected = await self._session.scalar(
+            select(exists().where(CardPriceLink.card_id == card.id))
+        )
+        if not has_cardmarket or corrected:
+            return True
+        graded = await self._session.scalar(
+            select(
+                exists().where(
+                    CollectionItem.card_id == card.id, CollectionItem.grading_company.is_not(None)
+                )
+            )
+        )
+        return bool(graded)
+
+    async def _context_ref(self, card: Card) -> CardRef:
+        """Karte mit englischem Namen und Set (für englisch suchende Quellen)."""
+        name: str | None = card.name if card.language == "en" else None
+        set_name: str | None = card.card_set.name if card.language == "en" else None
+        if name is None and card.external_id:
+            english = await self._session.scalar(
+                select(Card).where(Card.external_id == card.external_id, Card.language == "en")
+            )
+            if english is not None:
+                name, set_name = english.name, english.card_set.name
+        if name is None:
+            name = translate_card_name(card.name, card.language, target="en")
+        return dataclasses.replace(
+            card_ref(card),
+            english_name=name,
+            english_set_name=set_name,
+            release_date=card.card_set.release_date,
+        )
 
     async def _store(self, card: Card, quotes: Sequence[PriceQuote]) -> int:
         if not quotes:
@@ -513,6 +572,13 @@ def nm_basis(metrics: dict[str, Decimal]) -> tuple[str, Decimal] | None:
     return f"median({', '.join(used)})", value
 
 
+def _basis(reference: Offer) -> tuple[str, Decimal] | None:
+    """NM-Basis einer Referenz: Cardmarket-Median bzw. umgerechneter US-Preis."""
+    if reference.source == PRICECHARTING:
+        return "US-Preis PriceCharting (umgerechnet)", reference.metrics[RAW_METRIC]
+    return nm_basis(reference.metrics)
+
+
 def _condition_prices(
     offers: Sequence[Offer], factors: dict[str, Decimal], language_factor: Decimal
 ) -> list[ConditionPrice]:
@@ -523,11 +589,20 @@ def _condition_prices(
     """
     result: list[ConditionPrice] = []
     references = {o.variant: o for o in offers if o.source == CARDMARKET and o.condition is None}
+    # Ohne Cardmarket: US-Preis von PriceCharting (umgerechnet) als Basis der Schätzung.
+    for offer in offers:
+        if (
+            offer.source == PRICECHARTING
+            and offer.variant == RAW_VARIANT
+            and RAW_METRIC in offer.metrics
+            and RAW_VARIANT not in references
+        ):
+            references[RAW_VARIANT] = offer
     external_variants = [o.variant for o in offers if o.kind == "external" and o.condition]
     variants = list(dict.fromkeys([*references, *external_variants]))
     for variant in variants:
         reference = references.get(variant)
-        basis = nm_basis(reference.metrics) if reference is not None else None
+        basis = _basis(reference) if reference is not None else None
         for condition in CONDITIONS:
             external = [
                 o
@@ -580,13 +655,12 @@ def _condition_prices(
 async def tracked_card_ids(
     session: AsyncSession, settings: Settings, now: datetime
 ) -> list[uuid.UUID]:
-    """Karten für die tägliche Aktualisierung: Rohkarten aus Sammlungen, Karten auf
+    """Karten für die tägliche Aktualisierung: Karten aus Sammlungen (auch Slabs – deren
+    Notenpreise kommen von PriceCharting, das seine eigene Gültigkeit hat), Karten auf
     Merklisten und in den letzten ``price_tracking_view_days`` Tagen angesehene Karten."""
     since = now - timedelta(days=settings.price_tracking_view_days)
     viewed = select(PriceCheck.card_id).where(PriceCheck.last_viewed_at >= since)
-    collected = select(CollectionItem.card_id).where(
-        CollectionItem.card_id.is_not(None), CollectionItem.grading_company.is_(None)
-    )
+    collected = select(CollectionItem.card_id).where(CollectionItem.card_id.is_not(None))
     wished = select(WishlistItem.card_id).where(WishlistItem.card_id.is_not(None))
     result = await session.scalars(union(viewed, collected, wished))
     return sorted(card_id for card_id in result.all() if card_id is not None)

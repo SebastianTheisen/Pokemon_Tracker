@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal, Protocol, runtime_checkable
 
@@ -34,6 +34,10 @@ class CardRef:
     name: str
     number: str
     set_name: str
+    # Nur für Quellen mit ``needs_context`` (z. B. PriceCharting, sucht englisch):
+    english_name: str | None = None
+    english_set_name: str | None = None
+    release_date: date | None = None
 
 
 @dataclass(frozen=True)

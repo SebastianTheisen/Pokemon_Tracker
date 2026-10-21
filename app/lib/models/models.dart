@@ -1318,6 +1318,7 @@ String variantLabel(String variant) => switch (variant) {
   'reverse' => 'Reverse Holo',
   'holo' => 'Holo',
   'raw' => 'ungegradet',
+  'graded' => 'gegradet',
   _ when variant.startsWith('graded:') => variant.substring('graded:'.length),
   _ => variant,
 };

@@ -43,6 +43,13 @@ const metricLabels = {
   'direct_low': 'Direkt ab',
   'low3': 'Ø 3 günstigste',
   'median': 'Median',
+  // PriceCharting (US-Verkäufe, in Euro umgerechnet)
+  'ungraded': 'Roh',
+  'grade_7': 'Note 7',
+  'grade_8': 'Note 8',
+  'grade_9': 'Note 9',
+  'grade_9_5': 'Note 9,5',
+  'psa_10': 'PSA 10',
 };
 
 String sourceLabel(String source) => switch (source) {
@@ -51,6 +58,7 @@ String sourceLabel(String source) => switch (source) {
   'pokemontcg' => 'pokemontcg.io',
   'cardmarket_offers' => 'Cardmarket-Angebote',
   'ebay_sold' => 'eBay verkauft',
+  'pricecharting' => 'PriceCharting (US-Preis in €)',
   _ => source,
 };
 

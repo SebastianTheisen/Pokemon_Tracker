@@ -61,6 +61,18 @@ _AFFIXES: dict[str, tuple[tuple[str, str], ...]] = {
         ("光輝", "Strahlendes "),
     ),
 }
+# Für englische Ziele (PriceCharting-Suche): deutsche Zusätze → englische Schreibweise.
+_AFFIXES_EN = (
+    ("Team Rockets ", "Team Rocket's "),
+    ("Mega-", "Mega "),
+    ("Hisui-", "Hisuian "),
+    ("Galar-", "Galarian "),
+    ("Alola-", "Alolan "),
+    ("Paldea-", "Paldean "),
+    ("Terakristall-", "Tera "),
+    ("Leuchtendes ", "Shining "),
+    ("Strahlendes ", "Radiant "),
+)
 _SUFFIX = re.compile(r"(?<=[^\s-])(ex|EX|GX|VMAX|VSTAR|V-UNION|V|BREAK)$")
 
 
@@ -92,7 +104,7 @@ def species_name(species_id: str, language: str = TARGET_LANGUAGE) -> str | None
 
 
 def translate_card_name(name: str, language: str, target: str = TARGET_LANGUAGE) -> str | None:
-    """Deutscher Name einer asiatischen Karte – oder ``None``, wenn kein Pokémon erkannt wird."""
+    """Deutscher (bzw. ``target``) Name einer asiatischen Karte – ``None`` ohne Pokémon-Namen."""
     if language not in TRANSLATED_LANGUAGES:
         return None
     family = _family(language)
@@ -108,6 +120,9 @@ def translate_card_name(name: str, language: str, target: str = TARGET_LANGUAGE)
         return None
     for local, german in _AFFIXES.get(family, ()):
         text = text.replace(local, german)
+    if target == "en":
+        for german, english in _AFFIXES_EN:
+            text = text.replace(german, english)
     text = re.sub(r"\s*&\s*", " & ", text)
     text = re.sub(r"-\s+", "-", text)
     text = re.sub(r"\s+", " ", text).strip()
