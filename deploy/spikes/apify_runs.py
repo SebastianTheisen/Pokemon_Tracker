@@ -263,12 +263,24 @@ RUNS_G: RunList = [
 # Stufe H: parselab (vermutlich TCGdex-Wrapper) – hat er Karten, die uns fehlen?
 # Koreanisch und Chinesisch fehlen bei uns fast ganz (Bestandsaufnahme), Japanisch teilweise.
 RUNS_H: RunList = [
-    (
-        f"Karten · parselab · {language} · Pikachu",
-        "parselab/pokemon-tcg-cards-scraper",
-        {"language": language, "names": ["Pikachu"], "maxItems": 10},
-    )
-    for language in ("ko", "zh-cn", "ja")
+    # Namen in der Landessprache (TCGdex sucht im Namen der jeweiligen Sprache).
+    *(
+        (
+            f"Karten · parselab · {language} · {name}",
+            "parselab/pokemon-tcg-cards-scraper",
+            {"language": language, "names": [name], "maxItems": 10},
+        )
+        for language, name in (("ko", "피카츄"), ("zh-cn", "皮卡丘"), ("ja", "ピカチュウ"))
+    ),
+    # Gegenprobe ohne Namen: liefert die Sprache überhaupt etwas?
+    *(
+        (
+            f"Karten · parselab · {language} · ohne Filter",
+            "parselab/pokemon-tcg-cards-scraper",
+            {"language": language, "maxItems": 10},
+        )
+        for language in ("ko", "ja")
+    ),
 ]
 STAGES = {
     "B": RUNS,
@@ -367,6 +379,12 @@ def report(client: httpx.Client, title: str, actor: str, payload: dict[str, Any]
     emit(f"## {title}\n")
     emit(f"- Anbieter: `{actor}`")
     emit(f"- Eingabe: `{short(payload, 400)}`")
+    if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() == "H":
+        language = actor_properties(client, actor).get("language") or {}
+        emit(
+            f"- Sprachen laut Schema: {short(language.get('enum'), 200)} "
+            f"(Standard {language.get('default')})"
+        )
     if os.environ.get("APIFY_SPIKE_STAGE", "B").upper() in ("D", "E", "F", "G", "H"):
         payload = adapt_input(client, actor, payload)
     started = time.monotonic()
