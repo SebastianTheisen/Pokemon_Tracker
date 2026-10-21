@@ -252,7 +252,22 @@ Entscheidungen (17.10.2026):
 - [x] **Nachschärfung 2:** Klammerwörter, die Cardmarket nicht nennt, zählen nur zu 25 % dagegen; Epochen-Kürzel (EX, XY, BW, SM, SWSH, DP, HGSS) ignoriert; „Pack“ = „Booster“, „EU“ = „International“. Tests: Backend 459
 - [x] Lauf 3: 1.964 von 5.102 (38 %), Stichprobe 30 von 30 richtig. „EX“ überall zu ignorieren war zu grob („Reshiram Box“ ≠ „Reshiram ex Box“)
 - [x] **Nachschärfung 3:** „EX“ nur am Namensanfang ignoriert (Epoche), Apostroph-Rest „s“ weg, Kategorie „Pokémon Tins“ ergibt die Art Tin. Tests: Backend 460
-- [ ] Auf dem VPS: Abgleich neu, Analyse Lauf 4. Danach Feintuning beenden – Rest (v. a. 692 Münzen, EU-only-Produkte) führt TCGplayer nicht
+- [x] Feintuning der TCGplayer-Bilder beendet (38 %); Rest über eigene Fotos (später)
+- [x] **Spike Apify G/H:** Cardmarket-Scraper (unfenced-group, ahmed_jasarevic) liefern nur die offizielle Cardmarket-Datei neu verpackt, ohne Bilder; lulzasaur scheitert an der Sperre. parselab verpackt TCGdex (gleiche Felder, Bilder von assets.tcgdex.net, gleiche Lücken). pokemontcg.io-Wrapper nur Englisch, pokeapi = Videospieldaten → Apify bringt für Katalog und Bilder nichts
+- [x] **Bestandsaufnahme** (`deploy/phase5_bestand.sh`, `docs/phase5/bestand.md`): Lücken vor allem KO (239 von ~7.900), ZH-CN (877 von ~7.000), JA (~3.300), ZH-TW (~1.500); DE ~750, EN ~230. ~4.000 Pocket-Karten im Katalog. Cardmarket: 74.925 Einzelkarten, davon 39 % mit unseren Karten verknüpft, 260 von 787 Ausgaben zugeordnet
+
+### Phase 5b – Vollständige Daten aus verlässlichen Quellen (Entscheidung 21.10.2026)
+
+Ziel: alle Sets, Karten, Bilder und Preise aller Sprachen. Quellen je Bereich: offizielle Datenbanken der Herausgeber (Karten, Bilder), Cardmarket-Tagesdatei (Preise, Sealed), TCGdex als Ergänzung. „Fertig“ = Bestandsaufnahme erreicht je Sprache die Zielzahl der Quellen-Messung.
+
+- [x] **Pocket entfernt:** TCGdex-Serie `tcgp` (Handyspiel) wird nicht mehr importiert, vorhandene Pocket-Sets werden nach jedem Import gelöscht – Karten in Sammlungen bleiben. CLI `remove-digital [--dry-run]`
+- [x] **Sealed-Suche auf Deutsch:** Produktarten („Top-Trainer-Box“, „Display“, „Sammelkoffer“, „Kollektion“ …) und Set-Namen (deutsch → englisch über gleiche TCGdex-ID) werden übersetzt; ohne Treffer zählt die Eingabe. Tests: Backend 463
+- [ ] **Quellen-Messung** (`bash deploy/phase5_quellen.sh`, `docs/phase5/quellen.md`): EN gegen pokemontcg.io-Datensatz, DE gegen EN, JA gegen pokemon-card.com (alle Seiten), TW/HK/ID/TH Gesamtzahlen, Erkundung Korea (pokemoncard.co.kr) und Festland-China (pokemon.cn)
+- [ ] Import Japanisch und Taiwan aus den offiziellen Datenbanken (Kartenliste, Nummern, Bilder)
+- [ ] Deutsch und Englisch: fehlende Sets und Promos ergänzen
+- [ ] Korea und Festland-China: Quelle festlegen und importieren
+- [ ] Preise: Cardmarket-Zuordnung je Ausgabe über Name und Nummer neu aufbauen (Ziel: jede Karte, die Cardmarket führt, hat einen Preis)
+- [ ] Sealed: eigene Fotos je Produkt (für alle Nutzer) und Platzhalter je Produktart
 - [ ] PSA entscheiden: Link „Bei PSA prüfen“ (psacard.com/cert/…) in der App und/oder PSA-Support um Freigabe der Server-Adresse bitten
 - [ ] Auf dem VPS: Deploy, Status prüfen (`deploy/phase5_cardmarket_status.sh`), Glurak M6a 137 erneut scannen – Cardmarket-Knopf muss die japanische Ausgabe öffnen
 - [ ] Auf dem VPS: Link-Filter und Lesezeichen an echten Cardmarket- und eBay-Seiten prüfen (Seitenaufbau nur aus Dokumentation bekannt)

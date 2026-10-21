@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.models import Card, CardSet, CardSource
 from app.providers.tcgdex import TcgdexClient
 from app.services.catalog_search import search_cards
-from app.services.catalog_sync import LanguageReport, sync_catalog
+from app.services.catalog_sync import LanguageReport, remove_digital_sets, sync_catalog
 from tests.conftest import RegisterUser
 from tests.fake_tcgdex import FakeTcgdex
 
@@ -305,3 +305,82 @@ async def test_missing_images_use_other_language_of_same_card(
     assert rows[german.id].image_url == "https://assets.tcgdex.net/en/swsh/swsh7/215"
     assert rows[german.id].image_language == "en"
     assert rows[lonely.id].image_url is None
+
+
+# ------------------------------------------------------------- Pocket (Handyspiel)
+
+
+def _pocket_set(set_id: str, cards: int) -> dict[str, object]:
+    """Pocket-Set wie bei TCGdex: Serie ``tcgp``."""
+    return {
+        "id": set_id,
+        "name": "Genetic Apex",
+        "cardCount": {"total": cards, "official": cards},
+        "serie": {"id": "tcgp", "name": "Pokémon TCG Pocket"},
+        "releaseDate": "2024-10-30",
+        "cards": [
+            {"id": f"{set_id}-{i:03}", "localId": f"{i:03}", "name": f"Pocket {i}"}
+            for i in range(1, cards + 1)
+        ],
+    }
+
+
+async def test_pocket_sets_are_not_imported(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    fake = FakeTcgdex()
+    fake.catalog["en"]["A1"] = _pocket_set("A1", 3)
+
+    reports = await _sync(fake, session_factory, languages=["en"])
+
+    assert (reports[0].sets_synced, reports[0].sets_digital) == (1, 1)
+    async with session_factory() as session:
+        assert await session.scalar(select(CardSet).where(CardSet.external_id == "A1")) is None
+
+
+async def test_stored_pocket_sets_are_removed_except_collection_cards(
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+    register_user: RegisterUser,
+    synced: FakeTcgdex,
+) -> None:
+    # Stand vor dieser Änderung: Pocket-Set wurde wie jedes andere gespeichert.
+    async with session_factory() as session:
+        pocket = CardSet(
+            external_id="A1", language="en", name="Genetic Apex", series_name="Pokémon TCG Pocket"
+        )
+        session.add(pocket)
+        await session.flush()
+        cards = [
+            Card(
+                external_id=f"A1-00{i}",
+                language="en",
+                set_id=pocket.id,
+                number=f"00{i}",
+                number_norm=str(i),
+                name=f"Pocket {i}",
+                source=CardSource.TCGDEX,
+            )
+            for i in (1, 2, 3)
+        ]
+        session.add_all(cards)
+        await session.commit()
+        owned_id = cards[0].id
+    user = await register_user("pocket@example.com")
+    added = await client.post(
+        f"{API}/collection/items", json={"card_id": str(owned_id)}, headers=user.headers
+    )
+    assert added.status_code == 201, added.text
+
+    async with session_factory() as session:
+        preview = await remove_digital_sets(session, dry_run=True)
+        assert (len(preview.sets), preview.cards_removed, preview.cards_kept) == (1, 2, 1)
+        assert await session.scalar(select(func.count()).select_from(Card)) == 14  # unverändert
+
+    await _sync(synced, session_factory)  # Bereinigung läuft nach jedem Import
+
+    async with session_factory() as session:
+        remaining = (await session.scalars(select(Card.name).where(Card.set_id == pocket.id))).all()
+        assert remaining == ["Pocket 1"]  # liegt in einer Sammlung → bleibt samt Set
+        assert await session.get(CardSet, pocket.id) is not None
+        assert await session.scalar(select(func.count()).select_from(Card)) == 12

@@ -4,8 +4,10 @@ Der offizielle Produktkatalog enthält neben Einzelkarten auch versiegelte Produ
 Preisführer ihre Preise (:mod:`app.services.cardmarket_catalog`, täglich). Damit bekommen
 versiegelte Sammlungspositionen kostenlos einen belegten Wert:
 
-* Nutzer suchen das Produkt im Cardmarket-Katalog (englische Namen wie bei Cardmarket,
-  z. B. „Prismatic Evolutions Elite Trainer Box“) und legen es mit Sprache an.
+* Nutzer suchen das Produkt im Cardmarket-Katalog und legen es mit Sprache an. Cardmarket
+  benennt englisch („Prismatic Evolutions Elite Trainer Box“); deutsche Suchbegriffe werden
+  übersetzt: Produktarten („Top-Trainer-Box“) über :data:`_GERMAN_TERMS`, Set-Namen
+  („Prismatische Entwicklungen“) über die deutschen und englischen Sets des Katalogs.
 * Wert je Stück = Median aus Trend, Ø 7 und Ø 30 Tagen (wie die Near-Mint-Basis bei Karten).
   Cardmarket führt westliche Sprachen als ein Produkt – der Preis gilt also sprachübergreifend.
 """
@@ -21,8 +23,9 @@ from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
-from app.models import CmPrice, CmProduct, Product, ProductKind, User
+from app.models import CardSet, CmPrice, CmProduct, Product, ProductKind, User
 from app.services.audit import record_audit
 from app.services.cardmarket_catalog import SINGLE_CATEGORY, product_url
 from app.services.errors import InvalidInputError, NotFoundError
@@ -54,6 +57,51 @@ def kind_for(category_name: str | None, name: str) -> ProductKind:
             if pattern.search(text):
                 return kind
     return ProductKind.OTHER
+
+
+# Deutsche Begriffe → Cardmarket-Englisch. Reihenfolge zählt (spezielle zuerst).
+_GERMAN_TERMS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
+    (re.compile(pattern, re.I), english)
+    for pattern, english in (
+        (r"\btop[- ]?trainer[- ]?box(en)?\b|\bttb\b", "elite trainer box"),
+        (r"\bbooster[- ]?displays?\b|\bdisplays?\b", "booster box"),
+        (r"\bsammelkoffer\b", "collector chest"),
+        (r"\b(?:tin[- ]?)?dosen?\b", "tin"),
+        (r"\bthemendecks?\b", "theme deck"),
+        (r"\bkampfdecks?\b", "battle deck"),
+        (r"\b3er[- ]?blister\b", "3-pack blister"),
+        (r"\bspezial[- ]?kollektion(en)?\b", "special collection"),
+        (r"\bfiguren[- ]?kollektion(en)?\b", "figure collection"),
+        (r"\b(premium|pin|poster)[- ]?kollektion(en)?\b", r"\1 collection"),
+        (r"\bkollektion(en)?\b", "collection"),
+        (r"\bboosterpack(ung)?s?\b", "booster"),
+        (r"\bpok[eé]mon\b", "pok"),  # passt auf „Pokémon“ und „Pokemon“
+    )
+)
+
+
+async def _set_names_de_en(session: AsyncSession) -> list[tuple[str, str]]:
+    """Deutsche → englische Set-Namen (gleiche TCGdex-ID), längste zuerst."""
+    german, english = aliased(CardSet), aliased(CardSet)
+    rows = await session.execute(
+        select(german.name, english.name)
+        .join(english, english.external_id == german.external_id)
+        .where(german.language == "de", english.language == "en", german.name != english.name)
+    )
+    names = {de.casefold(): en.casefold() for de, en in rows if de and en}
+    return sorted(names.items(), key=lambda pair: len(pair[0]), reverse=True)
+
+
+async def translate_query(session: AsyncSession, query: str) -> str:
+    """Deutsche Suche in Cardmarket-Englisch übersetzen (Set-Namen und Produktarten)."""
+    text = f" {query.casefold()} "
+    for german, english in await _set_names_de_en(session):
+        if f" {german} " in text:
+            text = text.replace(f" {german} ", f" {english} ")
+    for pattern, english in _GERMAN_TERMS:
+        text = pattern.sub(english, text)
+    # „Booster-Bundle“ = „Booster Bundle“; Wörter werden einzeln im Namen gesucht.
+    return " ".join(text.replace("-", " ").split())
 
 
 def _metrics(raw: dict[str, float]) -> dict[str, Decimal]:
@@ -93,8 +141,18 @@ class SealedPrice:
 async def search_sealed(
     session: AsyncSession, query: str, *, limit: int = SEARCH_LIMIT
 ) -> list[SealedOffer]:
-    """Versiegelte Produkte, deren Name alle Suchwörter enthält (kurze Namen zuerst)."""
-    words = [word for word in query.casefold().split() if word]
+    """Versiegelte Produkte, deren Name alle Suchwörter enthält (kurze Namen zuerst).
+
+    Deutsche Begriffe werden übersetzt; findet die Übersetzung nichts, zählt die Eingabe.
+    """
+    translated = await translate_query(session, query)
+    offers = await _search_words(session, translated.split(), limit)
+    if offers or translated == " ".join(query.casefold().split()):
+        return offers
+    return await _search_words(session, query.casefold().split(), limit)
+
+
+async def _search_words(session: AsyncSession, words: list[str], limit: int) -> list[SealedOffer]:
     if not words:
         return []
     statement = (

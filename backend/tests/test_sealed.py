@@ -8,9 +8,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
-from app.models import CmExpansion, Product, ProductKind
+from app.models import CardSet, CmExpansion, Product, ProductKind
 from app.services.cardmarket_catalog import run_catalog_import
-from app.services.sealed import kind_for
+from app.services.sealed import kind_for, translate_query
 from tests.conftest import RegisterUser
 from tests.test_cardmarket_catalog import CHINESE_GLURAK, catalog_transport
 
@@ -165,3 +165,41 @@ async def test_link_existing_product_and_reject_singles(
         assert await session.scalar(select(func.count()).select_from(Product)) == 1
     short = await client.get(f"{API}/cardmarket/sealed", params={"q": "x"}, headers=user.headers)
     assert short.status_code == 422
+
+
+async def test_german_search_terms_and_set_names(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    session_factory: async_sessionmaker[AsyncSession],
+    imported: None,
+) -> None:
+    async with session_factory() as session:
+        session.add_all(
+            [
+                CardSet(external_id="sv08.5", language="de", name="Prismatische Entwicklungen"),
+                CardSet(external_id="sv08.5", language="en", name="Prismatic Evolutions"),
+            ]
+        )
+        await session.commit()
+        assert await translate_query(session, "Prismatische Entwicklungen Top-Trainer-Box") == (
+            "prismatic evolutions elite trainer box"
+        )
+        assert await translate_query(session, "Pokémon Sammelkoffer") == "pok collector chest"
+        assert await translate_query(session, "Paldea Premium-Kollektion") == (
+            "paldea premium collection"
+        )
+        assert await translate_query(session, "Mewtu 3er-Blister") == "mewtu 3 pack blister"
+    user = await register_user("de@example.com")
+
+    async def ids(query: str) -> list[int]:
+        found = await client.get(
+            f"{API}/cardmarket/sealed", params={"q": query}, headers=user.headers
+        )
+        assert found.status_code == 200, found.text
+        return [offer["cardmarket_product_id"] for offer in found.json()]
+
+    assert await ids("Prismatische Entwicklungen Top-Trainer-Box") == [ETB]
+    assert await ids("prismatische ttb") == []  # „prismatische“ allein ist kein Set-Name
+    assert await ids("Prismatic Booster-Bundle") == [BUNDLE]
+    # Englische Eingabe funktioniert weiter.
+    assert await ids("prismatic elite") == [ETB]

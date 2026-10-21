@@ -88,7 +88,7 @@ def test_sync_catalog_and_search(
     cli.main(["search", "gibtsnicht"])
 
     output = capsys.readouterr().out
-    assert "de           1         1             0        4 0" in output
+    assert "de           1         1             0       0        4 0" in output
     assert "[de   ] Nachtara VMAX · Drachenwandel · 215  (swsh7-215)" in output
     assert "Keine Treffer." in output
 

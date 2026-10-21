@@ -6,6 +6,7 @@ Beispiele (im Container: ``docker compose exec api python -m app.cli ...``)::
     python -m app.cli create-invite --note "für Max"
     python -m app.cli sync-catalog                 # alle Sprachen, inkrementell
     python -m app.cli sync-catalog --languages de en --full
+    python -m app.cli remove-digital --dry-run     # Pocket-Sets (Handyspiel) anzeigen/löschen
     python -m app.cli search "nachtara 215"
     python -m app.cli refresh-prices               # Preis-Runde sofort ausführen
     python -m app.cli prices "nachtara 215" --language de
@@ -58,7 +59,7 @@ from app.services.cardmarket_catalog import catalog_status as cardmarket_status
 from app.services.cardmarket_catalog import render_status as render_cardmarket_status
 from app.services.cardmarket_catalog import run_catalog_import
 from app.services.catalog_search import search_cards
-from app.services.catalog_sync import fill_image_fallbacks, sync_catalog
+from app.services.catalog_sync import fill_image_fallbacks, remove_digital_sets, sync_catalog
 from app.services.collection import CollectionService, ItemFilter, ItemInput
 from app.services.errors import ServiceError
 from app.services.image_import import (
@@ -134,16 +135,37 @@ async def _sync_catalog(
             full=args.full,
             concurrency=settings.catalog_sync_concurrency,
         )
-    print(f"{'Sprache':<8} {'Sets':>5} {'neu/akt.':>9} {'übersprungen':>13} {'Karten':>8} Fehler")
+    print(
+        f"{'Sprache':<8} {'Sets':>5} {'neu/akt.':>9} {'übersprungen':>13} {'Pocket':>7} "
+        f"{'Karten':>8} Fehler"
+    )
     for report in reports:
         print(
             f"{report.language:<8} {report.sets_total:>5} {report.sets_synced:>9} "
-            f"{report.sets_skipped:>13} {report.cards_upserted:>8} {len(report.errors)}"
+            f"{report.sets_skipped:>13} {report.sets_digital:>7} {report.cards_upserted:>8} "
+            f"{len(report.errors)}"
         )
         for error in report.errors[:5]:
             print(f"    ! {error}")
     if any(report.errors for report in reports):
         sys.exit(1)
+
+
+async def _remove_digital(
+    factory: async_sessionmaker[AsyncSession], _settings: Settings, args: argparse.Namespace
+) -> None:
+    """Pocket-Sets (Handyspiel, keine gedruckten Karten) anzeigen bzw. löschen."""
+    async with factory() as session:
+        report = await remove_digital_sets(session, dry_run=args.dry_run)
+        if not args.dry_run:
+            await session.commit()
+    for language, external_id, name in report.sets:
+        print(f"  {language:<6} {external_id:<8} {name}")
+    verb = "würden gelöscht" if args.dry_run else "gelöscht"
+    print(
+        f"Pocket-Sets: {len(report.sets)}, Karten {verb}: {report.cards_removed}, "
+        f"behalten (in Sammlungen): {report.cards_kept}"
+    )
 
 
 async def _fill_images(
@@ -512,6 +534,25 @@ Command = Callable[
 ]
 
 
+def _add_catalog_commands(commands: Any) -> None:
+    """Katalog: Import aus TCGdex, Pocket-Bereinigung, Ersatzbilder."""
+    sync = commands.add_parser("sync-catalog", help="Katalog aus TCGdex importieren")
+    sync.add_argument("--languages", nargs="+", help="z. B. de en ja (Standard: alle)")
+    sync.add_argument("--full", action="store_true", help="alle Sets neu laden")
+    sync.set_defaults(handler=_sync_catalog)
+
+    digital = commands.add_parser(
+        "remove-digital", help="Pocket-Sets (Handyspiel) aus dem Katalog entfernen"
+    )
+    digital.add_argument("--dry-run", action="store_true", help="nur anzeigen, nichts löschen")
+    digital.set_defaults(handler=_remove_digital)
+
+    images = commands.add_parser(
+        "fill-images", help="Fehlende Bilder aus anderen Sprachfassungen ergänzen"
+    )
+    images.set_defaults(handler=_fill_images)
+
+
 def _add_image_commands(commands: Any) -> None:
     import_images = commands.add_parser(
         "import-images", help="Fehlende Kartenbilder aus weiteren Quellen ergänzen"
@@ -565,16 +606,7 @@ def build_parser() -> argparse.ArgumentParser:
     invite.add_argument("--admin-id", help="ID des ausstellenden Admins (Standard: erster Admin)")
     invite.set_defaults(handler=_create_invite)
 
-    sync = commands.add_parser("sync-catalog", help="Katalog aus TCGdex importieren")
-    sync.add_argument("--languages", nargs="+", help="z. B. de en ja (Standard: alle)")
-    sync.add_argument("--full", action="store_true", help="alle Sets neu laden")
-    sync.set_defaults(handler=_sync_catalog)
-
-    images = commands.add_parser(
-        "fill-images", help="Fehlende Bilder aus anderen Sprachfassungen ergänzen"
-    )
-    images.set_defaults(handler=_fill_images)
-
+    _add_catalog_commands(commands)
     _add_image_commands(commands)
 
     _add_cardmarket_commands(commands)

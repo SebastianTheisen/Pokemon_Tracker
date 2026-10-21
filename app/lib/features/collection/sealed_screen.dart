@@ -1,5 +1,5 @@
-// Versiegeltes Produkt hinzufügen: im Cardmarket-Katalog suchen (englische Namen wie bei
-// Cardmarket), Sprache und Anzahl wählen. Der Wert kommt danach täglich aus dem offiziellen
+// Versiegeltes Produkt hinzufügen: im Cardmarket-Katalog suchen (deutsch oder englisch, der
+// Server übersetzt), Sprache und Anzahl wählen. Der Wert kommt danach täglich aus dem offiziellen
 // Cardmarket-Preisführer (Median aus Trend, Ø 7 und Ø 30 Tagen).
 import 'dart:async';
 
@@ -81,9 +81,8 @@ class _SealedAddScreenState extends ConsumerState<SealedAddScreen> {
             onChanged: _onChanged,
             decoration: const InputDecoration(
               prefixIcon: Icon(Icons.search),
-              hintText: 'z. B. Prismatic Evolutions Elite Trainer Box',
-              helperText:
-                  'Namen wie bei Cardmarket (englisch). Preise aus dem Cardmarket-Preisführer.',
+              hintText: 'z. B. Prismatische Entwicklungen Top-Trainer-Box',
+              helperText: 'Deutsch oder Englisch. Preise aus dem Cardmarket-Preisführer.',
             ),
           ),
         ),
@@ -102,7 +101,8 @@ class _SealedAddScreenState extends ConsumerState<SealedAddScreen> {
                     if (offers.isEmpty) {
                       return const EmptyView(
                         icon: Icons.search_off,
-                        message: 'Nichts gefunden – englischen Namen wie bei Cardmarket probieren.',
+                        message:
+                            'Nichts gefunden – weniger Wörter oder den englischen Namen probieren.',
                       );
                     }
                     return ListView.builder(

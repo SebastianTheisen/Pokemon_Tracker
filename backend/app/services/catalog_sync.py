@@ -5,6 +5,9 @@
 * Abrufe laufen parallel (begrenzt), Schreiben seriell; Commit nach jedem Set, damit ein
   Abbruch den bisherigen Fortschritt nicht verliert.
 * Selbst angelegte Karten (``source = user``) werden nie angefasst.
+* „Pokémon TCG Pocket“ (Serie ``tcgp``) ist ein reines Handyspiel ohne gedruckte Karten –
+  solche Sets werden nicht importiert und vorhandene entfernt (:func:`remove_digital_sets`),
+  außer Karten, die schon in einer Sammlung liegen.
 * Bilder aus anderen Quellen (:mod:`app.services.image_import`) bleiben erhalten, solange
   TCGdex selbst kein Bild liefert. Ersatzbilder aus anderen Sprachfassungen werden nach
   jedem Import neu bestimmt.
@@ -18,15 +21,20 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
-from sqlalchemy import case, func, null, select, text
+from sqlalchemy import case, delete, exists, func, null, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.models import Card, CardSet, CardSource, ImageSource
+from app.models import Card, CardSet, CardSource, CollectionItem, ImageSource
 from app.providers.tcgdex import SetBrief, SetDetail, TcgdexClient, TcgdexError
 from app.services.catalog_numbers import normalize_number
 
 log = structlog.get_logger(__name__)
+
+# TCGdex-Serien ohne gedruckte Karten (Pokémon TCG Pocket, Handyspiel).
+DIGITAL_SERIES = frozenset({"tcgp"})
+# Erkennung schon gespeicherter Pocket-Sets (gespeichert ist nur der Serienname).
+DIGITAL_SERIES_NAME = "%pocket%"
 
 
 @dataclass
@@ -37,6 +45,7 @@ class LanguageReport:
     sets_total: int = 0
     sets_synced: int = 0
     sets_skipped: int = 0
+    sets_digital: int = 0
     cards_upserted: int = 0
     errors: list[str] = field(default_factory=list)
 
@@ -179,6 +188,9 @@ async def sync_language(
         if isinstance(result, TcgdexError):
             report.errors.append(str(result))
             continue
+        if result.serie is not None and result.serie.id in DIGITAL_SERIES:
+            report.sets_digital += 1  # Handyspiel – nicht importieren
+            continue
         async with session_factory() as session:
             report.cards_upserted += await _store_set(session, language, result)
             await session.commit()
@@ -189,6 +201,7 @@ async def sync_language(
         language=language,
         synced=report.sets_synced,
         skipped=report.sets_skipped,
+        digital=report.sets_digital,
         cards=report.cards_upserted,
         errors=len(report.errors),
     )
@@ -230,6 +243,55 @@ async def fill_image_fallbacks(session: AsyncSession) -> int:
     return int(getattr(result, "rowcount", 0) or 0)
 
 
+@dataclass
+class DigitalCleanup:
+    """Ergebnis von :func:`remove_digital_sets`."""
+
+    sets: list[tuple[str, str, str]] = field(default_factory=list)  # Sprache, ID, Name
+    cards_removed: int = 0
+    cards_kept: int = 0  # liegen in einer Sammlung
+
+
+async def remove_digital_sets(session: AsyncSession, *, dry_run: bool = False) -> DigitalCleanup:
+    """Pocket-Sets samt Karten löschen; Karten in Sammlungen bleiben (mit ihrem Set).
+
+    Commit macht der Aufrufer. ``dry_run`` zählt nur.
+    """
+    report = DigitalCleanup()
+    digital_sets = (
+        await session.execute(
+            select(CardSet.id, CardSet.language, CardSet.external_id, CardSet.name)
+            .where(CardSet.series_name.ilike(DIGITAL_SERIES_NAME))
+            .order_by(CardSet.language, CardSet.external_id)
+        )
+    ).all()
+    report.sets = [(row.language, row.external_id, row.name) for row in digital_sets]
+    if not digital_sets:
+        return report
+    set_ids = [row.id for row in digital_sets]
+    in_collection = exists().where(CollectionItem.card_id == Card.id)
+    in_digital_set = Card.set_id.in_(set_ids)
+    report.cards_kept = int(
+        await session.scalar(select(func.count()).where(in_digital_set, in_collection)) or 0
+    )
+    report.cards_removed = int(
+        await session.scalar(select(func.count()).where(in_digital_set, ~in_collection)) or 0
+    )
+    if dry_run:
+        return report
+    await session.execute(delete(Card).where(in_digital_set, ~in_collection))
+    await session.execute(
+        delete(CardSet).where(CardSet.id.in_(set_ids), ~exists().where(Card.set_id == CardSet.id))
+    )
+    log.info(
+        "catalog.digital_removed",
+        sets=len(report.sets),
+        cards=report.cards_removed,
+        kept=report.cards_kept,
+    )
+    return report
+
+
 async def sync_catalog(
     client: TcgdexClient,
     session_factory: async_sessionmaker[AsyncSession],
@@ -238,12 +300,13 @@ async def sync_catalog(
     full: bool = False,
     concurrency: int = 4,
 ) -> list[LanguageReport]:
-    """Synchronisiert alle angegebenen Sprachen nacheinander, danach Ersatzbilder."""
+    """Synchronisiert alle Sprachen nacheinander, entfernt Pocket-Sets, danach Ersatzbilder."""
     reports = [
         await sync_language(client, session_factory, language, full=full, concurrency=concurrency)
         for language in languages
     ]
     async with session_factory() as session:
+        await remove_digital_sets(session)
         filled = await fill_image_fallbacks(session)
         await session.commit()
     log.info("catalog.image_fallbacks", filled=filled)
