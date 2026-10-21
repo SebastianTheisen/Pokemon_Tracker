@@ -1,5 +1,25 @@
 # Erkundung 2: Aufbau der Quellen für die Importe
 
+## PokéWiki – deutsche Veröffentlichung je Set (Infobox)
+
+- **Base Set 2 (TCG)**: Felder []
+- **Legendary Collection (TCG)**: Felder []
+  - Hinweis: `b dieses Set unter Fans auch manchmal scherzhaft „Base 3“ genannt wird. Sie ist nur auf Englisch erhältlich. ==Kartenliste== {{Setheader}} {{Setzeile|1|Simsala|Psycho|42|Holo-`
+- **Southern Islands (TCG)**: Felder []
+- **Pokémon Rumble (TCG)**: Felder []
+  - Hinweis: `urde zum gleichnamigen [[Pokémon Rumble|Spiel]] verkauft. Diese Erweiterung ist nicht auf Deutsch erschienen. == Kartenliste == {{Setheader|seltenheit=nein|level=nein}} {{Setze`
+- **Poké Card Creator Pack (TCG)**: Felder []
+- **Best of Game (TCG)**: Felder []
+- **Double Crisis (TCG)**: Felder []
+  - Hinweis: `Zyklus]]. Auf Englisch ist die Erweiterung am 25. März 2015 erschienen; sie ist nie auf deutsch erschienen. == Kartenliste == {{Setheader|level=nein}} {{Setzeile|1|Team Magmas`
+- **Legendary Treasures (TCG)**: Felder []
+  - Hinweis: `eitet. Auf Englisch ist die Erweiterung am 6. November 2013 erschienen; sie ist nie auf Deutsch erschienen. == Kartenliste == === Legendäre Schätze === {{Setheader|level=nein`
+- **Gym Heroes (TCG)**: Felder []
+  - Hinweis: `rweiterung des [[Grundset (TCG)|Grundsets]] des [[Sammelkartenspiel]]s. Sie ist nur auf Englisch erhältlich. == Kartenliste == {{Setheader}} {{Setzeile|1|Pyros Lavados|Feuer|4`
+- **Drachengruft (TCG)**: Felder []
+- **XY Black Star Promos (TCG)**: Felder []
+- **McDonald's Kollektion 2015 (TCG)**: Felder []
+
 ## PokéWiki (MediaWiki-API)
 
 - API: HTTP 200, application/json; charset=utf-8
@@ -64,6 +84,9 @@
 ## Taiwan – Zählung und Detailseite
 
 - Liste HTTP 200
+- Karten-Links auf Seite 1: 0
+- Skripte (Liste per JavaScript geladen?): []
+- Seitenanfang: `<!doctype html> <html> <head> <meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1.0"> <title>Pokémon Trading Card Game Website</title> </head> <body> <main> This website is under maintenance. </main> <footer> </footer> </body> </html> `
 
 
-_Lauf: 2026-10-21 20:43 UTC, Stand edba81b_
+_Lauf: 2026-10-21 21:20 UTC, Stand 5d34d3a_
