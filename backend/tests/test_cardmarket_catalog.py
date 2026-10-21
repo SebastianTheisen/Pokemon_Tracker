@@ -649,3 +649,24 @@ def test_next_catalog_import() -> None:
     assert next_catalog_import(now, now - timedelta(hours=2), 24) == now + timedelta(hours=22)
     assert next_catalog_import(now, now - timedelta(days=3), 24) == now + CARDMARKET_START_DELAY
     assert next_catalog_import(now, None, 0) is None
+
+
+async def test_western_sets_are_not_uncertain(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    imported: None,
+) -> None:
+    """DE/EN teilen sich bei Cardmarket eine Ausgabe; der „Zwilling“ ist die asiatische."""
+    user = await register_user("max@example.com")
+    card = await make_set_card(session_factory, language="de", name="Glurak")
+    fake = FakeTcgdex({"SV-P30-137": CHINESE_GLURAK})
+    await link_sets(session_factory, cast(TcgdexClient, fake), settings, now=datetime.now(UTC))
+
+    choice = (await client.get(f"{API}/cards/{card.id}/cardmarket", headers=user.headers)).json()
+    async with session_factory() as session:
+        status = await catalog_status(session)
+
+    assert (choice["uncertain"], len(choice["options"])) == (False, 2)  # wählbar, aber kein Hinweis
+    assert status.uncertain == []

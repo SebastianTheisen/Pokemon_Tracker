@@ -88,6 +88,11 @@ KNOWN_EXPANSION_LABELS: dict[int, str] = {
     6604: "Indonesisch/Thailändisch",
 }
 
+# Nur hier kann TCGdex die Sprachfassung verwechseln: Westliche Karten (DE, EN, FR, …) führt
+# Cardmarket in einer gemeinsamen Ausgabe; deren „Zwilling“ ist die asiatische Fassung.
+# Spike 20.10.2026: alle 14 unsicheren DE/EN-Sets waren richtig verknüpft.
+ASIAN_LANGUAGES = ("ja", "ko", "zh-tw", "zh-cn")
+
 Clock = Callable[[], datetime]
 
 
@@ -823,6 +828,7 @@ async def cardmarket_choice(session: AsyncSession, card: Card) -> CardmarketChoi
     base_expansion = expansions.get(base.id_expansion)
     uncertain = (
         resolution.reason != "card"
+        and card_set.language in ASIAN_LANGUAGES
         and card_set.cardmarket_expansion_source in (None, ExpansionLinkSource.TCGDEX.value)
         and base_expansion is not None
         and bool(base_expansion.twin_ids)
@@ -1046,6 +1052,7 @@ async def catalog_status(session: AsyncSession) -> CatalogStatus:
         .where(
             CardSet.cardmarket_expansion_source == ExpansionLinkSource.TCGDEX.value,
             CardSet.cardmarket_expansion_id.in_(list(labels)),
+            CardSet.language.in_(ASIAN_LANGUAGES),
         )
         .order_by(CardSet.language, CardSet.external_id)
     )
@@ -1097,7 +1104,7 @@ def render_status(status: CatalogStatus) -> str:
     sources = ", ".join(f"{k}: {v}" for k, v in sorted(status.sets_by_source.items()))
     lines.append(f"- Sets: {status.sets_total} (Ausgabe von {sources})")
     lines += ["", f"## Unsichere Sets ({len(status.uncertain)})", ""]
-    lines.append("Ausgabe nur von TCGdex, es gibt gleichzeitige Sprachfassungen (Zwillinge).")
+    lines.append("Asiatische Sets, Ausgabe nur von TCGdex, es gibt gleichzeitige Sprachfassungen.")
     lines.append("")
     for item in status.uncertain:
         twins = ", ".join(_expansion_text(t, label) for t, label in item.twins)
