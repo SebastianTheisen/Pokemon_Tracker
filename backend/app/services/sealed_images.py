@@ -8,10 +8,13 @@ Bilder zeigen die englische bzw. japanische Verpackung.
 Zuordnung über den Namen, aber unscharf – die Kataloge benennen anders:
 
 * Wörter statt Text, Satzzeichen und Füllwörter weg, Mehrzahl = Einzahl („Tins“ = „Tin“),
+  Kürzel der Serien-Epochen („XY“, „BW“, „EX“ …) zählen nicht – mal stehen sie da, mal nicht,
 * gleiche Bedeutung gleich schreiben: „Booster Box“ = „Display“, „Booster Pack“ = „Booster“,
   „Elite Trainer Box“ = „ETB“ …,
 * seltene Wörter zählen mehr als häufige (gewichtete Jaccard-Ähnlichkeit, Gewicht nach
-  Seltenheit im TCGplayer-Katalog): „Deoxys“ entscheidet, „EX“ oder „Booster“ kaum,
+  Seltenheit im TCGplayer-Katalog): „Deoxys“ entscheidet, „Booster“ kaum,
+* TCGplayer ergänzt gern in Klammern („Theme Deck [Salamence]“); Klammerwörter, die bei
+  Cardmarket fehlen, zählen deshalb nur zu :data:`BRACKET_FACTOR` gegen den Treffer,
 * die Produktart muss übereinstimmen (ein Display bekommt nie das Bild eines Boosters); nur
   wenn eine Seite keine Art erkennen lässt („Battle Academy“), reicht ein fast gleicher Name,
 * „Code Card“-Produkte (digitale Codes) kommen nie in Frage,
@@ -46,6 +49,7 @@ CATEGORIES = {3: "en", 85: "ja"}  # Pokemon, Pokemon Japan
 MIN_SIMILARITY = 0.72
 MIN_SIMILARITY_ANY_KIND = 0.9  # Art auf einer Seite unbekannt → Name muss fast gleich sein
 MIN_LEAD = 0.05  # Vorsprung vor dem Zweitbesten, sonst zweideutig
+BRACKET_FACTOR = 0.25  # Gewicht von TCGplayer-Klammerwörtern, die Cardmarket nicht nennt
 CONCURRENCY = 4
 # „Unlimited Edition“ ist die normale Ausgabe, „1st Edition“ bleibt über „1st“ unterscheidbar.
 _STOPWORDS = frozenset(
@@ -61,6 +65,14 @@ _STOPWORDS = frozenset(
         "exclusive",
         "unlimited",
         "edition",
+        # Kürzel der Serien-Epochen („XY BREAKthrough“ = „BREAKthrough“)
+        "ex",
+        "xy",
+        "bw",
+        "sm",
+        "swsh",
+        "dp",
+        "hgss",
     }
 )
 _SINGULAR = {
@@ -75,6 +87,9 @@ _SINGULAR = {
     "coins": "coin",
     "displays": "display",
 }
+# Einzelwörter nach den Wortgruppen: „POP Series 1 Pack“ = „… Booster“, „EU Version“ = …
+_WORDS = {"pack": "booster", "eu": "international"}
+_BRACKETS = re.compile(r"\[[^\]]*\]|\([^)]*\)")
 _CODE_CARD = re.compile(r"^\s*code card\b", re.I)
 # Reihenfolge zählt (längere Begriffe zuerst).
 _SYNONYMS = (
@@ -114,7 +129,12 @@ def tokens(name: str) -> frozenset[str]:
     text = f" {' '.join(_SINGULAR.get(word, word) for word in text.split())} "
     for phrase, replacement in _SYNONYMS:
         text = text.replace(f" {phrase} ", f" {replacement} ")
-    return frozenset(word for word in text.split() if word not in _STOPWORDS)
+    return frozenset(_WORDS.get(word, word) for word in text.split() if word not in _STOPWORDS)
+
+
+def main_tokens(name: str) -> frozenset[str]:
+    """Wörter außerhalb von ``[…]`` und ``(…)``."""
+    return tokens(_BRACKETS.sub(" ", name))
 
 
 @dataclass(frozen=True)
@@ -145,9 +165,10 @@ class Matcher:
     """Index der TCGplayer-Produkte je Sprache (Wort → Produkte) für schnelle Suche."""
 
     def __init__(self, products: Iterable[TcgProduct]) -> None:
-        self._entries: dict[str, list[tuple[TcgProduct, frozenset[str], ProductKind]]] = (
-            defaultdict(list)
-        )
+        # je Eintrag: Produkt, alle Wörter, Wörter außerhalb von Klammern, Art
+        self._entries: dict[
+            str, list[tuple[TcgProduct, frozenset[str], frozenset[str], ProductKind]]
+        ] = defaultdict(list)
         self._index: dict[tuple[str, str], list[int]] = defaultdict(list)
         for product in products:
             if _CODE_CARD.search(product.name):
@@ -156,26 +177,38 @@ class Matcher:
             entries = self._entries[product.language]
             for word in words:
                 self._index[(product.language, word)].append(len(entries))
-            entries.append((product, words, kind_for(None, product.name)))
+            entries.append(
+                (product, words, main_tokens(product.name), kind_for(None, product.name))
+            )
         # Gewicht je Wort: selten = wichtig (log(1 + N/df)); unbekannte Wörter wie die seltensten.
         self._weights: dict[str, dict[str, float]] = {}
         self._unknown: dict[str, float] = {}
         for language, entries in self._entries.items():
-            frequency = Counter(word for _, words, _ in entries for word in words)
+            frequency = Counter(word for _, words, _, _ in entries for word in words)
             total = len(entries)
             self._weights[language] = {
                 word: math.log1p(total / count) for word, count in frequency.items()
             }
             self._unknown[language] = math.log1p(total)
 
-    def _similarity(self, language: str, first: frozenset[str], second: frozenset[str]) -> float:
+    def _similarity(
+        self, language: str, words: frozenset[str], tcg: frozenset[str], tcg_main: frozenset[str]
+    ) -> float:
+        """Gewichtete Jaccard-Ähnlichkeit; fehlende Klammerwörter zählen gedämpft."""
         weights, unknown = self._weights.get(language, {}), self._unknown.get(language, 1.0)
 
-        def weight(words: frozenset[str]) -> float:
-            return sum(weights.get(word, unknown) for word in words)
+        def weight(group: frozenset[str]) -> float:
+            return sum(weights.get(word, unknown) for word in group)
 
-        union = weight(first | second)
-        return weight(first & second) / union if union else 0.0
+        shared = weight(words & tcg)
+        extra = tcg - words
+        union = (
+            shared
+            + weight(words - tcg)
+            + weight(extra & tcg_main)
+            + BRACKET_FACTOR * weight(extra - tcg_main)
+        )
+        return shared / union if union else 0.0
 
     def ranked(
         self, name: str, kind: ProductKind, language: str, *, limit: int = 3
@@ -186,10 +219,10 @@ class Matcher:
         found = {i for word in words for i in self._index.get((language, word), [])}
         candidates = [
             Candidate(
-                self._similarity(language, words, entries[i][1]),
+                self._similarity(language, words, entries[i][1], entries[i][2]),
                 entries[i][0],
-                entries[i][2],
-                _compatible(kind, entries[i][2]) is True,
+                entries[i][3],
+                _compatible(kind, entries[i][3]) is True,
             )
             for i in found
         ]

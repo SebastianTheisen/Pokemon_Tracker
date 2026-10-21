@@ -248,7 +248,9 @@ Entscheidungen (17.10.2026):
 - [x] **Spike PSA API 2** (`docs/phase5/psa_api.md`): Cloudflare sperrt die Contabo-Adresse vor jeder Prüfung des Tokens (auch die Doku-Seite) → vom VPS nicht nutzbar
 - [x] **Analyse Fehlschläge** (`docs/phase5/sealed_images_misses.md`): fast immer gibt es das Produkt bei TCGplayer, der Vergleich war zu streng – Füllwörter („EX“, „Unlimited Edition“) zählten wie Namen, „Tins“ ≠ „Tin“, TCGplayer-Produkte ohne erkennbare Art („Battle Academy“) wurden verworfen, „Exclusive“ machte Pokémon-Center-ETBs zweideutig
 - [x] **Bildzuordnung nachgeschärft:** gewichtete Ähnlichkeit (seltene Wörter zählen mehr, Schwelle 0,72), Mehrzahl = Einzahl, „Unlimited Edition“/„Exclusive“ ignoriert („1st“ bleibt), unbekannte Art nur bei fast gleichem Namen (≥ 0,9), „Code Card“-Produkte ausgeschlossen, verworfene Altzuordnungen werden entfernt. Analyse mit Stichprobe von 30 Treffern zum Gegenlesen. App: Knopf „Versiegelt“ unten rechts in der Sammlung statt Symbol in der Kopfzeile. Tests: Backend 458, Flutter 34
-- [ ] Auf dem VPS: Abgleich neu (`cardmarket-import --images`), Analyse `bash deploy/phase5_sealed_misses.sh`, Stichprobe auf falsche Bilder prüfen
+- [x] Lauf 2 auf dem VPS: 1.914 von 5.102 (37 %), Stichprobe 30 von 30 richtig. Restliche Fehlschläge: TCGplayer ergänzt in Klammern („Theme Deck [Salamence]“), Epochen-Kürzel („XY BREAKthrough“), „POP Series 1 Pack“, „EU“ statt „International Version“
+- [x] **Nachschärfung 2:** Klammerwörter, die Cardmarket nicht nennt, zählen nur zu 25 % dagegen; Epochen-Kürzel (EX, XY, BW, SM, SWSH, DP, HGSS) ignoriert; „Pack“ = „Booster“, „EU“ = „International“. Tests: Backend 459
+- [ ] Auf dem VPS: Abgleich neu, Analyse Lauf 3, Stichprobe prüfen
 - [ ] PSA entscheiden: Link „Bei PSA prüfen“ (psacard.com/cert/…) in der App und/oder PSA-Support um Freigabe der Server-Adresse bitten
 - [ ] Auf dem VPS: Deploy, Status prüfen (`deploy/phase5_cardmarket_status.sh`), Glurak M6a 137 erneut scannen – Cardmarket-Knopf muss die japanische Ausgabe öffnen
 - [ ] Auf dem VPS: Link-Filter und Lesezeichen an echten Cardmarket- und eBay-Seiten prüfen (Seitenaufbau nur aus Dokumentation bekannt)

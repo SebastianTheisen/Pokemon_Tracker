@@ -110,6 +110,40 @@ def test_matcher_real_cases_from_the_analysis() -> None:
     assert best("Pikachu V Showcase", ProductKind.COLLECTION_BOX) is None
 
 
+def test_matcher_second_round_from_the_analysis() -> None:
+    """Fälle aus docs/phase5/sealed_images_misses.md (Lauf 2): Klammern, Epochen, „Pack“."""
+    matcher = Matcher(
+        [
+            tcg(1, 'Dragon Theme Deck - "FireFang" [Salamence]'),
+            tcg(2, 'Dragon Theme Deck - "WindBlast" [Flygon]'),
+            tcg(3, 'Hidden Legends Theme Deck - "Forest Guardian" [Dark Celebi]'),
+            tcg(4, 'Hidden Legends Theme Deck - "Wish Maker" [Jirachi]'),
+            tcg(5, "XY BREAKthrough Booster Pack"),
+            tcg(6, "BREAKthrough Sleeved Booster Pack"),
+            tcg(7, "POP Series 1 Pack"),
+            tcg(8, "POP Series 2 Pack"),
+            tcg(9, "Divergent Powers Tin [Hisuian Typhlosion V] (International Version)"),
+            tcg(10, "Divergent Powers Tin [Hisuian Typhlosion V]"),
+            *(tcg(100 + i, f"Set {i} Booster Pack") for i in range(20)),
+            *(tcg(200 + i, f"Serie {i} Theme Deck [Mon {i}]") for i in range(20)),
+        ]
+    )
+
+    def best(name: str, kind: ProductKind) -> int | None:
+        hit = matcher.best(name, kind, ["en"])
+        return hit.product_id if hit else None
+
+    assert best("EX Dragon: FireFang Theme Deck", ProductKind.OTHER) == 1
+    assert best("EX Hidden Legends: Forest Guardian Theme Deck", ProductKind.OTHER) == 3
+    assert best("BREAKthrough Booster", ProductKind.BOOSTER) == 5
+    assert best("POP Series 2 Booster", ProductKind.BOOSTER) == 8
+    assert (
+        best("Divergent Powers Tins: Hisuian Typhlosion V Tin (EU Version)", ProductKind.TIN) == 9
+    )
+    # Ein anderes Deck derselben Serie bleibt ohne Bild statt falsch.
+    assert best("EX Dragon: Sky Rage Theme Deck", ProductKind.OTHER) is None
+
+
 def test_unknown_kind_needs_nearly_identical_name() -> None:
     matcher = Matcher([tcg(1, "Celebrations Collector Chest"), tcg(2, "Arceus Poster Pack")])
 
