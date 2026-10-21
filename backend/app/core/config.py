@@ -156,6 +156,13 @@ class Settings(BaseSettings):
         default=None,
         description="API-Token von Apify (eBay.de-Verkäufe auf Knopfdruck); nur in der .env.",
     )
+    psa_token: SecretStr | None = Field(
+        default=None,
+        description="Token der offiziellen PSA Public API (Zertifikate beim Slab-Scan prüfen).",
+    )
+    psa_cert_max_age_days: int = Field(
+        default=30, ge=1, description="Gemerkte Zertifikate (Population) erst danach erneuern."
+    )
     apify_monthly_budget_usd: float = Field(
         default=7.0,
         ge=0,

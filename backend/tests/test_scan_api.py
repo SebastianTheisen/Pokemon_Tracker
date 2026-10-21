@@ -14,10 +14,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import httpx
 import numpy as np
 import pytest
 from httpx import ASGITransport, AsyncClient
 from PIL import Image
+from pydantic import SecretStr
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -188,7 +190,8 @@ async def test_slab_is_read_and_card_found_by_image(
 
     assert _best(result) == ("S12-110", "ja")
     assert result["confident"] is True
-    assert result["grading"] == {"company": "PSA", "grade": "10"}
+    assert result["grading"] == {"company": "PSA", "grade": "10", "cert": "73270136"}
+    assert (result["psa"], result["psa_warning"]) == (None, None)  # ohne PSA-Token
     assert result["best"]["image_inliers"] >= 50  # Katalogbild = Ausschnitt von Foto 03
     assert result["detected"]["slab"]["name"] == "LUGIA V"
     # Die andere Lugia V (S12-079) verliert trotz gleichen Namens.
@@ -241,7 +244,7 @@ async def test_unsure_result_offers_search(
     assert _best(result) == ("SV2a-007", "ja")
     assert result["confident"] is False
     assert result["hint"] == "Falsche Karte? Selbst suchen"
-    assert result["grading"] == {"company": "PSA", "grade": "10"}
+    assert result["grading"] == {"company": "PSA", "grade": "10", "cert": None}
 
 
 async def test_text_alone_is_enough_without_catalog_image(
@@ -680,7 +683,8 @@ async def test_real_ocr_identifies_lugia(
     result = response.json()
     assert _best(result) == ("S12-110", "ja")
     assert result["confident"] is True
-    assert result["grading"] == {"company": "PSA", "grade": "10"}
+    assert result["grading"] == {"company": "PSA", "grade": "10", "cert": "73270136"}
+    assert (result["psa"], result["psa_warning"]) == (None, None)  # ohne PSA-Token
     assert photo("04.jpg").shape[0] == 1280
 
 
@@ -746,3 +750,113 @@ async def test_oversized_uploads_are_cut_off_early(
     )
     assert batch.status_code == 200
     assert [item["error"] for item in batch.json()] == ["Die Datei ist kein lesbares Bild."] * 3
+
+
+# ------------------------------------------------------------- PSA-Zertifikat
+
+LUGIA_LINES = (
+    "#110",
+    "2022 POKEMON JPN.SWSH",
+    "MINT",
+    "FA/LUGIA V",
+    "PARADIGMTRIGGER",
+    "73270136",
+    "ルギアV",
+    "PSA.",
+)
+
+
+def psa_handler(card_number: str = "110") -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == "bearer psa-test-token"
+        if request.url.path.endswith("/cert/GetByCertNumber/73270136"):
+            return httpx.Response(
+                200,
+                json={
+                    "PSACert": {
+                        "CertNumber": "73270136",
+                        "Year": "2022",
+                        "Brand": "POKEMON JAPANESE SWORD & SHIELD PARADIGM TRIGGER",
+                        "CardNumber": card_number,
+                        "Subject": "FA/LUGIA V",
+                        "Variety": "",
+                        "CardGrade": "GEM MT 10",
+                        "GradeDescription": "GEM MT 10",
+                        "TotalPopulation": 1234,
+                        "PopulationHigher": 0,
+                    }
+                },
+            )
+        return httpx.Response(404)
+
+    return httpx.MockTransport(handler)
+
+
+@pytest.fixture
+def psa_number() -> str:
+    return "110"
+
+
+@pytest.fixture
+async def psa_client(
+    settings: Settings,
+    engine: AsyncEngine,
+    price_provider: FakeProvider,
+    reader: ScriptedReader,
+    images: FakeImages,
+    psa_number: str,
+) -> AsyncIterator[AsyncClient]:
+    """Scanner wie oben, zusätzlich mit PSA-Token und simulierter PSA-API."""
+    configured = settings.model_copy(update={"psa_token": SecretStr("psa-test-token")})
+    app = create_app(
+        configured,
+        engine=engine,
+        price_providers=[price_provider],
+        text_reader=reader,
+        image_transport=images.transport(),
+        psa_transport=psa_handler(psa_number),
+    )
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http_client,
+    ):
+        yield http_client
+
+
+async def test_psa_confirms_slab_and_grade(
+    psa_client: AsyncClient,
+    admin: Account,
+    reader: ScriptedReader,
+    catalog: CardMap,
+) -> None:
+    # Label ohne Notenzahl („MINT“ → 9 laut Tabelle) – PSA sagt 10 und gilt.
+    reader.script("04.jpg", lines(*LUGIA_LINES))
+
+    result = await _scan(psa_client, admin, photo_bytes("04.jpg"))
+
+    assert _best(result) == ("S12-110", "ja")
+    assert result["grading"] == {"company": "PSA", "grade": "10", "cert": "73270136"}
+    assert result["psa"]["subject"] == "FA/LUGIA V"
+    assert (result["psa"]["population"], result["psa"]["population_higher"]) == (1234, 0)
+    assert result["psa_warning"] is None
+
+    lookup = await psa_client.get(f"{API}/scan/psa/73270136", headers=admin.headers)
+    unknown = await psa_client.get(f"{API}/scan/psa/99999999", headers=admin.headers)
+    assert lookup.json()["grade_description"] == "GEM MT 10"
+    assert unknown.status_code == 404
+
+
+@pytest.mark.parametrize("psa_number", ["079"])
+async def test_psa_warns_when_number_differs(
+    psa_client: AsyncClient,
+    admin: Account,
+    reader: ScriptedReader,
+    catalog: CardMap,
+) -> None:
+    reader.script("04.jpg", lines(*LUGIA_LINES))
+
+    result = await _scan(psa_client, admin, photo_bytes("04.jpg"))
+
+    assert result["psa_warning"] == (
+        "Laut PSA ist es Nr. 079 (FA/LUGIA V) – bitte die Karte prüfen."
+    )

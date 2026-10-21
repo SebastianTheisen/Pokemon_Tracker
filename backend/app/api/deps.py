@@ -17,6 +17,7 @@ from app.services.auth import AuthService
 from app.services.ebay_auto import EbayAutoService
 from app.services.errors import AuthenticationError, PermissionDeniedError
 from app.services.pricing import PriceService
+from app.services.psa import PsaService
 from app.services.rate_limit import FailureLimiter
 from app.services.scan import ScanService
 
@@ -102,6 +103,10 @@ def get_ebay_auto_service(
     return EbayAutoService(session, settings, request.app.state.apify)
 
 
+def get_psa_service(request: Request, session: SessionDep, settings: SettingsDep) -> PsaService:
+    return PsaService(session, settings, request.app.state.psa)
+
+
 def get_scan_service(request: Request, session: SessionDep, user: CurrentUser) -> ScanService:
     return ScanService(session, request.app.state.scanner, user)
 
@@ -111,3 +116,4 @@ PriceServiceDep = Annotated[PriceService, Depends(get_price_service)]
 AdminServiceDep = Annotated[AdminService, Depends(get_admin_service)]
 ScanServiceDep = Annotated[ScanService, Depends(get_scan_service)]
 EbayAutoServiceDep = Annotated[EbayAutoService, Depends(get_ebay_auto_service)]
+PsaServiceDep = Annotated[PsaService, Depends(get_psa_service)]

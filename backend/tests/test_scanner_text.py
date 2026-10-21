@@ -169,6 +169,7 @@ def test_slab_label_of_spike_photo_04() -> None:
         "number": "110",
         "name": "LUGIA V",
         "language": "ja",
+        "cert": "73270136",
     }
     assert features.names[0].text == "LUGIA V"  # Label-Name zuerst
     assert ("110", None) in [(hit.number, hit.total) for hit in features.numbers]

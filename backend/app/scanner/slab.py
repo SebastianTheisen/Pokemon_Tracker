@@ -78,6 +78,8 @@ class SlabLabel:
     number: str | None = None
     name_hint: str | None = None
     language_hint: str | None = None
+    cert: str | None = None
+    """Zertifikatsnummer (8–10 Ziffern) – bei PSA über die offizielle PSA-API prüfbar."""
 
     def summary(self) -> dict[str, Any]:
         return {
@@ -86,6 +88,7 @@ class SlabLabel:
             "number": self.number,
             "name": self.name_hint,
             "language": self.language_hint,
+            "cert": self.cert,
         }
 
 
@@ -176,10 +179,15 @@ def parse_slab(lines: Sequence[OcrLine]) -> SlabLabel | None:
     )
     if grade == "10" and any(_BLACK_LABEL.search(text) for text in texts):
         grade = "10 BL"
+    cert = next(
+        (compact for text in texts if _CERT_NUMBER.match(compact := text.replace(" ", ""))),
+        None,
+    )
     return SlabLabel(
         company=company,
         grade=grade,
         number=number.lstrip("0") or None if number else None,
         name_hint=_find_name(texts),
         language_hint=language,
+        cert=cert,
     )

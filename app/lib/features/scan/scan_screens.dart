@@ -257,6 +257,32 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
                 style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600),
               ),
             ),
+          if (widget.result.psa case final psa?)
+            Padding(
+              key: const Key('scan-psa'),
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                [
+                  '✓ Von PSA bestätigt',
+                  [?psa.subject, if (psa.cardNumber != null) '#${psa.cardNumber}'].join(' '),
+                  if (psa.population != null)
+                    'Population ${psa.population}'
+                        '${psa.populationHigher != null ? ' (höher: ${psa.populationHigher})' : ''}',
+                ].where((part) => part.isNotEmpty).join(' · '),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.gain, fontSize: 12),
+              ),
+            ),
+          if (widget.result.psaWarning case final warning?)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                warning,
+                key: const Key('scan-psa-warning'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.warning),
+              ),
+            ),
           const SizedBox(height: 12),
           _ScanPrice(card: selected, grading: widget.result.grading),
           if (widget.result.grading == null)

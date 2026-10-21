@@ -97,8 +97,10 @@ Json summaryJson({String total = '4894.67', Json? top}) {
   };
 }
 
-Json scanJson({bool confident = true, Json? grading}) => {
+Json scanJson({bool confident = true, Json? grading, Json? psa, String? psaWarning}) => {
   'scan_id': 'scan1',
+  'psa': psa,
+  'psa_warning': psaWarning,
   'confident': confident,
   'hint': confident ? 'Erkannt als Nachtara VMAX' : 'Falsche Karte? Selbst suchen',
   'best': {
@@ -242,7 +244,6 @@ class FakeApi extends Api {
         : [];
   }
 
-  @override
   /// Kartendetails für [card] (Varianten, Illustrator) – Standard unbekannt.
   Map<String, bool>? cardVariants;
   String? cardIllustrator;

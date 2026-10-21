@@ -945,13 +945,56 @@ class ScanMatch {
 }
 
 class Grading {
-  const Grading({required this.company, this.grade});
+  const Grading({required this.company, this.grade, this.cert});
 
-  factory Grading.fromJson(Json json) =>
-      Grading(company: json.str('company'), grade: json.strOrNull('grade'));
+  factory Grading.fromJson(Json json) => Grading(
+    company: json.str('company'),
+    grade: json.strOrNull('grade'),
+    cert: json.strOrNull('cert'),
+  );
 
   final String company;
   final String? grade;
+
+  /// Zertifikatsnummer vom Etikett (falls lesbar).
+  final String? cert;
+}
+
+/// Von PSA bestätigtes Zertifikat (offizielle PSA-API).
+class PsaCert {
+  const PsaCert({
+    required this.cert,
+    this.year,
+    this.brand,
+    this.cardNumber,
+    this.subject,
+    this.gradeDescription,
+    this.grade,
+    this.population,
+    this.populationHigher,
+  });
+
+  factory PsaCert.fromJson(Json json) => PsaCert(
+    cert: json.str('cert'),
+    year: json.strOrNull('year'),
+    brand: json.strOrNull('brand'),
+    cardNumber: json.strOrNull('card_number'),
+    subject: json.strOrNull('subject'),
+    gradeDescription: json.strOrNull('grade_description'),
+    grade: json.strOrNull('grade'),
+    population: json.intOrNull('population'),
+    populationHigher: json.intOrNull('population_higher'),
+  );
+
+  final String cert;
+  final String? year;
+  final String? brand;
+  final String? cardNumber;
+  final String? subject;
+  final String? gradeDescription;
+  final String? grade;
+  final int? population;
+  final int? populationHigher;
 }
 
 class ScanResult {
@@ -964,6 +1007,8 @@ class ScanResult {
     required this.canSaveReference,
     this.best,
     this.grading,
+    this.psa,
+    this.psaWarning,
   });
 
   factory ScanResult.fromJson(Json json) => ScanResult(
@@ -973,6 +1018,8 @@ class ScanResult {
     best: json.objOrNull('best') == null ? null : ScanMatch.fromJson(json.obj('best')),
     alternatives: json.list('alternatives', ScanMatch.fromJson),
     grading: json.objOrNull('grading') == null ? null : Grading.fromJson(json.obj('grading')),
+    psa: json.objOrNull('psa') == null ? null : PsaCert.fromJson(json.obj('psa')),
+    psaWarning: json.strOrNull('psa_warning'),
     durationMs: json.integer('duration_ms'),
     canSaveReference: json.flag('can_save_reference'),
   );
@@ -983,6 +1030,12 @@ class ScanResult {
   final ScanMatch? best;
   final List<ScanMatch> alternatives;
   final Grading? grading;
+
+  /// Von PSA bestätigt (nur mit PSA-Token und lesbarer Zertifikatsnummer).
+  final PsaCert? psa;
+
+  /// PSA nennt eine andere Kartennummer als der beste Treffer.
+  final String? psaWarning;
   final int durationMs;
   final bool canSaveReference;
 

@@ -7,6 +7,7 @@ import 'fakes.dart';
 void main() {
   moversTests();
   variantTests();
+  psaTests();
 
   testWidgets('ohne Sitzung: Anmeldung, falsches und richtiges Passwort', (tester) async {
     final api = FakeApi();
@@ -355,5 +356,38 @@ void variantTests() {
     await tester.tap(find.byKey(const Key('item-save')));
     await tester.pumpAndSettle();
     expect(api.lastItemBody?['variant'], 'normal');
+  });
+}
+
+void psaTests() {
+  testWidgets('PSA-Slab: Bestätigung von PSA und Hinweis bei anderer Nummer', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..scanResult = scanJson(
+        grading: {'company': 'PSA', 'grade': '10', 'cert': '73270136'},
+        psa: {
+          'cert': '73270136',
+          'year': '2022',
+          'brand': 'POKEMON JAPANESE SWORD & SHIELD PARADIGM TRIGGER',
+          'card_number': '110',
+          'subject': 'FA/LUGIA V',
+          'grade_description': 'GEM MT 10',
+          'grade': '10',
+          'population': 1234,
+          'population_higher': 0,
+        },
+        psaWarning: 'Laut PSA ist es Nr. 110 (FA/LUGIA V) – bitte die Karte prüfen.',
+      );
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('scan-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scan-gallery')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Slab: PSA 10'), findsOneWidget);
+    expect(
+      find.text('✓ Von PSA bestätigt · FA/LUGIA V #110 · Population 1234 (höher: 0)'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('scan-psa-warning')), findsOneWidget);
   });
 }

@@ -114,3 +114,18 @@ class EbayFetch(UuidPrimaryKeyMixin, Base):
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class PsaCertRecord(Base):
+    """Gemerktes PSA-Zertifikat (Daten der PSA-API; Abrufe pro Tag sind begrenzt).
+
+    ``data`` ist ``None``, wenn PSA das Zertifikat nicht kennt – auch das wird gemerkt.
+    """
+
+    __tablename__ = "psa_certs"
+
+    cert: Mapped[str] = mapped_column(String(12), primary_key=True)
+    data: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

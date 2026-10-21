@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.providers.psa import PsaCert
 from app.schemas.catalog import CardOut
 from app.services.scan import BatchItem, BinderOutcome, ScanMatch, ScanOutcome
 
@@ -32,9 +34,42 @@ class ScanMatchOut(BaseModel):
         )
 
 
+def _psa_warning(outcome: ScanOutcome, psa: PsaCert | None) -> str | None:
+    """Hinweis, wenn PSA eine andere Kartennummer nennt als der beste Treffer."""
+    if psa is None or not psa.card_number or outcome.best is None:
+        return None
+    psa_number = psa.card_number.lstrip("0") or "0"
+    if psa_number.upper() == outcome.best.card.number_norm.upper():
+        return None
+    return (
+        f"Laut PSA ist es Nr. {psa.card_number} ({psa.subject or 'unbekannt'}) – "
+        "bitte die Karte prüfen."
+    )
+
+
 class GradingOut(BaseModel):
     company: str
     grade: str | None
+    cert: str | None = Field(default=None, description="Zertifikatsnummer vom Etikett")
+
+
+class PsaCertOut(BaseModel):
+    """Von PSA bestätigtes Zertifikat (offizielle PSA-API)."""
+
+    cert: str
+    year: str | None
+    brand: str | None = Field(description="Set laut PSA, z. B. „POKEMON JAPANESE …“")
+    card_number: str | None
+    subject: str | None = Field(description="Karte laut PSA, z. B. „FA/LUGIA V“")
+    variety: str | None
+    grade_description: str | None
+    grade: str | None
+    population: int | None
+    population_higher: int | None
+
+    @classmethod
+    def build(cls, cert: PsaCert) -> PsaCertOut:
+        return cls(**asdict(cert))
 
 
 class ScanResultOut(BaseModel):
@@ -44,12 +79,18 @@ class ScanResultOut(BaseModel):
     best: ScanMatchOut | None
     alternatives: list[ScanMatchOut]
     grading: GradingOut | None = Field(description="Slab erkannt → als gegradet vorschlagen")
+    psa: PsaCertOut | None = Field(
+        default=None, description="Von PSA bestätigt (nur mit PSA-Token und lesbarer Nummer)"
+    )
+    psa_warning: str | None = Field(
+        default=None, description="PSA nennt eine andere Kartennummer als der beste Treffer"
+    )
     detected: dict[str, Any]
     duration_ms: int
     can_save_reference: bool
 
     @classmethod
-    def build(cls, outcome: ScanOutcome) -> ScanResultOut:
+    def build(cls, outcome: ScanOutcome, *, psa: PsaCert | None = None) -> ScanResultOut:
         if outcome.best is None:
             hint = NOTHING_HINT
         elif outcome.confident:
@@ -63,10 +104,17 @@ class ScanResultOut(BaseModel):
             best=ScanMatchOut.build(outcome.best) if outcome.best else None,
             alternatives=[ScanMatchOut.build(match) for match in outcome.alternatives],
             grading=(
-                GradingOut(company=outcome.grading.company, grade=outcome.grading.grade)
+                GradingOut(
+                    company=outcome.grading.company,
+                    # PSA kennt die Note sicher – sie gilt vor der gelesenen.
+                    grade=(psa.grade if psa and psa.grade else outcome.grading.grade),
+                    cert=outcome.grading.cert,
+                )
                 if outcome.grading
                 else None
             ),
+            psa=PsaCertOut.build(psa) if psa else None,
+            psa_warning=_psa_warning(outcome, psa),
             detected=outcome.detected,
             duration_ms=outcome.duration_ms,
             can_save_reference=outcome.reference_available,

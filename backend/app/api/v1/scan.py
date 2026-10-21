@@ -5,10 +5,12 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, File, Query, Response, UploadFile, status
 
-from app.api.deps import ScanServiceDep, SettingsDep
+from app.api.deps import CurrentUser, PsaServiceDep, ScanServiceDep, SettingsDep
 from app.core.config import CatalogLanguage, Settings
+from app.providers.psa import PsaCert
 from app.scanner.binder import BinderLayout
 from app.schemas.catalog import CardOut
 from app.schemas.scan import (
@@ -16,10 +18,15 @@ from app.schemas.scan import (
     BinderResultOut,
     ConfirmIn,
     ConfirmOut,
+    PsaCertOut,
     ReferenceOut,
     ScanResultOut,
 )
-from app.services.errors import InvalidInputError
+from app.services.errors import InvalidInputError, NotFoundError, ServiceError
+from app.services.psa import PsaService
+from app.services.scan import ScanOutcome
+
+log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/scan", tags=["scan"])
 
@@ -44,12 +51,38 @@ async def _read_upload(upload: UploadFile, settings: Settings) -> bytes:
 async def scan(
     service: ScanServiceDep,
     settings: SettingsDep,
+    psa: PsaServiceDep,
     file: Annotated[UploadFile, File(description="Foto (JPEG, PNG, WebP oder HEIC)")],
     language: LanguageHint = None,
 ) -> ScanResultOut:
-    """Eine Karte erkennen: bester Treffer plus bis zu 4 Alternativen."""
+    """Eine Karte erkennen: bester Treffer plus bis zu 4 Alternativen.
+
+    PSA-Slab mit lesbarer Zertifikatsnummer und eingerichtetem PSA-Token: Karte, Note und
+    Population kommen zusätzlich von PSA (``psa``); die Note von PSA gilt.
+    """
     outcome = await service.scan(await _read_upload(file, settings), language_hint=language)
-    return ScanResultOut.build(outcome)
+    return ScanResultOut.build(outcome, psa=await _psa_check(psa, outcome))
+
+
+async def _psa_check(psa: PsaService, outcome: ScanOutcome) -> PsaCert | None:
+    """PSA-Zertifikat prüfen, wenn möglich – Störungen verhindern nie das Scan-Ergebnis."""
+    grading = outcome.grading
+    if not psa.configured or grading is None or grading.company != "PSA" or not grading.cert:
+        return None
+    try:
+        return await psa.lookup(grading.cert)
+    except ServiceError as exc:
+        log.warning("scan.psa_check_failed", cert=grading.cert, error=exc.message)
+        return None
+
+
+@router.get("/psa/{cert}")
+async def psa_cert(cert: str, psa: PsaServiceDep, _user: CurrentUser) -> PsaCertOut:
+    """PSA-Zertifikat nachschlagen (z. B. Nummer vom Etikett abgetippt)."""
+    found = await psa.lookup(cert)
+    if found is None:
+        raise NotFoundError("PSA kennt dieses Zertifikat nicht.")
+    return PsaCertOut.build(found)
 
 
 @router.post("/batch")

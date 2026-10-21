@@ -23,6 +23,7 @@ from app.db.session import create_engine, create_session_factory
 from app.providers.apify import ApifyClient
 from app.providers.pricing import PriceProvider
 from app.providers.pricing.registry import build_price_providers
+from app.providers.psa import PsaClient
 from app.providers.tcgdex import TcgdexClient
 from app.scanner.ocr import RapidOcrReader, TextReader
 from app.scanner.runtime import ScannerRuntime
@@ -38,6 +39,7 @@ def create_app(
     text_reader: TextReader | None = None,
     image_transport: httpx.AsyncBaseTransport | None = None,
     apify_transport: httpx.AsyncBaseTransport | None = None,
+    psa_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     """Erzeugt die Anwendung (Factory, damit Tests Settings, Engine, Preisquellen,
     Texterkennung, Bild-Downloads und Apify ersetzen können)."""
@@ -76,11 +78,20 @@ def create_app(
                 if token
                 else None
             )
+            # PSA-Zertifikate beim Slab-Scan prüfen – nur mit Token in der .env.
+            psa_token = settings.psa_token.get_secret_value() if settings.psa_token else ""
+            app.state.psa = (
+                PsaClient(psa_token, user_agent=settings.http_user_agent, transport=psa_transport)
+                if psa_token
+                else None
+            )
             try:
                 yield
             finally:
                 if app.state.apify is not None:
                     await app.state.apify.aclose()
+                if app.state.psa is not None:
+                    await app.state.psa.aclose()
         if own_engine:
             await app_engine.dispose()
 
