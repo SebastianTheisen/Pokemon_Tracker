@@ -98,6 +98,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/ebay-import',
         builder: (_, state) => EbayImportScreen(data: state.uri.queryParameters['d']),
       ),
+      GoRoute(
+        path: '/ebay-fetch/:id',
+        builder: (_, state) => EbayImportScreen.fetch(
+          cardId: state.pathParameters['id']!,
+          grading: state.uri.queryParameters['grading'],
+        ),
+      ),
       GoRoute(path: '/settings/bookmarklet', builder: (_, _) => const BookmarkletSetupScreen()),
       GoRoute(path: '/sets', builder: (_, _) => const SetOverviewScreen()),
       GoRoute(path: '/admin/users', builder: (_, _) => const AdminUsersScreen()),

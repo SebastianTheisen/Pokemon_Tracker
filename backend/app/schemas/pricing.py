@@ -316,3 +316,38 @@ class CardmarketExpansionOut(BaseModel):
     label: str | None
     product_count: int
     twin_ids: list[int]
+
+
+class EbayFetchIn(BaseModel):
+    """Verkäufe von ebay.de über Apify holen (kostet Guthaben, außer gemerkt)."""
+
+    grading: str | None = Field(
+        default=None,
+        max_length=20,
+        pattern=r"^(PSA|BGS|CGC|SGC|TAG|ACE) \d{1,2}(\.\d)?( BL)?$",
+        description="Slab, z. B. „PSA 10“; leer = Rohkarte (gegradete werden ausgeschlossen)",
+    )
+    force: bool = Field(default=False, description="Gemerkte Suche ignorieren und neu abrufen")
+
+
+class EbayFetchOut(BaseModel):
+    """Rohzeilen wie vom Lesezeichen – Vorschau/Speichern über ``POST …/ebay-sold``."""
+
+    card_id: uuid.UUID
+    query: str
+    page_url: str
+    rows: list[EbaySoldRowIn]
+    fetched_at: datetime
+    cached: bool
+    cost_usd: Decimal | None
+    used_usd: float | None
+    budget_usd: float | None
+
+
+class ApifyStatusOut(BaseModel):
+    configured: bool
+    used_usd: float | None
+    limit_usd: float | None
+    budget_usd: float | None
+    remaining_usd: float | None
+    cycle_end: datetime | None

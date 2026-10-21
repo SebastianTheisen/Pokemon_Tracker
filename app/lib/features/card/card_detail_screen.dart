@@ -2,6 +2,7 @@
 // Quellen mit Datum und Link, Preisverlauf, eBay, Sammlung/Merkliste.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api.dart';
@@ -88,6 +89,30 @@ Future<void> openPriceLink(BuildContext context, WidgetRef ref, String cardId, S
     // Nicht kritisch: Ohne gemerkte Karte fragt die Import-Seite nach.
   }
   if (context.mounted) await openLink(context, url);
+}
+
+/// eBay-Verkäufe holen: eingerichtet → direkt in der App von ebay.de (Apify), sonst die
+/// eBay-Suche im Browser öffnen (dort überträgt das Lesezeichen die Verkäufe).
+Future<void> openEbaySold(
+  BuildContext context,
+  WidgetRef ref,
+  CardInfo card, {
+  String? grading,
+}) async {
+  ApifyStatus? status;
+  try {
+    status = await ref.read(apiProvider).apifyStatus();
+  } on ApiException {
+    status = null; // Apify gestört → Lesezeichen-Weg funktioniert trotzdem
+  }
+  if (!context.mounted) return;
+  if (status?.configured ?? false) {
+    await context.push(
+      Uri(path: '/ebay-fetch/${card.id}', queryParameters: {'grading': ?grading}).toString(),
+    );
+  } else {
+    await openPriceLink(context, ref, card.id, ebaySoldSearch(card, grading: grading).toString());
+  }
 }
 
 Future<void> openLink(BuildContext context, String url) async {
@@ -241,9 +266,9 @@ class _CardBodyState extends ConsumerState<_CardBody> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: OutlinedButton.icon(
-              onPressed: () =>
-                  openPriceLink(context, ref, card.id, ebaySoldSearch(card).toString()),
-              icon: const Icon(Icons.open_in_new),
+              key: const Key('card-ebay'),
+              onPressed: () => openEbaySold(context, ref, card),
+              icon: const Icon(Icons.sell_outlined),
               label: const Text('Verkaufte Angebote bei eBay'),
             ),
           ),

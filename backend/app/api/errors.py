@@ -13,6 +13,7 @@ from app.services.errors import (
     PermissionDeniedError,
     RateLimitedError,
     ServiceError,
+    UpstreamError,
 )
 
 _STATUS: dict[type[ServiceError], int] = {
@@ -22,6 +23,7 @@ _STATUS: dict[type[ServiceError], int] = {
     ConflictError: 409,
     InvalidInputError: 400,
     RateLimitedError: 429,
+    UpstreamError: 502,
 }
 
 

@@ -301,6 +301,35 @@ class FakeApi extends Api {
     });
   }
 
+  /// Apify: Standard nicht eingerichtet (Lesezeichen-Weg wie bisher).
+  Json apifyStatusJson = {'configured': false};
+
+  /// Fehler beim eBay-Abruf (z. B. Budget erreicht) – sonst feste Verkäufe.
+  ApiException? ebayFetchError;
+
+  @override
+  Future<ApifyStatus> apifyStatus() async => ApifyStatus.fromJson(apifyStatusJson);
+
+  @override
+  Future<EbayFetch> ebayFetch(String cardId, {String? grading, bool force = false}) async {
+    calls.add('ebayFetch:$cardId:${grading ?? 'raw'}:$force');
+    if (ebayFetchError case final error?) throw error;
+    return EbayFetch.fromJson({
+      'card_id': cardId,
+      'query': 'Nachtara VMAX 215/203 ${grading ?? '-PSA -BGS'}',
+      'page_url': 'https://www.ebay.de/sch/i.html?_nkw=Nachtara',
+      'rows': [
+        {'title': 'Nachtara VMAX 215/203 ${grading ?? 'Deutsch'}', 'price': '180,00 €'},
+        {'title': 'Pokemon Konvolut 50 Karten', 'price': '20,00 €'},
+      ],
+      'fetched_at': now.toIso8601String(),
+      'cached': !force,
+      'cost_usd': force ? '0.07005' : null,
+      'used_usd': 0.57,
+      'budget_usd': 7.0,
+    });
+  }
+
   @override
   Future<CardmarketOffersResult> cardmarketOffers(
     String cardId, {

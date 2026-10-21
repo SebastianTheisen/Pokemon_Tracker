@@ -291,6 +291,21 @@ class Api {
         as Json,
   );
 
+  /// Verkaufte Artikel von ebay.de über Apify holen (gemerkt: kostenlos). [grading] z. B.
+  /// „PSA 10“; ohne = Rohkarte. Auswerten/Speichern danach wie beim Lesezeichen ([ebaySold]).
+  Future<EbayFetch> ebayFetch(String cardId, {String? grading, bool force = false}) async =>
+      EbayFetch.fromJson(
+        (await _send(
+              'POST',
+              '/cards/$cardId/ebay-sold/fetch',
+              body: {'grading': ?grading, 'force': force},
+            ))!
+            as Json,
+      );
+
+  /// Ist der eBay-Abruf eingerichtet? Mit Monatsverbrauch und Budget (US-Dollar).
+  Future<ApifyStatus> apifyStatus() async => ApifyStatus.fromJson(await _get('/apify/status'));
+
   /// Ausgelesene eBay-Verkäufe auswerten (Vorschlag) bzw. die gewählten speichern.
   Future<EbaySoldResult> ebaySold(
     String cardId, {

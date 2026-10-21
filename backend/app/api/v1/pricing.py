@@ -8,9 +8,16 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from app.api.deps import AdminUser, CurrentUser, PriceServiceDep, SessionDep
+from app.api.deps import (
+    AdminUser,
+    CurrentUser,
+    EbayAutoServiceDep,
+    PriceServiceDep,
+    SessionDep,
+)
 from app.models import UserSettings
 from app.schemas.pricing import (
+    ApifyStatusOut,
     CardmarketChoiceIn,
     CardmarketChoiceOut,
     CardmarketConditionOut,
@@ -19,10 +26,13 @@ from app.schemas.pricing import (
     CardmarketOffersIn,
     CardmarketOffersOut,
     CardPricesOut,
+    EbayFetchIn,
+    EbayFetchOut,
     EbayGroupOut,
     EbaySaleOut,
     EbaySoldIn,
     EbaySoldOut,
+    EbaySoldRowIn,
     PriceHistoryOut,
     PriceSourceOut,
     PriceTargetIn,
@@ -198,6 +208,49 @@ async def label_cardmarket_expansion(
         label=expansion.label,
         product_count=expansion.product_count,
         twin_ids=list(expansion.twin_ids),
+    )
+
+
+@router.post("/cards/{card_id}/ebay-sold/fetch")
+async def fetch_ebay_sold(
+    card_id: uuid.UUID,
+    body: EbayFetchIn,
+    session: SessionDep,
+    user: CurrentUser,
+    ebay: EbayAutoServiceDep,
+) -> EbayFetchOut:
+    """Verkaufte Artikel von **ebay.de** über Apify holen (Rohzeilen, noch nichts gespeichert).
+
+    Gleiche Suche innerhalb einiger Tage → gemerktes Ergebnis ohne Kosten. Ist das
+    Monatsbudget erreicht, kommt 409 ``budget_exhausted`` (dann das Lesezeichen nutzen).
+    Auswerten und Speichern wie beim Lesezeichen über ``POST /cards/{id}/ebay-sold``.
+    """
+    card = await catalog_search.get_card(session, card_id)
+    result = await ebay.fetch(card, grading=body.grading, user_id=user.id, force=body.force)
+    return EbayFetchOut(
+        card_id=card.id,
+        query=result.search.query,
+        page_url=result.search.page_url,
+        rows=[EbaySoldRowIn(**row.__dict__) for row in result.rows],
+        fetched_at=result.fetched_at,
+        cached=result.cached,
+        cost_usd=result.cost_usd,
+        used_usd=result.status.used_usd,
+        budget_usd=result.status.budget_usd,
+    )
+
+
+@router.get("/apify/status")
+async def apify_status(_user: CurrentUser, ebay: EbayAutoServiceDep) -> ApifyStatusOut:
+    """Ist der eBay-Abruf eingerichtet, und wie viel Monatsbudget ist verbraucht?"""
+    status = await ebay.status()
+    return ApifyStatusOut(
+        configured=status.configured,
+        used_usd=status.used_usd,
+        limit_usd=status.limit_usd,
+        budget_usd=status.budget_usd,
+        remaining_usd=status.remaining_usd,
+        cycle_end=status.cycle_end,
     )
 
 

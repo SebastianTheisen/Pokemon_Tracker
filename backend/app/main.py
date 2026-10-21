@@ -20,6 +20,7 @@ from app.api.web import mount_web_app
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import create_engine, create_session_factory
+from app.providers.apify import ApifyClient
 from app.providers.pricing import PriceProvider
 from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
@@ -36,9 +37,10 @@ def create_app(
     price_providers: Sequence[PriceProvider] | None = None,
     text_reader: TextReader | None = None,
     image_transport: httpx.AsyncBaseTransport | None = None,
+    apify_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     """Erzeugt die Anwendung (Factory, damit Tests Settings, Engine, Preisquellen,
-    Texterkennung und Bild-Downloads ersetzen können)."""
+    Texterkennung, Bild-Downloads und Apify ersetzen können)."""
     settings = settings or get_settings()
     configure_logging(level=settings.log_level, json_output=settings.log_json)
 
@@ -67,7 +69,18 @@ def create_app(
             app.state.scanner = ScannerRuntime(
                 settings, text_reader or RapidOcrReader(), image_client
             )
-            yield
+            # eBay.de-Verkäufe auf Knopfdruck – nur mit Token in der .env.
+            token = settings.apify_token.get_secret_value() if settings.apify_token else ""
+            app.state.apify = (
+                ApifyClient(token, user_agent=settings.http_user_agent, transport=apify_transport)
+                if token
+                else None
+            )
+            try:
+                yield
+            finally:
+                if app.state.apify is not None:
+                    await app.state.apify.aclose()
         if own_engine:
             await app_engine.dispose()
 

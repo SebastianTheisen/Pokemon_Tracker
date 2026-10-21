@@ -381,11 +381,12 @@ class _ScanPrice extends ConsumerWidget {
         child: SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)),
       ),
       error: (_, _) => const SizedBox.shrink(),
-      data: (data) => grading == null ? _raw(context, data) : _graded(context, ref, data, grading!),
+      data: (data) =>
+          grading == null ? _raw(context, ref, data) : _graded(context, ref, data, grading!),
     );
   }
 
-  Widget _raw(BuildContext context, CardPrices data) {
+  Widget _raw(BuildContext context, WidgetRef ref, CardPrices data) {
     final nm = data.conditions
         .where((c) => c.condition == 'NM' && c.variant == 'normal')
         .firstOrNull;
@@ -409,18 +410,20 @@ class _ScanPrice extends ConsumerWidget {
           ),
         const SizedBox(height: 6),
         _FetchPrices(
-          cardId: card.id,
+          hint: cardmarket == null
+              ? null
+              : 'Cardmarket: dort das Lesezeichen „An Kartenkiste senden“ antippen.',
           buttons: [
             if (cardmarket != null)
               (
                 key: const Key('scan-cardmarket'),
                 label: 'Cardmarket ${languageTag(card.language)} ab NM',
-                url: cardmarket,
+                onPressed: () => openPriceLink(context, ref, card.id, cardmarket),
               ),
             (
               key: const Key('scan-ebay'),
               label: 'eBay verkauft',
-              url: ebaySoldSearch(card).toString(),
+              onPressed: () => openEbaySold(context, ref, card),
             ),
           ],
         ),
@@ -447,12 +450,11 @@ class _ScanPrice extends ConsumerWidget {
           ),
           const SizedBox(height: 6),
           _FetchPrices(
-            cardId: card.id,
             buttons: [
               (
                 key: const Key('scan-graded-ebay'),
                 label: '$label-Verkäufe neu holen',
-                url: ebaySoldSearch(card, grading: label).toString(),
+                onPressed: () => openEbaySold(context, ref, card, grading: label),
               ),
             ],
           ),
@@ -469,13 +471,12 @@ class _ScanPrice extends ConsumerWidget {
         const SizedBox(height: 6),
         OutlinedButton.icon(
           key: const Key('scan-graded-ebay'),
-          onPressed: () =>
-              openPriceLink(context, ref, card.id, ebaySoldSearch(card, grading: label).toString()),
-          icon: const Icon(Icons.open_in_new, size: 18),
+          onPressed: () => openEbaySold(context, ref, card, grading: label),
+          icon: const Icon(Icons.sell_outlined, size: 18),
           label: Text('Verkaufte $label bei eBay'),
         ),
         const Text(
-          'Dort das Lesezeichen „An Kartenkiste senden“ antippen – dann steht der Preis hier.',
+          'Verkäufe übernehmen – dann steht der Preis hier.',
           textAlign: TextAlign.center,
           style: TextStyle(color: AppColors.textMuted, fontSize: 12),
         ),
@@ -484,16 +485,17 @@ class _ScanPrice extends ConsumerWidget {
   }
 }
 
-/// Knöpfe „Preis holen“: öffnen die passende Seite (Sprache, Zustand bzw. Note sind schon
-/// gesetzt); dort überträgt das Lesezeichen „An Kartenkiste senden“ die Preise.
-class _FetchPrices extends ConsumerWidget {
-  const _FetchPrices({required this.cardId, required this.buttons});
+/// Knöpfe „Preis holen“: Cardmarket öffnet die passende Seite (Sprache und Zustand gesetzt,
+/// dort überträgt das Lesezeichen die Angebote); eBay holt die Verkäufe von ebay.de direkt
+/// in die App, wenn Apify eingerichtet ist – sonst ebenfalls per Lesezeichen.
+class _FetchPrices extends StatelessWidget {
+  const _FetchPrices({required this.buttons, this.hint});
 
-  final String cardId;
-  final List<({Key key, String label, String url})> buttons;
+  final List<({Key key, String label, VoidCallback onPressed})> buttons;
+  final String? hint;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Column(
+  Widget build(BuildContext context) => Column(
     children: [
       Wrap(
         alignment: WrapAlignment.center,
@@ -503,17 +505,18 @@ class _FetchPrices extends ConsumerWidget {
           for (final button in buttons)
             OutlinedButton.icon(
               key: button.key,
-              onPressed: () => openPriceLink(context, ref, cardId, button.url),
+              onPressed: button.onPressed,
               icon: const Icon(Icons.open_in_new, size: 18),
               label: Text(button.label),
             ),
         ],
       ),
-      const Text(
-        'Dort das Lesezeichen „An Kartenkiste senden“ antippen.',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-      ),
+      if (hint case final hint?)
+        Text(
+          hint,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+        ),
     ],
   );
 }

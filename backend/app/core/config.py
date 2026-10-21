@@ -148,8 +148,23 @@ class Settings(BaseSettings):
     price_refresh_concurrency: int = Field(default=4, ge=1, le=16)
     apify_token: SecretStr | None = Field(
         default=None,
-        description="API-Token von Apify (Cardmarket-Angebote, eBay-Verkäufe); nur in der .env.",
+        description="API-Token von Apify (eBay.de-Verkäufe auf Knopfdruck); nur in der .env.",
     )
+    apify_monthly_budget_usd: float = Field(
+        default=7.0,
+        ge=0,
+        description="Kostenbremse: kein neuer Lauf, wenn der Monatsverbrauch das erreichen würde.",
+    )
+    apify_ebay_actor: str = Field(
+        default="epicscrapers/ebay-sold-listings-api",
+        description="Dienst aus dem Apify-Store für verkaufte eBay-Artikel (Spike 21.10.2026).",
+    )
+    apify_ebay_max_items: int = Field(default=20, ge=5, le=60)
+    apify_ebay_cache_hours: int = Field(
+        default=72, ge=1, description="Gleiche Suche erst danach erneut bezahlen."
+    )
+    apify_max_charge_usd: float = Field(default=0.15, gt=0, le=2)
+    apify_run_timeout_seconds: int = Field(default=120, ge=30, le=600)
     extra_price_providers: list[str] = Field(
         default_factory=list,
         description=(

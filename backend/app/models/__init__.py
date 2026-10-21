@@ -16,7 +16,7 @@ from app.models.collection import (
     WishlistItem,
 )
 from app.models.images import ImageImportRun, ImageProbe, OfficialCard
-from app.models.pricing import CardPriceLink, PriceCheck, PricePoint
+from app.models.pricing import CardPriceLink, EbayFetch, PriceCheck, PricePoint
 from app.models.scanner import CardReferenceImage, ScanLog, ScanMode
 from app.models.settings import UserSettings
 from app.models.user import Role, User
@@ -35,6 +35,7 @@ __all__ = [
     "CollectionEvent",
     "CollectionEventType",
     "CollectionItem",
+    "EbayFetch",
     "ExpansionLinkSource",
     "Folder",
     "GradingCompany",

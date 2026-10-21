@@ -12,6 +12,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, UuidPrimaryKeyMixin
@@ -86,4 +87,30 @@ class CardPriceLink(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class EbayFetch(UuidPrimaryKeyMixin, Base):
+    """Ein Abruf verkaufter eBay.de-Artikel über Apify (kostet Guthaben).
+
+    Die Rohzeilen werden gemerkt, damit dieselbe Suche innerhalb von
+    ``apify_ebay_cache_hours`` nicht erneut bezahlt wird. Bewertet und gespeichert wird wie
+    beim Lesezeichen (:mod:`app.services.ebay_sold`).
+    """
+
+    __tablename__ = "ebay_fetches"
+    __table_args__ = (Index("ix_ebay_fetches_lookup", "card_id", "query", "fetched_at"),)
+
+    card_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cards.id", ondelete="CASCADE"), nullable=False
+    )
+    query: Mapped[str] = mapped_column(String(300), nullable=False)
+    page_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    rows: Mapped[list[dict[str, str]]] = mapped_column(JSONB, nullable=False)
+    cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(10, 5))
+    requested_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )

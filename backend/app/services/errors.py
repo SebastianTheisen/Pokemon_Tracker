@@ -50,6 +50,12 @@ class InvalidInputError(ServiceError):
     code = "invalid_input"
 
 
+class UpstreamError(ServiceError):
+    """Ein externer Dienst (z. B. Apify) ist ausgefallen oder lieferte Unbrauchbares (HTTP 502)."""
+
+    code = "upstream_failed"
+
+
 class RateLimitedError(ServiceError):
     """Zu viele Versuche (HTTP 429)."""
 

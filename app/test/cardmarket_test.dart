@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kartenkiste/app.dart';
+import 'package:kartenkiste/core/api.dart';
 import 'package:kartenkiste/features/cardmarket/cardmarket_import.dart';
 import 'package:kartenkiste/models/models.dart';
 import 'package:kartenkiste/router.dart';
@@ -18,6 +19,7 @@ const page = 'https://www.cardmarket.com/de/Pokemon/Products/Singles/X/Y?languag
 
 void main() {
   cardmarketEditionTests();
+  ebayFetchTests();
 
   test('gefilterter Cardmarket-Link nur mit Produkt-ID', () {
     const product = 'https://www.cardmarket.com/de/Pokemon/Products?idProduct=574273';
@@ -236,5 +238,66 @@ void cardmarketEditionTests() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('cardmarket-edition')), findsNothing);
+  });
+}
+
+void ebayFetchTests() {
+  testWidgets('eBay direkt von ebay.de: holen, gemerkt, neu abrufen, speichern, zurück', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true)..apifyStatusJson = {'configured': true};
+    await pumpApp(tester, api);
+    final topCard = find.text('Nachtara VMAX').first;
+    await tester.ensureVisible(topCard);
+    await tester.pumpAndSettle();
+    await tester.tap(topCard);
+    await tester.pumpAndSettle();
+
+    final button = find.byKey(const Key('card-ebay'));
+    await tester.scrollUntilVisible(button, 300, scrollable: find.byType(Scrollable).first);
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -200));
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+
+    expect(api.calls, contains('ebayFetch:c1:raw:false'));
+    expect(api.calls.where((c) => c.startsWith('priceTarget')), isEmpty); // kein Browser
+    expect(find.textContaining('Suche: Nachtara VMAX 215/203 -PSA -BGS'), findsOneWidget);
+    expect(find.textContaining('ohne Kosten'), findsOneWidget);
+    expect(find.textContaining('0.57 \$ von 7.00 \$'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('ebay-fetch-refresh')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('ebayFetch:c1:raw:true'));
+    expect(find.textContaining('ca. 0.07 \$'), findsOneWidget);
+
+    await tester.tap(find.text('Verkäufe speichern'));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('ebaySold:c1:2:0:true')); // Konvolut nicht gewählt
+    expect(find.byKey(const Key('card-ebay')), findsOneWidget); // zurück auf der Karte
+  });
+
+  testWidgets('Budget erreicht: Hinweis statt Verkäufe', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..apifyStatusJson = {'configured': true}
+      ..ebayFetchError = const ApiException(
+        'Monatsbudget für eBay-Abrufe erreicht (6.90 \$ von 7.00 \$)',
+        statusCode: 409,
+      );
+    await pumpApp(tester, api);
+    final topCard = find.text('Nachtara VMAX').first;
+    await tester.ensureVisible(topCard);
+    await tester.pumpAndSettle();
+    await tester.tap(topCard);
+    await tester.pumpAndSettle();
+    final button = find.byKey(const Key('card-ebay'));
+    await tester.scrollUntilVisible(button, 300, scrollable: find.byType(Scrollable).first);
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -200));
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Monatsbudget für eBay-Abrufe erreicht'), findsOneWidget);
+    expect(find.text('Erneut versuchen'), findsOneWidget);
   });
 }

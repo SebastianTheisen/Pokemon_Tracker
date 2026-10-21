@@ -1091,6 +1091,66 @@ class EbaySale {
   final bool suggested;
 }
 
+/// Verkaufte Artikel von ebay.de, über Apify geholt – Rohzeilen wie vom Lesezeichen.
+class EbayFetch {
+  const EbayFetch({
+    required this.cardId,
+    required this.query,
+    required this.pageUrl,
+    required this.rows,
+    required this.fetchedAt,
+    required this.cached,
+    this.costUsd,
+    this.usedUsd,
+    this.budgetUsd,
+  });
+
+  factory EbayFetch.fromJson(Json json) => EbayFetch(
+    cardId: json.str('card_id'),
+    query: json.str('query'),
+    pageUrl: json.str('page_url'),
+    rows: [for (final row in json['rows'] as List<dynamic>) row as Json],
+    fetchedAt: json.time('fetched_at'),
+    cached: json.flag('cached'),
+    costUsd: json.strOrNull('cost_usd'),
+    usedUsd: (json['used_usd'] as num?)?.toDouble(),
+    budgetUsd: (json['budget_usd'] as num?)?.toDouble(),
+  );
+
+  final String cardId;
+
+  /// Suche wie bei eBay eingetippt, z. B. „Glurak ex 183/165 -PSA -BGS …“.
+  final String query;
+
+  /// Dieselbe Suche zum Nachsehen im Browser.
+  final String pageUrl;
+  final List<Json> rows;
+  final DateTime fetchedAt;
+
+  /// Gemerkt (kostenlos) statt neu abgerufen.
+  final bool cached;
+  final String? costUsd;
+  final double? usedUsd;
+  final double? budgetUsd;
+}
+
+/// Ist der eBay-Abruf über Apify eingerichtet, und wie viel Monatsbudget ist verbraucht?
+class ApifyStatus {
+  const ApifyStatus({required this.configured, this.usedUsd, this.budgetUsd, this.remainingUsd});
+
+  factory ApifyStatus.fromJson(Json json) => ApifyStatus(
+    configured: json.flag('configured'),
+    usedUsd: (json['used_usd'] as num?)?.toDouble(),
+    budgetUsd: (json['budget_usd'] as num?)?.toDouble(),
+    remainingUsd: (json['remaining_usd'] as num?)?.toDouble(),
+  );
+
+  final bool configured;
+  final double? usedUsd;
+  final double? budgetUsd;
+  final double? remainingUsd;
+}
+
 class EbaySoldResult {
   const EbaySoldResult({required this.sales, required this.warnings, required this.saved});
 
