@@ -445,7 +445,7 @@ async def test_tcgdex_duplicate_of_imported_set_is_merged(
                 Card(external_id=f"me55c-{n}", language="de", set_id=imported.id, number=n,
                      number_norm=n, name=name, source=CardSource.TRANSLATED,
                      image_url=f"https://images.scrydex.com/pokemon/me55c-{n}/large")
-                for n, name in (("4", "Glurak"), ("58", "Pikachu"), ("43", "Selfe"))
+                for n, name in (("4", "Glurak"), ("58", "Pikachu"), ("108", "Scherox ex"))
             ]
         )  # fmt: skip
         await session.commit()
@@ -454,7 +454,7 @@ async def test_tcgdex_duplicate_of_imported_set_is_merged(
         "me02.5": _thirty(
             "me02.5",
             "30 Jahre: Klassische Sammlung",
-            [("001", "Glurak"), ("002", "Pikachu"), ("003", "Selfe")],
+            [("001", "Glurak"), ("002", "Pikachu"), ("003", "Scherox-ex")],
         )
         | {"releaseDate": released}
     }
@@ -469,7 +469,7 @@ async def test_tcgdex_duplicate_of_imported_set_is_merged(
         numbers = sorted(
             (await session.scalars(select(Card.number).where(Card.set_id == kept.id))).all()
         )
-        assert numbers == ["4", "43", "58"]  # aufgedruckte Nummern bleiben
+        assert numbers == ["108", "4", "58"]  # aufgedruckte Nummern bleiben
 
 
 async def test_merge_adopts_cardmarket_and_removes_derived_copies(

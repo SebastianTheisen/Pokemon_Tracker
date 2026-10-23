@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -120,7 +121,7 @@ async def _covering_set(session: AsyncSession, language: str, detail: SetDetail)
         others = select(Card.set_id).where(Card.source.not_in(_IMPORTED_SOURCES))
         condition += [CardSet.id.in_(imported_only), CardSet.id.not_in(others)]
     candidates = (await session.scalars(select(CardSet).where(*condition))).all()
-    wanted = {card.name.casefold() for card in detail.cards}
+    wanted = {name_key(card.name) for card in detail.cards}
     for candidate in candidates:
         rows = (
             await session.execute(select(Card.name, Card.source).where(Card.set_id == candidate.id))
@@ -129,7 +130,7 @@ async def _covering_set(session: AsyncSession, language: str, detail: SetDetail)
             continue
         if detail.release_date is None and abs(len(rows) - len(detail.cards)) > 2:  # noqa: PLR2004
             continue
-        names = {name.casefold() for name, _ in rows}
+        names = {name_key(name) for name, _ in rows}
         if len(wanted & names) >= share * len(wanted):
             return candidate
     return None
@@ -180,10 +181,15 @@ async def _remove_set_cards(session: AsyncSession, card_set: CardSet) -> None:
     )
 
 
+def name_key(name: str) -> str:
+    """Vergleichsform eines Kartennamens: „Scherox-ex“ = „Scherox ex“, „Zacian-V“ = „Zacian V“."""
+    return re.sub(r"[\W_]+", "", name.casefold())
+
+
 def _unique_by_name(cards: Iterable[Card]) -> dict[str, Card]:
     grouped: dict[str, list[Card]] = {}
     for card in cards:
-        grouped.setdefault(card.name.casefold(), []).append(card)
+        grouped.setdefault(name_key(card.name), []).append(card)
     return {name: group[0] for name, group in grouped.items() if len(group) == 1}
 
 
@@ -216,7 +222,7 @@ async def _adopt_cardmarket(
     missing = [
         brief
         for brief in detail.cards
-        if (target := targets.get(brief.name.casefold())) is not None
+        if (target := targets.get(name_key(brief.name))) is not None
         and target.cardmarket_product_id is None
     ]
     now = datetime.now(UTC)
@@ -230,7 +236,7 @@ async def _adopt_cardmarket(
         except TcgdexError:
             continue
         if (product_id := tcgdex_product_id(data)) is not None:
-            await learn_tcgdex_product(session, targets[brief.name.casefold()], product_id)
+            await learn_tcgdex_product(session, targets[name_key(brief.name)], product_id)
 
 
 async def _share_cardmarket(session: AsyncSession, covering: CardSet) -> None:
