@@ -18,16 +18,18 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
-from sqlalchemy import case, delete, exists, func, null, select, text
+from sqlalchemy import case, delete, exists, func, null, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import aliased
 
 from app.models import Card, CardSet, CardSource, CollectionItem, ImageSource
 from app.providers.tcgdex import SetBrief, SetDetail, TcgdexClient, TcgdexError
+from app.services.cardmarket_catalog import learn_tcgdex_product, tcgdex_product_id
 from app.services.catalog_numbers import normalize_number
 from app.services.pricecharting_catalog import replaced_by_pricecharting
 
@@ -133,30 +135,159 @@ async def _covering_set(session: AsyncSession, language: str, detail: SetDetail)
     return None
 
 
-async def _merge_into_covering_set(session: AsyncSession, language: str, detail: SetDetail) -> bool:
+async def _merge_into_covering_set(
+    session: AsyncSession, client: TcgdexClient, language: str, detail: SetDetail
+) -> bool:
     """TCGdex-Doppel eines importierten Sets nicht anlegen (bzw. wieder entfernen).
 
     Das importierte Set bleibt (Bilder, aufgedruckte Nummern – wichtig für den Scanner) und
-    übernimmt nur den offiziellen Set-Namen dieser Sprache von TCGdex. Karten des Doppels,
-    die schon jemand gesammelt hat, bleiben.
+    übernimmt vom Doppel, was es selbst nicht hat: den offiziellen Set-Namen dieser Sprache
+    und die Cardmarket-Verknüpfung (Ausgabe und Produkt je Karte, :func:`_adopt_cardmarket`).
+    Abgeleitete Fassungen des Doppels in anderen Sprachen (PokéWiki, übersetzt) werden
+    ebenso zusammengeführt. Karten, die schon jemand gesammelt hat, bleiben.
     """
     covering = await _covering_set(session, language, detail)
     if covering is None:
         return False
     if language != "en":
         covering.name = detail.name  # z. B. „30 Jahre: Klassische Sammlung“
-    duplicate = select(CardSet.id).where(
-        CardSet.external_id == detail.id, CardSet.language == language
+    duplicate = await session.scalar(
+        select(CardSet).where(CardSet.external_id == detail.id, CardSet.language == language)
     )
-    in_collection = exists().where(CollectionItem.card_id == Card.id)
-    await session.execute(delete(Card).where(Card.set_id.in_(duplicate), ~in_collection))
-    await session.execute(
-        delete(CardSet).where(CardSet.id.in_(duplicate), ~exists().where(Card.set_id == CardSet.id))
+    await _adopt_cardmarket(
+        session, client, language, detail, covering=covering, duplicate=duplicate
     )
+    if duplicate is not None:
+        await _remove_set_cards(session, duplicate)
+    await _merge_derived_copies(session, detail.id, covering.external_id)
+    await _share_cardmarket(session, covering)
     log.info(
         "catalog.sync.duplicate_set", language=language, set=detail.id, kept=covering.external_id
     )
     return True
+
+
+DERIVED_SOURCES = (CardSource.POKEWIKI, CardSource.TRANSLATED)
+CARDMARKET_RETRY = timedelta(days=7)
+
+
+async def _remove_set_cards(session: AsyncSession, card_set: CardSet) -> None:
+    """Karten eines Sets löschen (außer gesammelte); leeres Set ebenfalls."""
+    in_collection = exists().where(CollectionItem.card_id == Card.id)
+    await session.execute(delete(Card).where(Card.set_id == card_set.id, ~in_collection))
+    await session.execute(
+        delete(CardSet).where(CardSet.id == card_set.id, ~exists().where(Card.set_id == CardSet.id))
+    )
+
+
+def _unique_by_name(cards: Iterable[Card]) -> dict[str, Card]:
+    grouped: dict[str, list[Card]] = {}
+    for card in cards:
+        grouped.setdefault(card.name.casefold(), []).append(card)
+    return {name: group[0] for name, group in grouped.items() if len(group) == 1}
+
+
+async def _adopt_cardmarket(
+    session: AsyncSession,
+    client: TcgdexClient,
+    language: str,
+    detail: SetDetail,
+    *,
+    covering: CardSet,
+    duplicate: CardSet | None,
+) -> None:
+    """Cardmarket-Ausgabe und -Produkte des Doppels übernehmen (Zuordnung über den Namen).
+
+    Aus dem gespeicherten Doppel, sonst – höchstens alle sieben Tage – aus den
+    TCGdex-Kartendetails der Doppel-Karten.
+    """
+    targets = _unique_by_name(
+        (await session.scalars(select(Card).where(Card.set_id == covering.id))).unique().all()
+    )
+    if duplicate is not None:
+        if covering.cardmarket_expansion_id is None and duplicate.cardmarket_expansion_id:
+            covering.cardmarket_expansion_id = duplicate.cardmarket_expansion_id
+            covering.cardmarket_expansion_source = duplicate.cardmarket_expansion_source
+        source = (await session.scalars(select(Card).where(Card.set_id == duplicate.id))).all()
+        for name, card in _unique_by_name(source).items():
+            target = targets.get(name)
+            if target is not None and target.cardmarket_product_id is None:
+                target.cardmarket_product_id = card.cardmarket_product_id
+    missing = [
+        brief
+        for brief in detail.cards
+        if (target := targets.get(brief.name.casefold())) is not None
+        and target.cardmarket_product_id is None
+    ]
+    now = datetime.now(UTC)
+    checked = covering.cardmarket_checked_at
+    if not missing or (checked is not None and now - checked < CARDMARKET_RETRY):
+        return
+    covering.cardmarket_checked_at = now
+    for brief in missing:
+        try:
+            data = await client.get_card(language, brief.id)
+        except TcgdexError:
+            continue
+        if (product_id := tcgdex_product_id(data)) is not None:
+            await learn_tcgdex_product(session, targets[brief.name.casefold()], product_id)
+
+
+async def _share_cardmarket(session: AsyncSession, covering: CardSet) -> None:
+    """Cardmarket gilt sprachübergreifend: Ausgabe und Produkte an die anderen Sprachfassungen
+    desselben Sets weitergeben (Karten über ihre gemeinsame ID), wo dort noch nichts steht."""
+    await session.flush()
+    if covering.cardmarket_expansion_id is not None:
+        await session.execute(
+            update(CardSet)
+            .where(
+                CardSet.external_id == covering.external_id,
+                CardSet.cardmarket_expansion_id.is_(None),
+            )
+            .values(
+                cardmarket_expansion_id=covering.cardmarket_expansion_id,
+                cardmarket_expansion_source=covering.cardmarket_expansion_source,
+            )
+        )
+    source = aliased(Card)
+    siblings = select(CardSet.id).where(CardSet.external_id == covering.external_id)
+    await session.execute(
+        update(Card)
+        .where(
+            Card.set_id.in_(siblings),
+            Card.cardmarket_product_id.is_(None),
+            source.external_id == Card.external_id,
+            source.set_id == covering.id,
+            source.cardmarket_product_id.is_not(None),
+        )
+        .values(cardmarket_product_id=source.cardmarket_product_id)
+    )
+
+
+async def _merge_derived_copies(session: AsyncSession, duplicate_id: str, covering_id: str) -> None:
+    """Fassungen des Doppels in anderen Sprachen, die nur abgeleitete Karten haben
+    (z. B. deutsche Karten aus dem PokéWiki zum englischen TCGdex-Doppel), entfernen; das
+    importierte Set derselben Sprache übernimmt den Namen (PokéWiki: offizieller Name)."""
+    copies = (
+        await session.scalars(
+            select(CardSet).where(
+                CardSet.external_id == duplicate_id,
+                CardSet.id.in_(select(Card.set_id).where(Card.source.in_(DERIVED_SOURCES))),
+                CardSet.id.not_in(select(Card.set_id).where(Card.source.not_in(DERIVED_SOURCES))),
+            )
+        )
+    ).all()
+    for copy in copies:
+        target = await session.scalar(
+            select(CardSet).where(
+                CardSet.external_id == covering_id, CardSet.language == copy.language
+            )
+        )
+        if target is None:
+            continue
+        target.name = copy.name
+        await _remove_set_cards(session, copy)
+        log.info("catalog.sync.duplicate_copy", language=copy.language, set=duplicate_id)
 
 
 async def _store_set(session: AsyncSession, language: str, detail: SetDetail) -> int:
@@ -271,7 +402,7 @@ async def sync_language(
             if await replaced_by_pricecharting(session, language, result.id):
                 report.sets_replaced += 1  # fehlerhafte Vintage-Daten, kommt von PriceCharting
                 continue
-            if await _merge_into_covering_set(session, language, result):
+            if await _merge_into_covering_set(session, client, language, result):
                 report.sets_duplicate += 1
                 await session.commit()
                 continue

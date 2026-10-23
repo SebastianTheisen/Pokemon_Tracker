@@ -9,7 +9,7 @@ from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.models import Card, CardSet, CardSource
+from app.models import Card, CardSet, CardSource, CmExpansion, CmProduct
 from app.providers.tcgdex import TcgdexClient
 from app.services.catalog_search import search_cards
 from app.services.catalog_sync import LanguageReport, remove_digital_sets, sync_catalog
@@ -470,3 +470,71 @@ async def test_tcgdex_duplicate_of_imported_set_is_merged(
             (await session.scalars(select(Card.number).where(Card.set_id == kept.id))).all()
         )
         assert numbers == ["4", "43", "58"]  # aufgedruckte Nummern bleiben
+
+
+async def test_merge_adopts_cardmarket_and_removes_derived_copies(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Englisches Doppel (TCGdex) bringt Cardmarket mit; seine PokéWiki-Fassung verschwindet."""
+    async with session_factory() as session:
+        sets = {
+            (set_id, language): CardSet(
+                external_id=set_id, language=language, name=name, release_date=date(2026, 9, 16)
+            )
+            for set_id, language, name in (
+                ("me55c", "en", "30th Celebration: Classic Collection"),
+                ("me55c", "de", "30th Celebration: Classic Collection"),
+                ("30th-c", "de", "30 Jahre: Klassische Sammlung"),
+            )
+        }
+        session.add_all(sets.values())
+        await session.flush()
+        for (set_id, language), card_set in sets.items():
+            source = {
+                ("me55c", "en"): CardSource.POKEMONTCG,
+                ("me55c", "de"): CardSource.TRANSLATED,
+            }.get((set_id, language), CardSource.POKEWIKI)
+            names = ("Charizard", "Pikachu") if language == "en" else ("Glurak", "Pikachu")
+            numbers = ("4", "58") if set_id == "me55c" else ("001", "002")
+            session.add_all(
+                Card(external_id=f"{set_id}-{n}", language=language, set_id=card_set.id,
+                     number=n, number_norm=n.lstrip("0"), name=name, source=source)
+                for n, name in zip(numbers, names, strict=True)
+            )  # fmt: skip
+        session.add(CmExpansion(id_expansion=6800, product_count=2))
+        session.add(CmProduct(id_product=900001, id_metacard=1, name="Charizard", id_category=51,
+                              category_name="Pokémon Single", id_expansion=6800))  # fmt: skip
+        await session.commit()
+    fake = FakeTcgdex()
+    fake.catalog["en"] = {
+        "30th-c": _thirty(
+            "30th-c", "30th Classic Collection", [("001", "Charizard"), ("002", "Pikachu")]
+        )
+    }
+    fake.card_details[("en", "30th-c-001")] = {
+        "id": "30th-c-001",
+        "pricing": {"cardmarket": {"idProduct": 900001}},
+    }
+
+    reports = await _sync(fake, session_factory, languages=["en"])
+
+    assert reports[0].sets_duplicate == 1
+    async with session_factory() as session:
+        english = await session.scalar(
+            select(CardSet).where(CardSet.external_id == "me55c", CardSet.language == "en")
+        )
+        assert english is not None and english.cardmarket_expansion_id == 6800
+        charizard = await session.scalar(
+            select(Card).where(Card.external_id == "me55c-4", Card.language == "en")
+        )
+        assert charizard is not None and charizard.cardmarket_product_id == 900001
+        german = await session.scalar(
+            select(CardSet).where(CardSet.external_id == "me55c", CardSet.language == "de")
+        )
+        assert german is not None and german.name == "30 Jahre: Klassische Sammlung"
+        assert german.cardmarket_expansion_id == 6800  # Cardmarket gilt für alle Sprachen
+        glurak = await session.scalar(
+            select(Card).where(Card.external_id == "me55c-4", Card.language == "de")
+        )
+        assert glurak is not None and glurak.cardmarket_product_id == 900001
+        assert await session.scalar(select(CardSet).where(CardSet.external_id == "30th-c")) is None

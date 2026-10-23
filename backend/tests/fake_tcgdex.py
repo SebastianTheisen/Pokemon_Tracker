@@ -100,13 +100,17 @@ class FakeTcgdex:
         self.catalog = catalog or default_catalog()
         self.set_requests: list[str] = []
         self.failing_sets: set[str] = set()
+        self.card_details: dict[tuple[str, str], dict[str, Any]] = {}  # (Sprache, Karten-ID)
 
-    def handler(self, request: httpx.Request) -> httpx.Response:
+    def handler(self, request: httpx.Request) -> httpx.Response:  # noqa: PLR0911
         raw_path = request.url.raw_path.decode("ascii")
         if "+" in raw_path:
             # Wie der echte Server (VPS-Lauf Phase 1): unkodiertes „+“ → 404.
             return httpx.Response(404)
         parts = [unquote(part) for part in raw_path.strip("/").split("/")]  # v2/{lang}/sets[/{id}]
+        if len(parts) == 4 and parts[0] == "v2" and parts[2] == "cards":
+            details = self.card_details.get((parts[1], parts[3]))
+            return httpx.Response(200, json=details) if details else httpx.Response(404)
         if len(parts) < 3 or parts[0] != "v2" or parts[2] != "sets":
             return httpx.Response(404)
         language = parts[1]
