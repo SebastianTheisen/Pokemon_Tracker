@@ -4,10 +4,10 @@
 
 | Sprache | Sets | Karten | fehlen laut Set-Größe | Sets ohne Größe | ohne Bild | ohne Cardmarket | ohne Preis |
 |---|---|---|---|---|---|---|---|
-| en | 207 | 21405 | 228 | 0 | 612 (2 %) | 517 (2 %) | 21402 (99 %) |
-| de | 158 | 19900 | 0 | 0 | 130 (0 %) | 349 (1 %) | 19893 (99 %) |
-| ja | 186 | 15315 | 3349 | 0 | 2552 (16 %) | 4511 (29 %) | 15309 (99 %) |
-| zh-tw | 98 | 8074 | 1519 | 0 | 4 (0 %) | 3464 (42 %) | 8073 (99 %) |
+| ja | 389 | 25471 | 3410 | 196 | 346 (1 %) | 14667 (57 %) | 21532 (84 %) |
+| en | 205 | 21370 | 228 | 0 | 588 (2 %) | 517 (2 %) | 21367 (99 %) |
+| de | 158 | 19900 | 0 | 0 | 130 (0 %) | 349 (1 %) | 19889 (99 %) |
+| zh-tw | 149 | 13585 | 1519 | 51 | 4 (0 %) | 8975 (66 %) | 13584 (99 %) |
 | zh-cn | 78 | 5300 | 6292 | 0 | 48 (0 %) | 4471 (84 %) | 2669 (50 %) |
 | ko | 99 | 820 | 8170 | 0 | 0 (0 %) | 581 (70 %) | 593 (72 %) |
 
@@ -21,27 +21,27 @@
 | zh-cn | CSV9.5C | 太晶盛聚 | 2026-06-12 | 208 | 0 |
 | zh-cn | CSV9C | 星彩晶璃 | 2026-05-15 | 208 | 0 |
 | zh-cn | CSV8C | 璀璨诡幻 | 2026-03-13 | 207 | 0 |
-| zh-cn | csm1b | 风暴涌现 | 2022-10-22 | 204 | 0 |
 | zh-cn | CSV7C | 利刃猛醒 | 2026-01-16 | 204 | 0 |
+| zh-cn | csm1b | 风暴涌现 | 2022-10-22 | 204 | 0 |
 | zh-cn | csm2a | 闪耀协同效应 | 2023-01-18 | 194 | 0 |
 | zh-cn | csm2b | 闪耀协同效应 | 2023-01-18 | 193 | 0 |
 | zh-cn | csm2c | 闪耀协同效应 | 2023-01-18 | 192 | 0 |
-| ko | SV4a | 샤이니트레저 ex | 2023-12-01 | 190 | 0 |
 | ko | S4a | 샤이니스타V | 2020-11-20 | 190 | 0 |
+| ko | SV4a | 샤이니트레저 ex | 2023-12-01 | 190 | 0 |
 | ko | S8b | VMAX 클라이맥스 | 2021-12-03 | 184 | 0 |
 | ko | SM12a | TAG TEAM GX 태그올스타즈 | 2019-10-04 | 173 | 0 |
 | ko | S12a | VSTAR 유니버스 | 2022-12-02 | 172 | 0 |
 | ko | SV2a | 포켓몬 카드 151 | 2023-06-16 | 165 | 0 |
 | en | jumbo | Jumbo cards | 2000-02-01 | 160 | 0 |
 | zh-cn | pc-pokemon-chinese-promo | Promo | – | 170 | 11 |
+| zh-cn | CSM1cC | 横空出世 泽 | 2020-10-28 | 151 | 0 |
+| zh-cn | CSM1aC | 横空出世 赫 | 2020-10-28 | 151 | 0 |
 | zh-cn | CSM1bC | 横空出世 苍 | 2020-10-28 | 151 | 0 |
 | zh-cn | csm2.5 | 精彩的比赛 | 2023-03-13 | 151 | 0 |
-| zh-cn | CSM1cC | 横空出世 泽 | 2020-10-28 | 151 | 0 |
 | zh-cn | csm1.5 | 战斗精英 | 2022-12-16 | 151 | 0 |
-| zh-cn | CSM1aC | 横空出世 赫 | 2020-10-28 | 151 | 0 |
-| ko | SM8b | GX 울트라샤이니 ULTIMATE | 2018-10-05 | 150 | 0 |
 | zh-cn | CSM2aC | 交相辉映 沐 | 2023-01-18 | 150 | 0 |
 | zh-cn | CSM2bC | 交相辉映 魁 | 2023-01-18 | 150 | 0 |
+| ko | SM8b | GX 울트라샤이니 ULTIMATE | 2018-10-05 | 150 | 0 |
 | zh-cn | CSM2cC | 交相辉映 唤 | 2023-01-18 | 150 | 0 |
 | zh-cn | CS1bC | 极巨争锋 焰 | 2023-05-19 | 136 | 0 |
 | zh-cn | CS1aC | 横空出世 赫 | 2023-05-19 | 135 | 0 |
@@ -52,61 +52,61 @@
 | zh-cn | CSV3C | 无畏太晶 | 2025-05-16 | 130 | 0 |
 | zh-cn | CSV5C | 黑晶炽诚 | 2025-09-12 | 129 | 0 |
 | zh-cn | CSV4C | 嘉奖回合 | 2025-07-18 | 129 | 0 |
-| zh-cn | CSV2C | 奇迹启程 | 2025-03-21 | 128 | 0 |
 | zh-cn | CSV6C | 真实玄虚 | 2025-11-07 | 128 | 0 |
+| zh-cn | CSV2C | 奇迹启程 | 2025-03-21 | 128 | 0 |
 | zh-cn | CS5bC | 勇魅群星 勇 | 2024-06-18 | 128 | 0 |
 
 ## 2b. Sets ohne Cardmarket-Ausgabe (→ keine Preise)
 
-Je Sprache: ja: 97, ko: 96, zh-cn: 71, zh-tw: 60, de: 22, en: 19
+Je Sprache: ja: 300, zh-tw: 111, ko: 96, zh-cn: 71, de: 22, en: 19
 
 | Sprache | Set | Name | Erschienen | Karten |
 |---|---|---|---|---|
-| en | me55c | 30th Celebration: Classic Collection | 2026-09-16 | 30 |
 | de | me55c | 30th Celebration: Classic Collection | 2026-09-16 | 30 |
+| zh-tw | M6a | 30th CELEBRATION | 2026-09-16 | 160 |
+| zh-tw | MF | 30th CELEBRATION プレミアムデッキセット エーフィ・ブラッキー | 2026-09-16 | 44 |
+| en | me55c | 30th Celebration: Classic Collection | 2026-09-16 | 30 |
+| zh-tw | M6 | ストームエメラルダ | 2026-07-31 | 110 |
 | zh-cn | CSV9.5C | 太晶盛聚 | 2026-06-12 | 0 |
+| zh-tw | M5 | アビスアイ | 2026-05-22 | 118 |
 | zh-cn | CSV9C | 星彩晶璃 | 2026-05-15 | 0 |
 | zh-cn | CBB5C | 宝石包 Vol.5 | 2026-04-24 | 0 |
+| zh-tw | M4 | ニンジャスピナー | 2026-03-13 | 120 |
 | zh-cn | CSV8C | 璀璨诡幻 | 2026-03-13 | 0 |
 | zh-cn | CBB4C | 宝石包 Vol.4 | 2026-02-26 | 0 |
+| zh-tw | M3 | ムニキスゼロ | 2026-01-23 | 117 |
 | zh-cn | CSV7C | 利刃猛醒 | 2026-01-16 | 0 |
+| zh-tw | MC | スタートデッキ100 バトルコレクション | 2025-12-19 | 766 |
+| zh-tw | M2a | MEGAドリームex | 2025-11-28 | 250 |
 | zh-cn | CSV6C | 真实玄虚 | 2025-11-07 | 0 |
 | zh-cn | CBB3C | 宝石包Vol.3 | 2025-09-26 | 0 |
+| zh-tw | M2 | インフェルノX | 2025-09-26 | 116 |
 | zh-cn | CSV5C | 黑晶炽诚 | 2025-09-12 | 0 |
+| zh-tw | M1S | メガシンフォニア | 2025-08-01 | 92 |
+| zh-tw | M1L | メガブレイブ | 2025-08-01 | 92 |
+| zh-tw | M-P | メガ プロモカード | 2025-07-28 | 197 |
 | zh-cn | CSV4C | 嘉奖回合 | 2025-07-18 | 0 |
-| zh-cn | CSV3C | 无畏太晶 | 2025-05-16 | 0 |
+| zh-tw | SV11B | ブラックボルト | 2025-06-06 | 174 |
+| zh-tw | SV11W | ホワイトフレア | 2025-06-06 | 174 |
 | zh-cn | CBB2C | 宝石包Vol.2 | 2025-05-16 | 0 |
+| zh-cn | CSV3C | 无畏太晶 | 2025-05-16 | 0 |
 | zh-cn | CSV2C | 奇迹启程 | 2025-03-21 | 0 |
 | zh-cn | CSV1C | 亘古开来 | 2025-01-17 | 0 |
 | de | 2024sv | McDonald's Kollektion 2024 | 2024-12-04 | 15 |
 | zh-cn | CS6.5C | 胜象星引 | 2024-11-15 | 0 |
 | zh-cn | CS6aC | 碧海暗影 啸 | 2024-09-20 | 0 |
 | zh-cn | CS6bC | 碧海暗影 逐 | 2024-09-20 | 0 |
-| ja | SVLN | スターターセット テラスタイプ：ステラ ニンフィアex | 2024-08-30 | 22 |
 | ja | SVLS | スターターセット テラスタイプ：ステラ ソウブレイズex | 2024-08-30 | 22 |
+| ja | SVLN | スターターセット テラスタイプ：ステラ ニンフィアex | 2024-08-30 | 22 |
 | zh-cn | CS5.5C | 暗影夺辉 | 2024-08-02 | 0 |
+| zh-tw | SVK | デッキビルドBOX ステラミラクル | 2024-07-19 | 42 |
 | ja | SVK | デッキビルドBOX ステラミラクル | 2024-07-19 | 44 |
 | ko | SV6 | 변환의 가면 | 2024-06-21 | 0 |
-| zh-cn | CS5aC | 勇魅群星 魅 | 2024-06-18 | 0 |
-| zh-cn | CS5bC | 勇魅群星 勇 | 2024-06-18 | 0 |
-| ko | SV5a | 크림슨헤이즈 | 2024-05-24 | 0 |
-| ja | CS4b | トリプレットビート | 2024-04-26 | 0 |
-| ja | CS4a | トリプレットビート | 2024-04-26 | 0 |
-| zh-tw | CS3b | 三連音爆 | 2024-04-26 | 0 |
-| ja | CS4Da | トリプレットビート | 2024-04-26 | 0 |
-| ja | CS3a | トリプレットビート | 2024-04-26 | 0 |
-| ja | CS2b | トリプレットビート | 2024-04-26 | 0 |
-| zh-tw | CS4 | 三連音爆 | 2024-04-26 | 0 |
-| ja | CS3.5 | トリプレットビート | 2024-04-26 | 0 |
-| ja | CS1b | トリプレットビート | 2024-04-26 | 0 |
-| ja | CS2a | トリプレットビート | 2024-04-26 | 0 |
-| ja | CS1a | トリプレットビート | 2024-04-26 | 0 |
-| zh-tw | CS3.5 | 三連音爆 | 2024-04-26 | 0 |
 
 ## 3. Cardmarket-Einzelkarten ohne passende Karte bei uns
 
-- Einzelkarten bei Cardmarket: 74925, davon über Produkt-ID mit einer unserer Karten verknüpft: 29778 (39 %)
-- Cardmarket-Ausgaben: 787, davon einem unserer Sets zugeordnet: 260 (33 %)
+- Einzelkarten bei Cardmarket: 74925, davon über Produkt-ID mit einer unserer Karten verknüpft: 29773 (39 %)
+- Cardmarket-Ausgaben: 787, davon einem unserer Sets zugeordnet: 259 (32 %)
 
 Neueste Ausgaben mit Einzelkarten ohne Gegenstück (Beispielnamen):
 
@@ -163,7 +163,8 @@ Neueste Ausgaben mit Einzelkarten ohne Gegenstück (Beispielnamen):
 
 | Modus | Scans | kein Treffer | unsicher | bestätigt | korrigiert | Ø ms |
 |---|---|---|---|---|---|---|
-| single | 17 | 0 | 5 | 5 | 0 | 7298 |
+| single | 21 | 0 | 8 | 5 | 0 | 7742 |
+| binder | 6 | 3 | 3 | 0 | 0 | 3682 |
 
 Art der Korrekturen (Vorschlag ≠ bestätigte Karte):
 
@@ -176,4 +177,4 @@ Neueste Korrekturen:
 |---|---|---|---|---|---|---|---|---|---|
 
 
-_Lauf: 2026-10-23 15:12 UTC, Stand 23d8210_
+_Lauf: 2026-10-23 20:27 UTC, Stand 0665776_

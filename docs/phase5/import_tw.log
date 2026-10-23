@@ -1,39 +1,38 @@
 nohup: ignoring input
-2026-10-23T19:34:42.500510Z [info     ] image_import.list_progress     page=50 source=asia.pokemon-card.com/tw
-2026-10-23T19:36:09.448969Z [info     ] image_import.list_progress     page=100 source=asia.pokemon-card.com/tw
-2026-10-23T19:37:25.851697Z [info     ] image_import.list_progress     page=150 source=asia.pokemon-card.com/tw
-2026-10-23T19:38:39.103222Z [info     ] image_import.list_progress     page=200 source=asia.pokemon-card.com/tw
-2026-10-23T19:39:55.618384Z [info     ] image_import.list_progress     page=250 source=asia.pokemon-card.com/tw
-2026-10-23T19:41:08.797942Z [info     ] image_import.list_progress     page=300 source=asia.pokemon-card.com/tw
-2026-10-23T19:42:16.327870Z [info     ] image_import.list_progress     page=350 source=asia.pokemon-card.com/tw
-2026-10-23T19:43:26.987803Z [info     ] image_import.list_progress     page=400 source=asia.pokemon-card.com/tw
-2026-10-23T19:44:37.324204Z [info     ] image_import.list_progress     page=450 source=asia.pokemon-card.com/tw
-2026-10-23T19:45:51.630432Z [info     ] image_import.list_progress     page=500 source=asia.pokemon-card.com/tw
-2026-10-23T19:47:15.080696Z [info     ] image_import.list_progress     page=550 source=asia.pokemon-card.com/tw
-2026-10-23T19:43:46.844940Z [info     ] image_import.list_progress     page=600 source=asia.pokemon-card.com/tw
-2026-10-23T19:44:55.994679Z [info     ] image_import.list_progress     page=650 source=asia.pokemon-card.com/tw
-2026-10-23T19:46:17.014830Z [info     ] image_import.list_progress     page=700 source=asia.pokemon-card.com/tw
-2026-10-23T19:47:12.394600Z [info     ] image_import.matched_by_name   matched=0 source=asia.pokemon-card.com/tw
-2026-10-23T19:47:14.002966Z [info     ] image_import.done              dry_run=False fallbacks=0 images={'asia.pokemon-card.com/tw': 242}
+2026-10-23T20:07:28.747446Z [info     ] image_import.list_progress     page=50 source=asia.pokemon-card.com/tw
+2026-10-23T20:08:46.301370Z [info     ] image_import.list_progress     page=100 source=asia.pokemon-card.com/tw
+2026-10-23T20:10:04.047623Z [info     ] image_import.list_progress     page=150 source=asia.pokemon-card.com/tw
+2026-10-23T20:11:23.630850Z [info     ] image_import.list_progress     page=200 source=asia.pokemon-card.com/tw
+2026-10-23T20:12:40.044648Z [info     ] image_import.list_progress     page=250 source=asia.pokemon-card.com/tw
+2026-10-23T20:13:58.086391Z [info     ] image_import.list_progress     page=300 source=asia.pokemon-card.com/tw
+2026-10-23T20:15:10.797229Z [info     ] image_import.list_progress     page=350 source=asia.pokemon-card.com/tw
+2026-10-23T20:16:36.830420Z [info     ] image_import.list_progress     page=400 source=asia.pokemon-card.com/tw
+2026-10-23T20:17:57.477242Z [info     ] image_import.list_progress     page=450 source=asia.pokemon-card.com/tw
+2026-10-23T20:19:20.110139Z [info     ] image_import.list_progress     page=500 source=asia.pokemon-card.com/tw
+2026-10-23T20:20:38.668161Z [info     ] image_import.list_progress     page=550 source=asia.pokemon-card.com/tw
+2026-10-23T20:21:59.517430Z [info     ] image_import.list_progress     page=600 source=asia.pokemon-card.com/tw
+2026-10-23T20:23:20.245360Z [info     ] image_import.list_progress     page=650 source=asia.pokemon-card.com/tw
+2026-10-23T20:24:41.688652Z [info     ] image_import.list_progress     page=700 source=asia.pokemon-card.com/tw
+2026-10-23T20:25:36.572817Z [info     ] image_import.matched_by_name   matched=0 source=asia.pokemon-card.com/tw
+2026-10-23T20:26:40.007561Z [info     ] image_import.done              dry_run=False fallbacks=36 images={'asia.pokemon-card.com/tw': 6109}
 # Bild-Import
 
 | Quelle | Anfragen | zugeordnet | Bilder gesetzt | angelegt | ohne Treffer | Fehler |
 |---|---:|---:|---:|---:|---:|---:|
-| asia.pokemon-card.com/tw | 732 | 8307 | 242 | 0 | 6060 | 0 |
+| asia.pokemon-card.com/tw | 732 | 8856 | 6109 | 5511 | 0 | 0 |
 
 ## asia.pokemon-card.com/tw
 
 - Liste: 14587 Karten, Detailseiten: 0 (ohne Nummer: 0)
-- Nicht zugeordnet (Setcode: Anzahl): MC: 886, M2a: 486, SV11W: 254, SV11B: 254, AC2a: 200, AC2b: 200, M-P: 199, AS6a: 196, AS6b: 194, As5b: 186, AS5a: 184, AC2D: 176, SVM: 175, AS5D: 169, AS6D: 168, M6a: 160, AC1a: 158, AC1b: 158, AC1D: 157, S-P: 151, M4: 120, M5: 118, M3: 117, M2: 116, M6: 110
 
-Ersatzbilder aus anderen Sprachfassungen: 0
+Ersatzbilder aus anderen Sprachfassungen: 36
 
 ## Abdeckung (mit Bild / gesamt)
 
 - de: 19770/19900 (eigene Sprache 15818)
-- en: 20793/21405 (eigene Sprache 20793)
-- ja: 21090/23642 (eigene Sprache 21058)
+- en: 20782/21370 (eigene Sprache 20782)
+- ja: 25125/25471 (eigene Sprache 25071)
 - ko: 820/820 (eigene Sprache 581)
 - zh-cn: 5252/5300 (eigene Sprache 4423)
-- zh-tw: 8070/8074 (eigene Sprache 8070)
+- zh-tw: 13581/13585 (eigene Sprache 13581)
 

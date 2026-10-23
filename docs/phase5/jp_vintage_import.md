@@ -1,4 +1,4 @@
-2026-10-23T19:51:38.697112Z [info     ] pricecharting_catalog.done     cards=3619 consoles=33 cost=0.24019999999999997 missing=0 sets=33
+2026-10-23T20:03:37.463268Z [info     ] pricecharting_catalog.done     cards=4013 consoles=33 cost=0.23020000000000002 missing=0 sets=33
 PriceCharting-Sets: 33 gefunden (ja)
   ja     pokemon-japanese-expansion-pack
   ja     pokemon-japanese-jungle
@@ -33,30 +33,30 @@ PriceCharting-Sets: 33 gefunden (ja)
   ja     pokemon-japanese-2002-mcdonald%27s
   ja     pokemon-japanese-player%27s-club
   ja     pokemon-japanese-cd-promo
-Importiert: 33 Sets, 3619 Karten, davon mit Preis 3549; übersprungen (ohne Nummer): 456; Kosten 0.240 $
-  TCGdex PMCG3: entfernt 48 Karten
-  TCGdex PMCG2: entfernt 48 Karten
-  TCGdex PMCG1: entfernt 102 Karten
-  TCGdex PMCG6: entfernt 98 Karten
-  TCGdex PMCG4: entfernt 65 Karten
-  TCGdex PMCG5: entfernt 96 Karten
-  TCGdex neo1: entfernt 96 Karten
-  TCGdex neo2: entfernt 57 Karten
-  TCGdex neo3: entfernt 57 Karten
-  TCGdex neo4: entfernt 113 Karten
-  TCGdex web1: entfernt 47 Karten
-  TCGdex VS1: entfernt 143 Karten
-  TCGdex E1: entfernt 128 Karten
-  TCGdex E2: entfernt 92 Karten
-  TCGdex E3: entfernt 90 Karten
-  TCGdex E5: entfernt 91 Karten
-  TCGdex E4: entfernt 91 Karten
-  TCGdex PCG1: entfernt 82 Karten
-  TCGdex PCG2: entfernt 82 Karten
-  TCGdex PCG3: entfernt 85 Karten
-  TCGdex PCG4: entfernt 106 Karten
-  TCGdex PCG6: entfernt 86 Karten
-  TCGdex PCG5: entfernt 86 Karten
-  TCGdex PCG7: entfernt 52 Karten
-  TCGdex PCG8: entfernt 75 Karten
-  TCGdex PCG9: entfernt 68 Karten
+Importiert: 33 Sets, 4013 Karten, davon mit Preis 3932; übersprungen (ohne Nummer): 62; Kosten 0.230 $
+  TCGdex PMCG3: entfernt 0 Karten
+  TCGdex PMCG2: entfernt 0 Karten
+  TCGdex PMCG1: entfernt 0 Karten
+  TCGdex PMCG4: entfernt 0 Karten
+  TCGdex PMCG5: entfernt 0 Karten
+  TCGdex PMCG6: entfernt 0 Karten
+  TCGdex neo1: entfernt 0 Karten
+  TCGdex neo2: entfernt 0 Karten
+  TCGdex neo4: entfernt 0 Karten
+  TCGdex neo3: entfernt 0 Karten
+  TCGdex web1: entfernt 0 Karten
+  TCGdex VS1: entfernt 0 Karten
+  TCGdex E1: entfernt 0 Karten
+  TCGdex E2: entfernt 0 Karten
+  TCGdex E5: entfernt 0 Karten
+  TCGdex E3: entfernt 0 Karten
+  TCGdex E4: entfernt 0 Karten
+  TCGdex PCG1: entfernt 0 Karten
+  TCGdex PCG2: entfernt 0 Karten
+  TCGdex PCG3: entfernt 0 Karten
+  TCGdex PCG5: entfernt 0 Karten
+  TCGdex PCG6: entfernt 0 Karten
+  TCGdex PCG4: entfernt 0 Karten
+  TCGdex PCG7: entfernt 0 Karten
+  TCGdex PCG8: entfernt 0 Karten
+  TCGdex PCG9: entfernt 0 Karten
