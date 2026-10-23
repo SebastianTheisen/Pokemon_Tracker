@@ -51,10 +51,22 @@ _STOPWORDS = frozenset({"pokemon", "the", "of", "and", "collection", "set", "car
 _LANGUAGE_WORDS = frozenset({"japanese", "korean", "chinese"})
 
 
+def _stem(word: str) -> str:
+    return word[:-1] if len(word) > 3 and word.endswith("s") else word  # noqa: PLR2004
+
+
 def words(text: str) -> frozenset[str]:
-    """Vergleichswörter: „McDonald's Collection 2023“ → {mcdonalds, 2023}."""
+    """Vergleichswörter: „McDonald's Collection 2023“ → {mcdonald, 2023}; Mehrzahl = Einzahl
+    („Miracle Twin“ = „miracle-twins“)."""
     plain = text.casefold().replace("%27", "").replace("'", "").replace("&", " ")
-    return frozenset(w for w in re.split(r"[^a-z0-9]+", plain) if w and w not in _STOPWORDS)
+    return frozenset(_stem(w) for w in re.split(r"[^a-z0-9]+", plain) if w and w not in _STOPWORDS)
+
+
+def guessed_slug(name: str) -> str:
+    """Adresse eines japanischen Sets aus dem englischen Namen, wenn die Übersicht es nicht
+    verlinkt: „Jet-Black Spirit“ → ``pokemon-japanese-jet-black-spirit``."""
+    plain = name.casefold().replace("'", "%27").replace("é", "e")
+    return "pokemon-japanese-" + re.sub(r"[^a-z0-9&%]+", "-", plain).strip("-")
 
 
 def card_key(name: str) -> str:
@@ -89,6 +101,8 @@ class ImageReport:
     sets_missing: int = 0
     mapping: dict[str, str] = field(default_factory=dict)  # „en/tk-xy-su …“ → Slug
     unmapped: list[str] = field(default_factory=list)
+    guessed: list[str] = field(default_factory=list)  # Adressen ohne Link in der Übersicht
+    missing: list[str] = field(default_factory=list)  # bei PriceCharting nicht gefunden
     images_set: int = 0
     fallbacks: int = 0
     cost_usd: float = 0.0
@@ -101,6 +115,7 @@ class _Target:
     label: str
     language: str
     name: str
+    translated: bool = False  # englischer Name aus der Set-Code-Liste
 
 
 async def _targets(session: AsyncSession, limit: int | None) -> list[_Target]:
@@ -117,8 +132,16 @@ async def _targets(session: AsyncSession, limit: int | None) -> list[_Target]:
     ).all()
     targets = []
     for set_id, external_id, language, name in rows[:limit]:
-        english = translated_set_name(external_id, language, name) or name
-        targets.append(_Target(set_id, f"{language}/{external_id} {name}", language, english))
+        english = translated_set_name(external_id, language, name)
+        targets.append(
+            _Target(
+                set_id,
+                f"{language}/{external_id} {name}",
+                language,
+                english or name,
+                translated=english is not None,
+            )
+        )
     return targets
 
 
@@ -186,6 +209,9 @@ async def import_pricecharting_images(
     chosen: dict[uuid.UUID, str] = {}
     for target in targets:
         slug = choose_slug(target.name, target.language, slugs)
+        if slug is None and target.language == "ja" and target.translated:
+            slug = guessed_slug(target.name)  # fehlt sie, bleibt das Set ohne Bild
+            report.guessed.append(slug)
         if slug is None:
             report.unmapped.append(target.label)
             continue
@@ -207,6 +233,12 @@ async def import_pricecharting_images(
             report.errors.append(f"Apify: {exc}")
             break
         report.cost_usd += cost
+        returned = {
+            str(c.get("collectionUrl") or "").rstrip("/").rpartition("/")[2].lower()
+            for c in collections
+            if c.get("products")
+        }
+        report.missing += [c.slug for c in batch if c.slug not in returned]
         async with session_factory() as session:
             for collection in collections:
                 slug = str(collection.get("collectionUrl") or "").rstrip("/").rpartition("/")[2]
@@ -231,8 +263,14 @@ async def import_pricecharting_images(
 def render_image_report(report: ImageReport, *, dry_run: bool) -> str:
     lines = [f"Sets mit fehlenden Bildern: {report.sets_missing}"]
     lines += [f"  {label} → {slug}" for label, slug in report.mapping.items()]
+    if report.guessed:
+        lines.append(
+            "Davon Adresse abgeleitet (nicht in der Übersicht): " + ", ".join(report.guessed)
+        )
     if report.unmapped:
         lines.append("Ohne passende PriceCharting-Seite: " + "; ".join(report.unmapped[:60]))
+    if report.missing:
+        lines.append("Bei PriceCharting nicht gefunden: " + ", ".join(report.missing))
     if not dry_run:
         lines.append(
             f"Bilder gesetzt: {report.images_set}, deutsche Ersatzbilder: {report.fallbacks}, "

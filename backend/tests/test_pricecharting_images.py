@@ -15,7 +15,11 @@ from app.models import Card, CardSet
 from app.providers.apify import ApifyClient
 from app.providers.fx import EcbRates
 from app.services.pricecharting_catalog import PriceChartingCatalog
-from app.services.pricecharting_images import choose_slug, import_pricecharting_images
+from app.services.pricecharting_images import (
+    choose_slug,
+    guessed_slug,
+    import_pricecharting_images,
+)
 
 NOW = datetime(2026, 10, 23, tzinfo=UTC)
 SLUGS = [
@@ -32,6 +36,10 @@ def test_choose_slug() -> None:
     assert choose_slug("VMAX Climax", "ja", SLUGS) == "pokemon-japanese-vmax-climax"
     assert choose_slug("My First Battle", "en", SLUGS) == "pokemon-my-first-battle"
     assert choose_slug("Base Set", "en", SLUGS) is None
+    assert choose_slug("Miracle Twin", "ja", ["pokemon-japanese-miracle-twins"]) == (
+        "pokemon-japanese-miracle-twins"
+    )
+    assert guessed_slug("Jet-Black Spirit") == "pokemon-japanese-jet-black-spirit"
 
 
 MCDONALDS = {
