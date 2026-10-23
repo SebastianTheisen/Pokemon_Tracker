@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
-from app.models import Card, CardSet
+from app.models import Card, CardSet, PricePoint
 from app.providers.apify import ApifyClient
 from app.providers.fx import EcbRates
 from app.services.pricecharting_catalog import PriceChartingCatalog
@@ -119,3 +119,82 @@ async def test_missing_images_are_filled(
     assert images[("en", "1")] == ("https://img/pika.jpg", "pricecharting", None)
     assert images[("de", "2")] == ("https://img/char.jpg", "fallback", "en")  # englisches Bild
     assert images[("en", "4")] == (None, None, None)  # nicht bei PriceCharting
+
+
+EEVEE_HEROES = {
+    "collectionUrl": "https://www.pricecharting.com/console/pokemon-japanese-eevee-heroes",
+    "priceColumns": {"used": "Ungraded"},
+    "products": [
+        {"productId": 11, "productName": "Eevee #1", "imageUrl": "https://img/1.jpg"},
+        {"productId": 12, "productName": "Umbreon V #46", "imageUrl": "https://img/46.jpg"},
+        {"productId": 13, "productName": "Umbreon VMAX #95", "imageUrl": "https://img/95.jpg",
+         "prices": {"used": 1250}},
+        {"productId": 14, "productName": "Eevee Heroes Booster Box", "imageUrl": "https://img/b"},
+    ],
+}  # fmt: skip
+
+
+async def test_missing_japanese_cards_are_added(
+    session_factory: async_sessionmaker[AsyncSession], settings: Settings
+) -> None:
+    """Secret Rares über der offiziellen Set-Größe (S6a 095) fehlen bei TCGdex und in der
+    offiziellen Datenbank – PriceCharting führt sie."""
+    async with session_factory() as session:
+        card_set = CardSet(external_id="S6a", language="ja", name="イーブイヒーローズ")
+        session.add(card_set)
+        await session.flush()
+        session.add_all(
+            Card(external_id=f"S6a-{n}", language="ja", set_id=card_set.id, number=n,
+                 number_norm=n.lstrip("0"), name=name, image_url=f"https://x/{n}")
+            for n, name in (("001", "イーブイ"), ("046", "ブラッキーV"))
+        )  # fmt: skip
+        await session.commit()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if request.url.host == "www.ecb.europa.eu":
+            return httpx.Response(200, text="<Cube currency='USD' rate='1.25'/>")
+        if path.endswith("/users/me/limits"):
+            body: Any = {
+                "data": {"current": {"monthlyUsageUsd": 1}, "limits": {"maxMonthlyUsageUsd": 8}}
+            }
+        elif "cheerio-scraper" in path:
+            body = {"data": {"id": "c", "status": "SUCCEEDED", "defaultDatasetId": "links"}}
+        elif path.endswith("/datasets/links/items"):
+            body = [{"links": ["/console/pokemon-base-set"]}]  # Eevee Heroes fehlt dort
+        elif path.endswith("/runs"):
+            assert json.loads(request.content)["collections"] == [
+                "https://www.pricecharting.com/console/pokemon-japanese-eevee-heroes"
+            ]
+            body = {"data": {"id": "r", "status": "SUCCEEDED", "defaultDatasetId": "d"}}
+        elif path.endswith("/datasets/d/items"):
+            body = [EEVEE_HEROES]
+        else:
+            return httpx.Response(404)
+        return httpx.Response(200, content=json.dumps(body).encode())
+
+    mock = httpx.MockTransport(handler)
+    catalog = PriceChartingCatalog(
+        session_factory,
+        settings,
+        EcbRates(user_agent="t", transport=mock, clock=lambda: NOW),
+        lambda: ApifyClient("token", user_agent="t", transport=mock),
+        transport=mock,
+        clock=lambda: NOW,
+    )
+
+    report = await import_pricecharting_images(session_factory, catalog, gaps=True)
+
+    assert report.cards_added == {"ja/S6a イーブイヒーローズ": 1}, report
+    async with session_factory() as session:
+        umbreon = await session.scalar(select(Card).where(Card.number == "095"))
+        assert umbreon is not None
+        assert (umbreon.name, umbreon.number_norm, umbreon.image_url) == (
+            "ブラッキーVMAX",
+            "95",
+            "https://img/95.jpg",
+        )
+        price = await session.scalar(
+            select(PricePoint.value).where(PricePoint.card_id == umbreon.id)
+        )
+        assert str(price) == "1000.00"  # 1250 $ / 1,25

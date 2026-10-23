@@ -22,13 +22,16 @@ import re
 import uuid
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 import structlog
 from sqlalchemy import func, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.models import Card, CardSet, ImageSource
+from app.models import Card, CardSet, CardSource, ImageSource
 from app.providers.apify import ApifyError
 from app.services.card_names import translate_card_name
 from app.services.catalog_numbers import normalize_number
@@ -37,6 +40,7 @@ from app.services.pricecharting_catalog import (
     BATCH,
     Console,
     PriceChartingCatalog,
+    japanese_name,
     parse_product,
 )
 from app.services.set_names import translated_set_name
@@ -104,6 +108,7 @@ class ImageReport:
     guessed: list[str] = field(default_factory=list)  # Adressen ohne Link in der Übersicht
     missing: list[str] = field(default_factory=list)  # bei PriceCharting nicht gefunden
     images_set: int = 0
+    cards_added: dict[str, int] = field(default_factory=dict)  # Set → neu angelegte Karten
     fallbacks: int = 0
     cost_usd: float = 0.0
     errors: list[str] = field(default_factory=list)
@@ -118,21 +123,24 @@ class _Target:
     translated: bool = False  # englischer Name aus der Set-Code-Liste
 
 
-async def _targets(session: AsyncSession, limit: int | None) -> list[_Target]:
+async def _targets(session: AsyncSession, limit: int | None, *, gaps: bool) -> list[_Target]:
+    """Sets mit fehlenden Bildern; mit ``gaps`` zusätzlich alle japanischen Sets, deren
+    englischer Name bekannt ist (dort fehlen oft Secret Rares über der Set-Größe)."""
     missing = func.count().filter(Card.image_url.is_(None))
     rows = (
         await session.execute(
-            select(CardSet.id, CardSet.external_id, CardSet.language, CardSet.name)
+            select(CardSet.id, CardSet.external_id, CardSet.language, CardSet.name, missing)
             .join(Card, Card.set_id == CardSet.id)
             .where(CardSet.language.in_(IMAGE_LANGUAGES), ~CardSet.external_id.startswith("pc-"))
             .group_by(CardSet.id)
-            .having(missing >= MIN_MISSING)
             .order_by(missing.desc())
         )
     ).all()
     targets = []
-    for set_id, external_id, language, name in rows[:limit]:
+    for set_id, external_id, language, name, without_image in rows:
         english = translated_set_name(external_id, language, name)
+        if without_image < MIN_MISSING and not (gaps and language == "ja" and english):
+            continue
         targets.append(
             _Target(
                 set_id,
@@ -142,7 +150,7 @@ async def _targets(session: AsyncSession, limit: int | None) -> list[_Target]:
                 translated=english is not None,
             )
         )
-    return targets
+    return targets[:limit]
 
 
 def _english_card_name(name: str, language: str) -> str:
@@ -187,17 +195,78 @@ async def _apply_collection(
     return updated
 
 
-async def import_pricecharting_images(
+async def _add_missing_cards(
+    session: AsyncSession,
+    catalog: PriceChartingCatalog,
+    target: _Target,
+    collection: dict[str, Any],
+    *,
+    per_euro: Decimal,
+) -> int:
+    """Karten, die PriceCharting im Set führt und wir nicht (gleiche Nummer fehlt) –
+    z. B. Secret Rares über der offiziellen Set-Größe. Je fehlender Nummer eine Karte."""
+    rows = (
+        await session.execute(
+            select(Card.number, Card.number_norm).where(Card.set_id == target.set_id)
+        )
+    ).all()
+    present = {number_norm for _, number_norm in rows}
+    width = max((len(number) for number, _ in rows if number.isdigit()), default=0)
+    columns = collection.get("priceColumns") or {}
+    now = datetime.now(UTC)
+    added = 0
+    for product in collection.get("products") or []:
+        parsed = parse_product(product) if isinstance(product, dict) else None
+        if parsed is None or not product.get("productId"):
+            continue
+        name, number = parsed
+        number_norm = normalize_number(number)
+        if number_norm in present:
+            continue
+        present.add(number_norm)
+        printed = number.zfill(width) if number.isdigit() else number
+        image = str(product.get("imageUrl") or "")[:500] or None
+        card_id = await session.scalar(
+            insert(Card)
+            .values(
+                external_id=f"pc-{product['productId']}",
+                language=target.language,
+                set_id=target.set_id,
+                number=printed[:32],
+                number_norm=number_norm,
+                name=japanese_name(name)[:200] if target.language == "ja" else name[:200],
+                image_url=image,
+                image_source=ImageSource.PRICECHARTING if image else None,
+                source=CardSource.PRICECHARTING,
+            )
+            .on_conflict_do_nothing(
+                index_elements=[Card.external_id, Card.language],
+                index_where=Card.external_id.is_not(None),
+            )
+            .returning(Card.id)
+        )
+        if card_id is None:
+            continue
+        added += 1
+        await catalog.store_prices(
+            session, card_id, product=product, columns=columns, per_euro=per_euro, now=now
+        )
+    return added
+
+
+async def import_pricecharting_images(  # noqa: PLR0912 – ein Lauf über alle Sets
     session_factory: async_sessionmaker[AsyncSession],
     catalog: PriceChartingCatalog,
     *,
     dry_run: bool = False,
     limit: int | None = None,
+    gaps: bool = False,
 ) -> ImageReport:
-    """Bilder für Sets ohne Bilder. Probelauf: nur Set-Liste und Zuordnung (~0,005 $)."""
+    """Bilder für Sets ohne Bilder; mit ``gaps`` auch fehlende Karten japanischer Sets.
+    Probelauf: nur Set-Liste und Zuordnung (~0,005 $)."""
     report = ImageReport()
     async with session_factory() as session:
-        targets = await _targets(session, limit)
+        targets = await _targets(session, limit, gaps=gaps)
     report.sets_missing = len(targets)
     if not targets:
         return report
@@ -225,6 +294,7 @@ async def import_pricecharting_images(
         if target.set_id in chosen:
             by_slug[chosen[target.set_id]].append(target)
     unique_slugs = list(by_slug)
+    per_euro = await catalog.usd_per_euro() if gaps else Decimal(1)
     for start in range(0, len(unique_slugs), BATCH):
         batch = [Console(slug, "") for slug in unique_slugs[start : start + BATCH]]
         try:
@@ -246,6 +316,12 @@ async def import_pricecharting_images(
                     report.images_set += await _apply_collection(
                         session, target, collection, shared=usage[slug.lower()] > 1
                     )
+                    if gaps and target.language == "ja" and usage[slug.lower()] == 1:
+                        added = await _add_missing_cards(
+                            session, catalog, target, collection, per_euro=per_euro
+                        )
+                        if added:
+                            report.cards_added[target.label] = added
             await session.commit()
     async with session_factory() as session:
         report.fallbacks = await fill_image_fallbacks(session)  # deutsche Karten
@@ -274,7 +350,8 @@ def render_image_report(report: ImageReport, *, dry_run: bool) -> str:
     if not dry_run:
         lines.append(
             f"Bilder gesetzt: {report.images_set}, deutsche Ersatzbilder: {report.fallbacks}, "
-            f"Kosten {report.cost_usd:.3f} $"
+            f"Karten ergänzt: {sum(report.cards_added.values())}, Kosten {report.cost_usd:.3f} $"
         )
+        lines += [f"  + {label}: {count}" for label, count in report.cards_added.items()]
     lines += [f"  ! {error}" for error in report.errors]
     return "\n".join(lines)

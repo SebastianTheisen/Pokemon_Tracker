@@ -140,6 +140,7 @@ _SEALED = re.compile(
     r"file|album|playmat|coins?|set|kit)\b",
     re.I,
 )
+_JP_SUFFIX = re.compile(r"\s+(ex|EX|GX|V|VMAX|VSTAR|V-UNION|BREAK|LV\.X|δ)$")
 _BRACKET = re.compile(r"\s*(\[[^\]]*\])\s*$")
 
 ApifyFactory = Callable[[], ApifyClient]
@@ -227,11 +228,16 @@ def japanese_name(name: str) -> str:
         if base.startswith(english):
             base, prefix = base.removeprefix(english), local
             break
+    suffix = ""
     species_id = species_id_by_name(base)
+    if species_id is None and (match := _JP_SUFFIX.search(base)):
+        # „Umbreon VMAX“ → „ブラッキーVMAX“ (Zusatz wie auf japanischen Karten direkt angehängt)
+        base, suffix = base[: match.start()], match.group(1)
+        species_id = species_id_by_name(base)
     local_name = species_name(species_id, "ja") if species_id else None
     if local_name is None:
         return name
-    return f"{prefix}{local_name}" + (f" {bracket.group(1)}" if bracket else "")
+    return f"{prefix}{local_name}{suffix}" + (f" {bracket.group(1)}" if bracket else "")
 
 
 def replaced_tcgdex_sets() -> frozenset[str]:
@@ -290,6 +296,25 @@ class PriceChartingCatalog:
         except httpx.HTTPStatusError as exc:
             log.info("pricecharting_catalog.direct_blocked", status=exc.response.status_code)
         return parse_consoles(await self._links_via_apify(), languages)
+
+    async def usd_per_euro(self) -> Decimal:
+        """Aktueller EZB-Kurs (USD je Euro) für die Umrechnung der Preise."""
+        return (await self._rates.rate("USD")).per_euro
+
+    async def store_prices(
+        self,
+        session: AsyncSession,
+        card_id: Any,
+        *,
+        product: dict[str, Any],
+        columns: dict[str, Any],
+        per_euro: Decimal,
+        now: datetime,
+    ) -> bool:
+        """Preise eines Produkts zu einer Karte speichern (wie beim Set-Import)."""
+        return await self._store_prices(
+            session, card_id, product=product, columns=columns, per_euro=per_euro, now=now
+        )
 
     async def links(self) -> str:
         """Alle Set-Links der Übersicht (über Apify, der Server wird gesperrt)."""

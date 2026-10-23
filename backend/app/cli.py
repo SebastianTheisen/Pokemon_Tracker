@@ -236,7 +236,7 @@ async def _import_pricecharting(
     )
     if args.images:
         images = await import_pricecharting_images(
-            factory, catalog, dry_run=args.dry_run, limit=args.limit
+            factory, catalog, dry_run=args.dry_run, limit=args.limit, gaps=args.gaps
         )
         print(render_pc_images(images, dry_run=args.dry_run))
         return
@@ -683,6 +683,11 @@ def _add_catalog_commands(commands: Any) -> None:
         "--images",
         action="store_true",
         help="nur fehlende Kartenbilder ergänzen (Trainer-Kits, McDonald's, …)",
+    )
+    pricecharting.add_argument(
+        "--gaps",
+        action="store_true",
+        help="mit --images: fehlende Karten japanischer Sets ergänzen (z. B. Secret Rares)",
     )
     pricecharting.add_argument(
         "--jp-vintage",
