@@ -1,0 +1,36 @@
+nohup: ignoring input
+2026-10-23T15:29:11.950536Z [info     ] image_import.list_progress     page=50 source=pokemon-card.com
+2026-10-23T15:30:02.288526Z [info     ] image_import.list_progress     page=100 source=pokemon-card.com
+2026-10-23T15:30:43.687372Z [info     ] image_import.list_progress     page=150 source=pokemon-card.com
+2026-10-23T15:31:23.405422Z [info     ] image_import.list_progress     page=200 source=pokemon-card.com
+2026-10-23T15:31:54.741417Z [info     ] image_import.list_progress     page=250 source=pokemon-card.com
+2026-10-23T15:32:27.181124Z [info     ] image_import.list_progress     page=300 source=pokemon-card.com
+2026-10-23T15:32:53.746925Z [info     ] image_import.list_progress     page=350 source=pokemon-card.com
+2026-10-23T15:33:31.674558Z [info     ] image_import.list_progress     page=400 source=pokemon-card.com
+2026-10-23T15:34:09.019650Z [info     ] image_import.list_progress     page=450 source=pokemon-card.com
+2026-10-23T15:34:46.900501Z [info     ] image_import.list_progress     page=500 source=pokemon-card.com
+2026-10-23T15:35:28.923772Z [info     ] image_import.list_progress     page=550 source=pokemon-card.com
+2026-10-23T15:36:10.224528Z [info     ] image_import.list_progress     page=600 source=pokemon-card.com
+2026-10-23T15:36:13.182701Z [info     ] image_import.matched_by_name   matched=0 source=pokemon-card.com
+2026-10-23T15:37:26.612042Z [info     ] image_import.done              dry_run=False fallbacks=0 images={'pokemon-card.com': 8828}
+# Bild-Import
+
+| Quelle | Anfragen | zugeordnet | Bilder gesetzt | angelegt | ohne Treffer | Fehler |
+|---|---:|---:|---:|---:|---:|---:|
+| pokemon-card.com | 603 | 8978 | 8828 | 8327 | 0 | 0 |
+
+## pokemon-card.com
+
+- Liste: 23492 Karten, Detailseiten: 0 (ohne Nummer: 0)
+
+Ersatzbilder aus anderen Sprachfassungen: 0
+
+## Abdeckung (mit Bild / gesamt)
+
+- de: 19770/19900 (eigene Sprache 15818)
+- en: 20793/21405 (eigene Sprache 20793)
+- ja: 21090/23642 (eigene Sprache 21058)
+- ko: 820/820 (eigene Sprache 581)
+- zh-cn: 5252/5300 (eigene Sprache 4423)
+- zh-tw: 8070/8074 (eigene Sprache 8070)
+
