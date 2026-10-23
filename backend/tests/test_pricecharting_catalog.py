@@ -226,7 +226,7 @@ EXPANSION_PACK = {
     "collectionUrl": "https://www.pricecharting.com/console/pokemon-japanese-expansion-pack",
     "collectionName": "Pokemon Japanese Expansion Pack",
     "priceColumns": {"used": "Ungraded"},
-    "productCount": 4,
+    "productCount": 5,
     "products": [
         {"productId": 11, "productName": "Charizard #6", "imageUrl": "https://img/6.jpg",
          "prices": {"used": 250}},
@@ -234,6 +234,8 @@ EXPANSION_PACK = {
          "prices": {"used": 900}},
         {"productId": 13, "productName": "Bill #74", "imageUrl": "https://img/b.jpg",
          "prices": {"used": 2}},
+        {"productId": 15, "productName": "Moo-Moo Milk", "imageUrl": "https://img/m.jpg",
+         "prices": {"used": 3}},
         {"productId": 14, "productName": "Expansion Pack Booster", "prices": {"used": 99}},
     ],
 }  # fmt: skip
@@ -311,7 +313,7 @@ async def test_jp_vintage_replaces_broken_tcgdex_set(
     report = await service.run_vintage()
 
     assert len(requested) == math.ceil(len(JP_VINTAGE) / 10)
-    assert (report.sets, report.cards, report.skipped_products) == (1, 3, 1)
+    assert (report.sets, report.cards, report.skipped_products) == (1, 4, 1)  # Booster nicht
     assert "pokemon-japanese-jungle" in report.missing  # TCGdex-Set bliebe dann bestehen
     assert [(r.tcgdex_id, r.removed, r.kept, r.set_removed) for r in report.replacements] == [
         ("PMCG1", 2, 1, False)
@@ -325,7 +327,7 @@ async def test_jp_vintage_replaces_broken_tcgdex_set(
         names = sorted(
             (await session.scalars(select(Card.name).where(Card.set_id == new_set.id))).all()
         )
-        assert names == ["Bill", "リザードン", "リザードン [No Rarity]"]
+        assert names == ["Bill", "Moo-Moo Milk", "リザードン", "リザードン [No Rarity]"]
         remaining = (
             await session.scalars(select(Card.id).where(Card.external_id.like("PMCG1-%")))
         ).all()

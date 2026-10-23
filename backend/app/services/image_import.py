@@ -858,22 +858,39 @@ async def _create_card(
 
 # Japan: Set-Code im Bildpfad = Set-ID bei TCGdex (``M6a``, ``SV2a``). Taiwan liest den Code
 # aus einem Markenbild – ob er zu TCGdex passt, ist offen, deshalb dort keine neuen Sets.
-NEW_SET_LANGUAGES = frozenset({"ja"})
+NEW_SET_LANGUAGES = frozenset({"ja", "zh-tw"})
 _SET_CODE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+-]{0,15}$")
 
 
 async def _create_set(
     session: AsyncSession, index: _CatalogIndex, set_code: str, language: str
 ) -> Any:
-    """Neues Set aus der offiziellen Datenbank (Name = Set-Code, bis TCGdex es kennt)."""
+    """Neues Set aus der offiziellen Datenbank, bis TCGdex es kennt.
+
+    Name und Erscheinungsdatum vom japanischen Set mit demselben Code (Taiwan übernimmt die
+    japanischen Codes, z. B. „SV11B“, „M2a“), sonst der Code selbst.
+    """
     if language not in NEW_SET_LANGUAGES or not _SET_CODE.match(set_code):
         return None
+    japanese = None
+    if language != "ja":
+        japanese = (
+            await session.execute(
+                select(CardSet.name, CardSet.release_date)
+                .where(
+                    CardSet.language == "ja",
+                    func.lower(CardSet.external_id) == set_code.casefold(),
+                )
+                .limit(1)
+            )
+        ).first()
     statement = (
         insert(CardSet)
         .values(
             external_id=set_code,
             language=language,
-            name=set_code,
+            name=japanese.name if japanese else set_code,
+            release_date=japanese.release_date if japanese else None,
             series_name="Offizielle Datenbank",
         )
         .on_conflict_do_nothing(index_elements=[CardSet.external_id, CardSet.language])

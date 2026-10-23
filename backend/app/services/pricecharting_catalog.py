@@ -135,6 +135,11 @@ _JP_PREFIXES = (
     ("Blaine's ", "カツラの"),
     ("Giovanni's ", "サカキの"),
 )
+_SEALED = re.compile(
+    r"\b(booster|box|pack|deck|display|tin|collection|binder|sleeves?|case|bundle|starter|"
+    r"file|album|playmat|coins?|set|kit)\b",
+    re.I,
+)
 _BRACKET = re.compile(r"\s*(\[[^\]]*\])\s*$")
 
 ApifyFactory = Callable[[], ApifyClient]
@@ -200,6 +205,14 @@ def metric_name(label: str) -> str | None:
     if key.startswith(("grade_", "psa_10")):
         return key
     return None
+
+
+def unnumbered_card(product: dict[str, Any]) -> tuple[str, str] | None:
+    """Vintage-Karte ohne Nummer („Moo-Moo Milk“) – versiegelte Produkte ausgenommen."""
+    name = str(product.get("productName") or "").strip()
+    if not name or _SEALED.search(name):
+        return None
+    return name, ""
 
 
 def japanese_name(name: str) -> str:
@@ -467,8 +480,11 @@ class PriceChartingCatalog:
         report.sets += 1
         columns = collection.get("priceColumns") or {}
         now = self._now()
+        vintage = slug in JP_VINTAGE
         for product in products:
             parsed = parse_product(product)
+            if parsed is None and vintage:
+                parsed = unnumbered_card(product)  # alte Trainer/Energien haben keine Nummer
             if parsed is None or not product.get("productId"):
                 report.skipped_products += 1  # versiegelt oder ohne Nummer
                 continue

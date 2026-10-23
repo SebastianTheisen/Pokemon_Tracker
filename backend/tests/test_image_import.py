@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from typing import Any
 
 import httpx
@@ -25,6 +26,7 @@ from app.providers.card_images.official import find_number
 from app.providers.card_images.pokemon_com import official_image_url
 from app.providers.card_images.pokemontcg import PtcgSet, SetRef, match_sets, normalize_set_id
 from app.providers.tcgdex import TcgdexClient
+from app.services import image_import
 from app.services.catalog_numbers import normalize_number
 from app.services.catalog_sync import sync_catalog
 from app.services.image_import import (
@@ -681,3 +683,30 @@ async def test_blocked_source_aborts_and_marks_run_incomplete(
     assert jp.requests < 200  # nicht stur weiter bis zum Ende
     async with session_factory() as session:
         assert await last_run_incomplete(session)
+
+
+async def test_taiwan_creates_missing_set_with_japanese_name(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Taiwan nutzt die japanischen Set-Codes – unbekannte Sets bekommen deren Namen."""
+    async with session_factory() as session:
+        session.add(
+            CardSet(
+                external_id="M2a",
+                language="ja",
+                name="MEGAドリームex",
+                release_date=date(2025, 11, 28),
+            )
+        )
+        await session.commit()
+        index = image_import._CatalogIndex([], {})
+
+        set_id = await image_import._create_set(session, index, "M2a", "zh-tw")
+        unknown_id = await image_import._create_set(session, index, "AC2a", "zh-tw")
+        await session.commit()
+
+        created = await session.get(CardSet, set_id)
+        assert created is not None
+        assert (created.name, str(created.release_date)) == ("MEGAドリームex", "2025-11-28")
+        unknown = await session.get(CardSet, unknown_id)
+        assert unknown is not None and unknown.name == "AC2a"  # Taiwan-eigenes Set
