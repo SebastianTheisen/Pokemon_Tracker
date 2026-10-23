@@ -140,3 +140,21 @@ async def test_linked_product_gives_price_without_tcgdex(
         quotes = await correct_cardmarket_quotes(session, pikachu, card_ref(pikachu), [])
 
     assert {(q.source, q.metric, str(q.value)) for q in quotes} >= {("cardmarket", "trend", "4.50")}
+
+
+async def test_expansion_of_another_set_is_not_taken(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Gehören die Ausgaben schon anderen Sets (z. B. englisches „151“), bleibt das Set offen."""
+    await _catalog(session_factory)
+    async with session_factory() as session:
+        for set_id, expansion in (("sv03.5", 6602), ("sv03.5c", 6603)):
+            session.add(
+                CardSet(external_id=set_id, language="en", name="151",
+                        cardmarket_expansion_id=expansion, cardmarket_expansion_source="tcgdex")
+            )  # fmt: skip
+        await session.commit()
+        report = await match_cardmarket(session, dry_run=True)
+
+    assert report.sets_linked == {}
+    assert report.links == []

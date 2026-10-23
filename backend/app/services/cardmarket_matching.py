@@ -60,6 +60,7 @@ class MatchReport:
     sets_linked: dict[str, int] = field(default_factory=dict)
     cards_linked: dict[str, int] = field(default_factory=dict)
     sets_ambiguous: list[str] = field(default_factory=list)
+    links: list[str] = field(default_factory=list)  # „ja/SV2a Pokémon Card 151 → 5207 (…)“
 
     def count(self, bucket: dict[str, int], language: str, amount: int = 1) -> None:
         bucket[language] = bucket.get(language, 0) + amount
@@ -79,6 +80,7 @@ class _Expansion:
     first_added: date | None
     twins: frozenset[int]
     names: dict[str, list[int]]  # Namensschlüssel → Produkt-IDs (aufsteigend)
+    sample: str = ""  # ein Produktname zur Kontrolle im Bericht
 
 
 def _number_order(number: str) -> tuple[int, int, str]:
@@ -102,6 +104,7 @@ def english_name(name: str, language: str, english_sibling: str | None) -> str |
 
 async def _load_expansions(session: AsyncSession) -> dict[int, _Expansion]:
     names: defaultdict[int, defaultdict[str, list[int]]] = defaultdict(lambda: defaultdict(list))
+    samples: dict[int, str] = {}
     rows = await session.execute(
         select(CmProduct.id_product, CmProduct.id_expansion, CmProduct.name)
         .where(CmProduct.id_category == SINGLE_CATEGORY)
@@ -110,6 +113,7 @@ async def _load_expansions(session: AsyncSession) -> dict[int, _Expansion]:
     for product_id, expansion_id, name in rows:
         if key := name_key(name):
             names[expansion_id][key].append(product_id)
+            samples.setdefault(expansion_id, name)
     expansions = {e.id_expansion: e for e in (await session.scalars(select(CmExpansion))).all()}
     return {
         expansion_id: _Expansion(
@@ -121,18 +125,28 @@ async def _load_expansions(session: AsyncSession) -> dict[int, _Expansion]:
                 expansions[expansion_id].twin_ids if expansion_id in expansions else ()
             ),
             names=dict(by_name),
+            sample=samples.get(expansion_id, ""),
         )
         for expansion_id, by_name in names.items()
     }
 
 
 def _choose_expansion(
-    card_set: CardSet, keys: set[str], expansions: dict[int, _Expansion], taken: set[int]
+    card_set: CardSet,
+    keys: set[str],
+    expansions: dict[int, _Expansion],
+    owners: dict[int, set[str]],
 ) -> int | str | None:
-    """Beste Ausgabe für ein Set; ``"ambiguous"``, wenn mehrere gleich gut passen."""
+    """Beste Ausgabe für ein Set; ``"ambiguous"``, wenn mehrere gleich gut passen.
+
+    Eine Ausgabe, die schon zu einem *anderen* Set gehört (andere Set-ID), scheidet aus –
+    sonst bekäme z. B. das japanische „151“ die englische Ausgabe und damit englische Preise.
+    Sprachfassungen desselben Sets (gleiche ID, z. B. Englisch und Deutsch) teilen sie sich.
+    """
     scored: list[tuple[float, int]] = []
     for expansion in expansions.values():
-        if expansion.id in taken:
+        owner = owners.get(expansion.id)
+        if owner and card_set.external_id not in owner:
             continue
         common = len(keys & expansion.names.keys())
         if common < MIN_COMMON_NAMES:
@@ -161,7 +175,7 @@ def _choose_expansion(
     return "ambiguous"
 
 
-async def match_cardmarket(  # noqa: PLR0912 – ein Durchgang über alle Sets
+async def match_cardmarket(  # noqa: PLR0912, PLR0915 – ein Durchgang über alle Sets
     session: AsyncSession, *, dry_run: bool = False, languages: tuple[str, ...] = MATCH_LANGUAGES
 ) -> MatchReport:
     """Sets und Karten über Kartennamen mit Cardmarket verknüpfen. Commit macht der Aufrufer."""
@@ -200,10 +214,14 @@ async def match_cardmarket(  # noqa: PLR0912 – ein Durchgang über alle Sets
                 product_id=row.cardmarket_product_override or row.cardmarket_product_id,
             )
         )
-    taken: defaultdict[str, set[int]] = defaultdict(set)
-    for card_set in sets:
-        if card_set.cardmarket_expansion_id is not None:
-            taken[card_set.language].add(card_set.cardmarket_expansion_id)
+    owners: defaultdict[int, set[str]] = defaultdict(set)
+    for external_id, expansion_id in await session.execute(
+        select(CardSet.external_id, CardSet.cardmarket_expansion_id).where(
+            CardSet.cardmarket_expansion_id.is_not(None)
+        )
+    ):
+        if expansion_id is not None:
+            owners[expansion_id].add(external_id)
 
     # 1. Ausgabe je Set
     assigned: dict[uuid.UUID, int] = {}
@@ -213,14 +231,19 @@ async def match_cardmarket(  # noqa: PLR0912 – ein Durchgang über alle Sets
         keys = {card.key for card in cards.get(card_set.id, []) if card.key}
         if len(keys) < MIN_COMMON_NAMES:
             continue
-        chosen = _choose_expansion(card_set, keys, expansions, taken[card_set.language])
+        chosen = _choose_expansion(card_set, keys, expansions, owners)
         if chosen == "ambiguous":
             report.sets_ambiguous.append(f"{card_set.language}/{card_set.external_id}")
             continue
         if not isinstance(chosen, int):
             continue
-        taken[card_set.language].add(chosen)
+        owners[chosen].add(card_set.external_id)
         assigned[card_set.id] = chosen
+        picked = expansions[chosen]
+        report.links.append(
+            f"{card_set.language}/{card_set.external_id} {card_set.name} → {chosen} "
+            f"({len(keys & picked.names.keys())}/{len(keys)} Namen, z. B. „{picked.sample}“)"
+        )
         report.count(report.sets_linked, card_set.language)
         if not dry_run:
             await link_set(session, card_set, chosen, ExpansionLinkSource.MATCHED)
@@ -271,6 +294,7 @@ def render_match_report(report: MatchReport, *, dry_run: bool) -> str:
         f"Karten {verb}: "
         + (", ".join(f"{k}: {v}" for k, v in report.cards_linked.items()) or "0"),
     ]
+    lines += [f"  {link}" for link in report.links]
     if report.sets_ambiguous:
         lines.append("Mehrdeutig (offen): " + ", ".join(report.sets_ambiguous[:40]))
     return "\n".join(lines)
