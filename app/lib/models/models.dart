@@ -162,6 +162,7 @@ class SetSummary {
     required this.externalId,
     required this.language,
     required this.name,
+    this.translatedName,
   });
 
   factory SetSummary.fromJson(Json json) => SetSummary(
@@ -169,12 +170,22 @@ class SetSummary {
     externalId: json.str('external_id'),
     language: json.str('language'),
     name: json.str('name'),
+    translatedName: json.strOrNull('translated_name'),
   );
 
   final String id;
   final String externalId;
   final String language;
   final String name;
+
+  /// Englischer Name japanischer, koreanischer und taiwanischer Sets („Paradigm Trigger“).
+  final String? translatedName;
+
+  /// Angezeigter Name: übersetzt, sonst wie geliefert.
+  String get displayName => translatedName ?? name;
+
+  /// Originalname, wenn übersetzt angezeigt wird (z. B. „パラダイムトリガー“).
+  String? get originalName => translatedName == null ? null : name;
 }
 
 class CardSet extends SetSummary {
@@ -183,6 +194,7 @@ class CardSet extends SetSummary {
     required super.externalId,
     required super.language,
     required super.name,
+    super.translatedName,
     this.seriesName,
     this.releaseDate,
     this.officialCount,
@@ -194,6 +206,7 @@ class CardSet extends SetSummary {
     externalId: json.str('external_id'),
     language: json.str('language'),
     name: json.str('name'),
+    translatedName: json.strOrNull('translated_name'),
     seriesName: json.strOrNull('series_name'),
     releaseDate: json.timeOrNull('release_date'),
     officialCount: json.intOrNull('card_count_official'),
@@ -288,7 +301,7 @@ class CardInfo {
   /// (offizielle Datenbanken) gibt es nur in einer Größe.
   String? image({bool high = false}) => cardImageUrl(imageUrl, high: high);
 
-  String get subtitle => '${cardSet.name} · $number';
+  String get subtitle => '${cardSet.displayName} · $number';
 }
 
 /// Siehe [CardInfo.image].

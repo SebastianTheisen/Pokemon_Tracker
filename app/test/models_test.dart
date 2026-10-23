@@ -19,4 +19,25 @@ void main() {
     expect(cardImageUrl(japan), japan);
     expect(cardImageUrl(null), isNull);
   });
+
+  test('Set-Namen: übersetzt anzeigen, Original dazu', () {
+    final japanese = SetSummary.fromJson({
+      'id': '1',
+      'external_id': 'S12',
+      'language': 'ja',
+      'name': 'パラダイムトリガー',
+      'translated_name': 'Paradigm Trigger',
+    });
+    expect(japanese.displayName, 'Paradigm Trigger');
+    expect(japanese.originalName, 'パラダイムトリガー');
+
+    final german = SetSummary.fromJson({
+      'id': '2',
+      'external_id': 'sv03',
+      'language': 'de',
+      'name': 'Obsidian Flammen',
+    });
+    expect(german.displayName, 'Obsidian Flammen');
+    expect(german.originalName, isNull);
+  });
 }

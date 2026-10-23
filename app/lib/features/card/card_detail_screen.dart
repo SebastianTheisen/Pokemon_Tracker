@@ -250,7 +250,10 @@ class _CardBodyState extends ConsumerState<_CardBody> {
                       if (card.originalName != null)
                         Text(card.originalName!, style: const TextStyle(fontSize: 16)),
                       const SizedBox(height: 4),
-                      Text(card.cardSet.name, style: const TextStyle(color: AppColors.textMuted)),
+                      Text(
+                        [card.cardSet.displayName, ?card.cardSet.originalName].join(' · '),
+                        style: const TextStyle(color: AppColors.textMuted),
+                      ),
                       Text(
                         'Nr. ${card.number}',
                         style: const TextStyle(color: AppColors.textMuted),

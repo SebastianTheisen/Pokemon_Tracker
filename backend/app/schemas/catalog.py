@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.models import CardSource
 from app.services.card_names import translate_card_name
+from app.services.set_names import translated_set_name
 
 
 class SetOut(BaseModel):
@@ -25,6 +26,12 @@ class SetOut(BaseModel):
     logo_url: str | None
     symbol_url: str | None
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def translated_name(self) -> str | None:
+        """Englischer Name japanischer (koreanischer, taiwanischer) Sets."""
+        return translated_set_name(self.external_id, self.language, self.name)
+
 
 class SetSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -33,6 +40,12 @@ class SetSummary(BaseModel):
     external_id: str
     language: str
     name: str
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def translated_name(self) -> str | None:
+        """Englischer Name japanischer (koreanischer, taiwanischer) Sets."""
+        return translated_set_name(self.external_id, self.language, self.name)
 
 
 class CardOut(BaseModel):

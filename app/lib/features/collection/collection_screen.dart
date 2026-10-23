@@ -536,10 +536,13 @@ class SetOverviewScreen extends ConsumerWidget {
                   final total = entry.cardSet.officialCount;
                   final progress = total == null || total == 0 ? null : entry.ownedCards / total;
                   return ListTile(
-                    title: Text('${entry.cardSet.name} (${languageTag(entry.cardSet.language)})'),
+                    title: Text(
+                      '${entry.cardSet.displayName} (${languageTag(entry.cardSet.language)})',
+                    ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (entry.cardSet.originalName case final original?) Text(original),
                         Text(
                           '${entry.ownedCards}${total == null ? '' : ' / $total'} Karten · '
                           '${money(entry.value)}',
