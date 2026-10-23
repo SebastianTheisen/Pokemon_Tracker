@@ -426,11 +426,12 @@ async def test_full_run_fills_images_from_all_sources(
     by_source = {item.source: item for item in report.sources}
     assert by_source["pokemontcg"].images_set == 3  # EN eigene Sprache, 2× DE als Ersatz
     assert by_source["pokemon.com"].images_set == 1  # DE-Bild ersetzt englisches Ersatzbild
-    assert by_source["pokemon-card.com"].cards_created == 1  # Promo 132/M-P
+    # Promo 132/M-P und 005/050 im neuen Set ZZ9 (Japan: Set wird angelegt)
+    assert by_source["pokemon-card.com"].cards_created == 2
     # Schnellweg: タマタマ ist im Set M6a eindeutig → ohne Detailseite zugeordnet.
     assert by_source["pokemon-card.com"].matched_by_name == 1
     assert not [url for url in fake.requests if url.endswith("/card/50613")]
-    assert by_source["pokemon-card.com"].unmatched == 1  # Set ZZ9 unbekannt → nicht angelegt
+    assert by_source["pokemon-card.com"].unmatched == 0
     assert by_source["asia.pokemon-card.com/tw"].cards_created == 1  # 099/064 im bekannten Set
     async with session_factory() as session:
         rows = {
@@ -458,6 +459,8 @@ async def test_full_run_fills_images_from_all_sources(
             "132",
         )
         assert rows[cards["tw1"].id].image_url == f"{TW}/tw/card-img/tw00019913.png"
+        new_set = next(card for card in rows.values() if card.external_id == "ZZ9-005")
+        assert (new_set.card_set.name, new_set.card_set.language) == ("ZZ9", "ja")
         assert await session.scalar(select(func.count()).select_from(OfficialCard)) == 5
         probes = (await session.scalars(select(ImageProbe))).all()
         # Nur DE-Karten brauchten noch ein Bild in eigener Sprache; SV084 gibt es dort nicht.

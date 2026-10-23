@@ -9,7 +9,8 @@ Reihenfolge je Lauf (jeder Schritt füllt nur, was danach noch fehlt):
 3. **Offizielle Datenbanken Japan und Taiwan**: alle Karten samt Bild. Neue Karten der
    Liste lösen einmalig einen Abruf der Detailseite aus (Nummer, Setcode). Zuordnung zur
    Katalogkarte über Setcode + Nummer, sonst Nummer + Setgröße + Name. Fehlt eine Karte im
-   Katalog (z. B. japanische Promos), wird sie angelegt – aber nur in Sets, die TCGdex kennt.
+   Katalog (z. B. japanische Promos), wird sie angelegt. Japan: auch in Sets, die TCGdex
+   noch nicht kennt (Set-Code wie bei TCGdex, z. B. ``MEZ``); Taiwan nur in bekannten Sets.
 4. **Ersatzbilder** aus anderen Sprachfassungen für alles, was dann noch fehlt.
 
 Regeln für das Setzen eines Bildes (:func:`_should_replace`):
@@ -25,6 +26,7 @@ abgefragt (:class:`~app.providers.card_images.http.PoliteClient`).
 from __future__ import annotations
 
 import asyncio
+import re
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import asdict, dataclass, field
@@ -805,7 +807,7 @@ async def _match_by_name(
 async def _create_card(
     session: AsyncSession, index: _CatalogIndex, record: OfficialCard, language: str
 ) -> _CatalogCard | None:
-    """Legt eine fehlende Karte an – nur in Sets, die der Katalog (TCGdex) kennt.
+    """Legt eine fehlende Karte an – in bekannten Sets, für Japan auch in neuen Sets.
 
     Die externe ID folgt dem Schema von TCGdex (``M6a-001``). Kennt TCGdex die Karte später,
     überschreibt der nächste Katalog-Import genau diese Zeile, statt eine doppelte anzulegen.
@@ -816,6 +818,8 @@ async def _create_card(
         return None
     set_key = set_code_key(set_code)
     set_id = index.set_ids.get(set_key)
+    if set_id is None:
+        set_id = await _create_set(session, index, set_code, language)
     if set_id is None:
         return None
     card_set = await session.get(CardSet, set_id)
@@ -850,6 +854,39 @@ async def _create_card(
     created = _CatalogCard(card_id, record.name, number_norm, set_key, None)
     index.by_set_number[(set_key, number_norm)] = created
     return created
+
+
+# Japan: Set-Code im Bildpfad = Set-ID bei TCGdex (``M6a``, ``SV2a``). Taiwan liest den Code
+# aus einem Markenbild – ob er zu TCGdex passt, ist offen, deshalb dort keine neuen Sets.
+NEW_SET_LANGUAGES = frozenset({"ja"})
+_SET_CODE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+-]{0,15}$")
+
+
+async def _create_set(
+    session: AsyncSession, index: _CatalogIndex, set_code: str, language: str
+) -> Any:
+    """Neues Set aus der offiziellen Datenbank (Name = Set-Code, bis TCGdex es kennt)."""
+    if language not in NEW_SET_LANGUAGES or not _SET_CODE.match(set_code):
+        return None
+    statement = (
+        insert(CardSet)
+        .values(
+            external_id=set_code,
+            language=language,
+            name=set_code,
+            series_name="Offizielle Datenbank",
+        )
+        .on_conflict_do_nothing(index_elements=[CardSet.external_id, CardSet.language])
+        .returning(CardSet.id)
+    )
+    set_id = await session.scalar(statement)
+    if set_id is None:
+        set_id = await session.scalar(
+            select(CardSet.id).where(CardSet.external_id == set_code, CardSet.language == language)
+        )
+    if set_id is not None:
+        index.set_ids[set_code_key(set_code)] = set_id
+    return set_id
 
 
 async def _official_dry_run(
