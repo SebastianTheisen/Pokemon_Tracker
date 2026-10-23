@@ -291,6 +291,16 @@ class PriceChartingCatalog:
             log.info("pricecharting_catalog.direct_blocked", status=exc.response.status_code)
         return parse_consoles(await self._links_via_apify(), languages)
 
+    async def links(self) -> str:
+        """Alle Set-Links der Übersicht (über Apify, der Server wird gesperrt)."""
+        return await self._links_via_apify()
+
+    async def collections(self, batch: Sequence[Console]) -> tuple[list[dict[str, Any]], float]:
+        """Set-Seiten samt Produkten und Kosten (Budget wie beim Katalog)."""
+        report = CatalogReport()
+        items = await self._fetch(batch, report)
+        return items, report.cost_usd
+
     async def _links_via_apify(self) -> str:
         """Links der Übersichtsseite über den Apify-Standarddienst „Cheerio Scraper“."""
         async with self._apify() as client:

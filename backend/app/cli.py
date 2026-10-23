@@ -11,6 +11,7 @@ Beispiele (im Container: ``docker compose exec api python -m app.cli ...``)::
     python -m app.cli import-german --dry-run      # fehlende deutsche Karten aus dem PokéWiki
     python -m app.cli import-pricecharting --dry-run   # Korea/China-Sets von PriceCharting
     python -m app.cli import-pricecharting --jp-vintage --dry-run   # JP 1996–2006 ersetzen
+    python -m app.cli import-pricecharting --images --dry-run       # fehlende Bilder
     python -m app.cli search "nachtara 215"
     python -m app.cli refresh-prices               # Preis-Runde sofort ausführen
     python -m app.cli prices "nachtara 215" --language de
@@ -83,6 +84,8 @@ from app.services.image_import import (
 from app.services.price_health import SourceHealth
 from app.services.pricecharting_catalog import PriceChartingCatalog
 from app.services.pricecharting_catalog import render_report as render_pricecharting_report
+from app.services.pricecharting_images import import_pricecharting_images
+from app.services.pricecharting_images import render_image_report as render_pc_images
 from app.services.pricing import PriceService
 from app.services.ptcg_import import import_ptcg
 from app.services.ptcg_import import render_report as render_ptcg_report
@@ -231,6 +234,12 @@ async def _import_pricecharting(
         EcbRates(user_agent=settings.http_user_agent, url=settings.ecb_rates_url),
         lambda: ApifyClient(token.get_secret_value(), user_agent=settings.http_user_agent),
     )
+    if args.images:
+        images = await import_pricecharting_images(
+            factory, catalog, dry_run=args.dry_run, limit=args.limit
+        )
+        print(render_pc_images(images, dry_run=args.dry_run))
+        return
     if args.jp_vintage:
         report = await catalog.run_vintage(dry_run=args.dry_run, limit=args.limit)
     else:
@@ -670,6 +679,11 @@ def _add_catalog_commands(commands: Any) -> None:
         "--sets", nargs="+", help="zusätzliche Sets, z. B. pokemon-korean-electric-breaker"
     )
     pricecharting.add_argument("--limit", type=int, help="höchstens so viele Sets (zum Testen)")
+    pricecharting.add_argument(
+        "--images",
+        action="store_true",
+        help="nur fehlende Kartenbilder ergänzen (Trainer-Kits, McDonald's, …)",
+    )
     pricecharting.add_argument(
         "--jp-vintage",
         action="store_true",
