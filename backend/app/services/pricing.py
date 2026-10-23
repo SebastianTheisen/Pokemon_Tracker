@@ -267,7 +267,13 @@ class PriceService:
             )
         except PriceNotAvailableError:
             self._health.record_success(provider.name)
-            return "not_available", True, "Quelle kennt die Karte nicht", 0
+            if provider.kind == "external":
+                return "not_available", True, "Quelle kennt die Karte nicht", 0
+            # Unbekannt bei TCGdex – ein verknüpftes Cardmarket-Produkt hat trotzdem Preise.
+            quotes = await correct_cardmarket_quotes(self._session, card, card_ref(card), [])
+            if not quotes:
+                return "not_available", True, "Quelle kennt die Karte nicht", 0
+            return "fetched", True, None, await self._store(card, quotes)
         except Exception as exc:  # Quellen (auch Plug-ins) dürfen nichts stören
             error = f"{type(exc).__name__}: {exc}"[:300]
             self._health.record_failure(provider.name, error)

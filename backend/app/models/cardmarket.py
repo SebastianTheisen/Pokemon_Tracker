@@ -39,6 +39,7 @@ class ExpansionLinkSource(enum.StrEnum):
     TCGDEX = "tcgdex"  # aus der Cardmarket-ID, die TCGdex für eine Karte des Sets meldet
     BUILTIN = "builtin"  # fest hinterlegt (bekannte Fehler von TCGdex)
     USER = "user"  # von einem Nutzer in der App gewählt
+    MATCHED = "matched"  # über die Kartennamen zugeordnet (:mod:`app.services.cardmarket_matching`)
 
 
 class CmProduct(Base):

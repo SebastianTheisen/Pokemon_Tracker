@@ -288,7 +288,8 @@ Ziel: alle Sets, Karten, Bilder und Preise aller Sprachen. Quellen je Bereich: o
 - [x] **PriceCharting-Details** (Migration 0015 `pricecharting_details`): Produktseiten-Abruf speichert POP-Report, Verkäufe je Note, letzte Verkäufe (je Note 10) und Bilder; `GET /cards/{id}/pricecharting`. App: Abschnitt „US-Markt (PriceCharting)“ auf der Kartenseite (Verkäufe je Note, PSA-/CGC-Population, letzte 5 Verkäufe mit Link, in US-Dollar). Preisverlauf wird roh gespeichert (Format noch unbekannt). Tests: Backend 500, Flutter 36
 - [x] TCGdex-Doppel importierter Sets zusammenführen (30th, Futsal) inkl. Cardmarket-Übernahme; Suche „PFL077“; englische Namen japanischer Sets (Set-Code-Liste `app/data/set_names.json`)
 - [ ] Korea weiter dünn: offizielle Seite sperrt ausländische Zugriffe (410), TCGdex „kommt bald“, PriceCharting nur 4 Sets
-- [ ] Preise: Cardmarket-Zuordnung je Ausgabe über Name und Nummer neu aufbauen (Ziel: jede Karte, die Cardmarket führt, hat einen Preis)
+- [x] Preise: Cardmarket-Zuordnung über Kartennamen (`cardmarket-match`, auch im täglichen Import): Ausgabe je Set, Produkt je Karte (Reihenfolge bei gleichen Namen); Preisführer auch für Karten, die TCGdex nicht kennt
+- [ ] VPS: `cardmarket-match --dry-run`, dann echt; Bestand messen (Ziel: JA/ZH-CN „ohne Cardmarket“ deutlich kleiner)
 - [ ] Sealed: eigene Fotos je Produkt (für alle Nutzer) und Platzhalter je Produktart
 - [ ] PSA entscheiden: Link „Bei PSA prüfen“ (psacard.com/cert/…) in der App und/oder PSA-Support um Freigabe der Server-Adresse bitten
 - [ ] Auf dem VPS: Deploy, Status prüfen (`deploy/phase5_cardmarket_status.sh`), Glurak M6a 137 erneut scannen – Cardmarket-Knopf muss die japanische Ausgabe öffnen

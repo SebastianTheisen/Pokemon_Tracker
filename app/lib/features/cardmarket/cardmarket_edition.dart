@@ -66,6 +66,7 @@ String _origin(CardmarketChoice choice) => switch ((choice.reason, choice.setSou
   ('card', _) => 'für diese Karte gewählt',
   (_, 'user') => 'von euch gewählt',
   (_, 'builtin') => 'geprüft',
+  (_, 'matched') => 'über die Kartennamen zugeordnet',
   _ => 'laut TCGdex',
 };
 

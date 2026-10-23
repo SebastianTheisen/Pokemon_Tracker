@@ -18,6 +18,7 @@ Beispiele (im Container: ``docker compose exec api python -m app.cli ...``)::
     python -m app.cli scan foto.jpg --email ich@example.com     # ein Foto erkennen
     python -m app.cli scan-eval --photos testset --expected testset/soll.csv --email ich@…
     python -m app.cli scanner-warmup --korean     # OCR-Modelle laden (KO wird heruntergeladen)
+    python -m app.cli cardmarket-match --dry-run  # Cardmarket über Kartennamen verknüpfen
     python -m app.cli import-images --dry-run     # Bildquellen testen, nichts speichern
     python -m app.cli import-images --sources pokemontcg pokemon.com
     python -m app.cli image-status                # letzter Bild-Import und Abdeckung
@@ -64,6 +65,7 @@ from app.services.card_details import sync_card_details
 from app.services.cardmarket_catalog import catalog_status as cardmarket_status
 from app.services.cardmarket_catalog import render_status as render_cardmarket_status
 from app.services.cardmarket_catalog import run_catalog_import
+from app.services.cardmarket_matching import match_cardmarket, render_match_report
 from app.services.catalog_search import search_cards
 from app.services.catalog_sync import fill_image_fallbacks, remove_digital_sets, sync_catalog
 from app.services.collection import CollectionService, ItemFilter, ItemInput
@@ -268,6 +270,17 @@ async def _import_images(
     print(text)
 
 
+async def _cardmarket_match(
+    factory: async_sessionmaker[AsyncSession], _settings: Settings, args: argparse.Namespace
+) -> None:
+    """Sets und Karten über Kartennamen mit Cardmarket verknüpfen (ohne Download)."""
+    async with factory() as session:
+        report = await match_cardmarket(session, dry_run=args.dry_run)
+        if not args.dry_run:
+            await session.commit()
+    print(render_match_report(report, dry_run=args.dry_run))
+
+
 async def _cardmarket_import(
     factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
 ) -> None:
@@ -289,7 +302,9 @@ async def _cardmarket_import(
     print(
         f"Produkte: {summary.products}, Preise: {summary.prices}, Ausgaben: "
         f"{summary.expansions} (mit Zwillingen: {summary.expansions_with_twins}), "
-        f"feste Zuordnungen geändert: {summary.known_links}, Sets verknüpft: {summary.sets_linked}"
+        f"feste Zuordnungen geändert: {summary.known_links}, "
+        f"Sets verknüpft: {summary.sets_linked}, "
+        f"Karten über den Namen verknüpft: {summary.names_matched}"
     )
     async with factory() as session:
         text = render_cardmarket_status(await cardmarket_status(session))
@@ -694,6 +709,11 @@ def _add_cardmarket_commands(commands: Any) -> None:
         "--images", action="store_true", help="Bilder für Versiegeltes jetzt abgleichen"
     )
     cardmarket.set_defaults(handler=_cardmarket_import)
+    match = commands.add_parser(
+        "cardmarket-match", help="Sets und Karten über Kartennamen mit Cardmarket verknüpfen"
+    )
+    match.add_argument("--dry-run", action="store_true", help="nur zählen, nichts speichern")
+    match.set_defaults(handler=_cardmarket_match)
     cardmarket_info = commands.add_parser(
         "cardmarket-status", help="Stand des Cardmarket-Katalogs und unsichere Sets"
     )

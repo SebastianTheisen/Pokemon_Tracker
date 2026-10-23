@@ -715,7 +715,11 @@ async def correct_cardmarket_quotes(
         await learn_tcgdex_product(session, card, reported.pop())
     resolution = await resolve_product(session, card)
     if not resolution.corrected:
-        return list(quotes)
+        if resolution.product_id is None or any(q.source == CARDMARKET for q in quotes):
+            return list(quotes)
+        # Die Quelle kennt das Produkt nicht (z. B. Karte aus einer offiziellen Datenbank,
+        # über den Namen verknüpft) – dann gelten die Werte des Preisführers.
+        return [*quotes, *await guide_quotes(session, ref, resolution.product_id)]
     kept = [q for q in quotes if q.source != CARDMARKET]
     if resolution.product_id is None:
         return kept  # lieber kein Cardmarket-Preis als der eines falschen Produkts
@@ -848,7 +852,8 @@ async def cardmarket_choice(session: AsyncSession, card: Card) -> CardmarketChoi
     uncertain = (
         resolution.reason != "card"
         and card_set.language in ASIAN_LANGUAGES
-        and card_set.cardmarket_expansion_source in (None, ExpansionLinkSource.TCGDEX.value)
+        and card_set.cardmarket_expansion_source
+        in (None, ExpansionLinkSource.TCGDEX.value, ExpansionLinkSource.MATCHED.value)
         and base_expansion is not None
         and bool(base_expansion.twin_ids)
     )
@@ -951,6 +956,7 @@ class ImportSummary:
     expansions_with_twins: int = 0
     known_links: int = 0
     sets_linked: int = 0
+    names_matched: int = 0  # Karten, die über den Namen ein Produkt bekamen
     catalog_created_at: datetime | None = None
     guide_created_at: datetime | None = None
     error: str | None = None
@@ -997,6 +1003,13 @@ async def run_catalog_import(
         summary.expansions_with_twins = stored.expansions_with_twins
         if tcgdex is not None:
             summary.sets_linked = await link_sets(session_factory, tcgdex, settings, now=clock())
+        # Erst nach TCGdex: übernimmt nur, was TCGdex offen lässt.
+        from app.services.cardmarket_matching import match_cardmarket  # noqa: PLC0415 – Zyklus
+
+        async with session_factory() as session:
+            matched = await match_cardmarket(session)
+            await session.commit()
+        summary.names_matched = sum(matched.cards_linked.values())
     except Exception as exc:  # Lauf protokollieren statt den Worker zu stören
         summary.error = f"{type(exc).__name__}: {exc}"[:500]
         log.exception("cardmarket.import_failed")
@@ -1075,7 +1088,9 @@ async def catalog_status(session: AsyncSession) -> CatalogStatus:
     candidates = await session.scalars(
         select(CardSet)
         .where(
-            CardSet.cardmarket_expansion_source == ExpansionLinkSource.TCGDEX.value,
+            CardSet.cardmarket_expansion_source.in_(
+                (ExpansionLinkSource.TCGDEX.value, ExpansionLinkSource.MATCHED.value)
+            ),
             CardSet.cardmarket_expansion_id.in_(list(labels)),
             CardSet.language.in_(ASIAN_LANGUAGES),
         )
