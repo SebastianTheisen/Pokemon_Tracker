@@ -103,6 +103,20 @@ def species_name(species_id: str, language: str = TARGET_LANGUAGE) -> str | None
     return _species().get(species_id, {}).get(language)
 
 
+@cache
+def _ids_by_name(language: str) -> dict[str, str]:
+    return {
+        names[language].casefold(): species_id
+        for species_id, names in _species().items()
+        if language in names
+    }
+
+
+def species_id_by_name(name: str, language: str = "en") -> str | None:
+    """Species-ID zu einem Pokémon-Namen (genau, ohne Zusätze), z. B. „Charizard“ → „6“."""
+    return _ids_by_name(language).get(name.strip().casefold())
+
+
 def translate_card_name(name: str, language: str, target: str = TARGET_LANGUAGE) -> str | None:
     """Deutscher (bzw. ``target``) Name einer asiatischen Karte – ``None`` ohne Pokémon-Namen."""
     if language not in TRANSLATED_LANGUAGES:

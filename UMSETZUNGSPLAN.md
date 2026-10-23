@@ -273,6 +273,8 @@ Ziel: alle Sets, Karten, Bilder und Preise aller Sprachen. Quellen je Bereich: o
 - [x] **Japan: neue Sets aus der offiziellen Datenbank:** Der vorhandene Import der offiziellen Datenbanken (Bild-Import, Quelle `jp`) legt fehlende Karten jetzt auch in Sets an, die TCGdex nicht kennt (Set-Code als Set-ID und vorläufiger Name, z. B. MEZ; TCGdex überschreibt später). Taiwan weiter nur in bekannten Sets – erst prüfen, ob die Codes passen
 - [x] Sealed-Suche: angefangene deutsche Set-Namen („prismatische“, „erwachte“) werden zum englischen Set-Namen ergänzt
 - [x] Scanner: Nachdrucke mit gleicher Nummer und Grafik (30th Celebration, Celebrations) per Bildvergleich der Unterschiedsstelle (Stempel) unterscheiden; ohne klaren Unterschied nie „sicher“
+- [x] Japan 1996–2006: TCGdex-Fassung fehlerhaft (falsche Namen, keine Bilder, Spike `docs/phase5/jp_vintage.md`) → Sets von PriceCharting (`import-pricecharting --jp-vintage`), TCGdex-Karten außerhalb von Sammlungen entfernt, Katalog-Abgleich überspringt ersetzte Sets
+- [ ] Auf dem VPS: `--jp-vintage --dry-run`, dann Import; nicht gefundene Slugs (PCG1/5/8 vermutet) nachtragen
 - [ ] Am Handy prüfen: 30th-Karten (Selfe, Glurak) und Originale scannen; Log `scan.twins` zeigt die Abweichungen
 - [ ] Auf dem VPS: Japan-Import komplett laufen lassen (`import-images --sources jp`, im Hintergrund, mehrere Stunden), Taiwan (`--sources tw`) und Hinweis „Nicht zugeordnet (Setcode)“ auswerten
 - [ ] Deutsch: `import-german` erneut laufen lassen (räumt nie-deutsche Sets auf)

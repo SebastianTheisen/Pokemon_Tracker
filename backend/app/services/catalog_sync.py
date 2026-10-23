@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.models import Card, CardSet, CardSource, CollectionItem, ImageSource
 from app.providers.tcgdex import SetBrief, SetDetail, TcgdexClient, TcgdexError
 from app.services.catalog_numbers import normalize_number
+from app.services.pricecharting_catalog import replaced_by_pricecharting
 
 log = structlog.get_logger(__name__)
 
@@ -46,6 +47,7 @@ class LanguageReport:
     sets_synced: int = 0
     sets_skipped: int = 0
     sets_digital: int = 0
+    sets_replaced: int = 0
     cards_upserted: int = 0
     errors: list[str] = field(default_factory=list)
 
@@ -192,6 +194,9 @@ async def sync_language(
             report.sets_digital += 1  # Handyspiel – nicht importieren
             continue
         async with session_factory() as session:
+            if await replaced_by_pricecharting(session, language, result.id):
+                report.sets_replaced += 1  # fehlerhafte Vintage-Daten, kommt von PriceCharting
+                continue
             report.cards_upserted += await _store_set(session, language, result)
             await session.commit()
         report.sets_synced += 1

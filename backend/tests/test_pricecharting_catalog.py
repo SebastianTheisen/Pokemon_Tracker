@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+import math
+import uuid
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -12,14 +14,27 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
-from app.models import Card, CardSet, CardSource, PriceCheck, PricePoint
+from app.models import (
+    Card,
+    CardSet,
+    CardSource,
+    CollectionItem,
+    Folder,
+    PriceCheck,
+    PricePoint,
+    Role,
+    User,
+)
 from app.providers.apify import ApifyClient
 from app.providers.fx import EcbRates
 from app.services.pricecharting_catalog import (
+    JP_VINTAGE,
     PriceChartingCatalog,
+    japanese_name,
     metric_name,
     parse_consoles,
     parse_product,
+    replaced_by_pricecharting,
     set_name,
 )
 
@@ -203,3 +218,125 @@ async def test_set_list_via_apify_when_server_is_blocked(
         ("pokemon-chinese-gem-pack", "zh-cn"),
     ]
     assert any("cheerio-scraper" in call for call in calls)
+
+
+# ------------------------------------------------------- Japanische Vintage-Sets
+
+EXPANSION_PACK = {
+    "collectionUrl": "https://www.pricecharting.com/console/pokemon-japanese-expansion-pack",
+    "collectionName": "Pokemon Japanese Expansion Pack",
+    "priceColumns": {"used": "Ungraded"},
+    "productCount": 4,
+    "products": [
+        {"productId": 11, "productName": "Charizard #6", "imageUrl": "https://img/6.jpg",
+         "prices": {"used": 250}},
+        {"productId": 12, "productName": "Charizard [No Rarity] #6", "imageUrl": "https://img/n.jpg",
+         "prices": {"used": 900}},
+        {"productId": 13, "productName": "Bill #74", "imageUrl": "https://img/b.jpg",
+         "prices": {"used": 2}},
+        {"productId": 14, "productName": "Expansion Pack Booster", "prices": {"used": 99}},
+    ],
+}  # fmt: skip
+
+
+def vintage_transport(requested: list[list[str]]) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if request.url.host == "www.ecb.europa.eu":
+            return httpx.Response(200, text=ECB)
+        if path.endswith("/users/me/limits"):
+            body: Any = {
+                "data": {"current": {"monthlyUsageUsd": 1}, "limits": {"maxMonthlyUsageUsd": 8}}
+            }
+        elif path.endswith("/runs"):
+            requested.append(json.loads(request.content)["collections"])
+            body = {"data": {"id": "r", "status": "SUCCEEDED", "defaultDatasetId": "d"}}
+        elif path.endswith("/datasets/d/items"):
+            body = [EXPANSION_PACK] if len(requested) == 1 else []
+        else:
+            return httpx.Response(404)
+        return httpx.Response(200, content=json.dumps(body).encode())
+
+    return httpx.MockTransport(handler)
+
+
+async def _tcgdex_base_set(factory: async_sessionmaker[AsyncSession]) -> uuid.UUID:
+    """TCGdex-Fassung mit fehlerhaften Namen; eine Karte liegt in einer Sammlung."""
+    async with factory() as session:
+        card_set = CardSet(
+            external_id="PMCG1",
+            language="ja",
+            name="拡張パック",
+            series_name="PMCG",
+            release_date=date(1996, 10, 20),
+        )
+        session.add(card_set)
+        await session.flush()
+        cards = [
+            Card(external_id=f"PMCG1-{n}", language="ja", set_id=card_set.id, number=n,
+                 number_norm=n, name=name)
+            for n, name in (("4", "リザードン"), ("74", "マサキ"), ("19", "奇妙な"))
+        ]  # fmt: skip
+        user = User(email="v@example.com", display_name="V", password_hash="x", role=Role.USER)
+        session.add_all([*cards, user])
+        await session.flush()
+        folder = Folder(user_id=user.id, name="Ordner")
+        session.add(folder)
+        await session.flush()
+        session.add(CollectionItem(user_id=user.id, folder_id=folder.id, card_id=cards[0].id))
+        await session.commit()
+        return cards[0].id
+
+
+async def test_jp_vintage_replaces_broken_tcgdex_set(
+    session_factory: async_sessionmaker[AsyncSession], settings: Settings
+) -> None:
+    kept_id = await _tcgdex_base_set(session_factory)
+    requested: list[list[str]] = []
+    mock = vintage_transport(requested)
+    service = PriceChartingCatalog(
+        session_factory,
+        settings,
+        EcbRates(user_agent="t", transport=mock, clock=lambda: NOW),
+        lambda: ApifyClient("token", user_agent="t", transport=mock),
+        transport=mock,
+        clock=lambda: NOW,
+    )
+
+    preview = await service.run_vintage(dry_run=True)
+    assert requested == []  # Probelauf kostet nichts
+    first = preview.replacements[0]
+    assert (first.tcgdex_id, first.removed, first.kept) == ("PMCG1", 2, 1)
+
+    report = await service.run_vintage()
+
+    assert len(requested) == math.ceil(len(JP_VINTAGE) / 10)
+    assert (report.sets, report.cards, report.skipped_products) == (1, 3, 1)
+    assert "pokemon-japanese-jungle" in report.missing  # TCGdex-Set bliebe dann bestehen
+    assert [(r.tcgdex_id, r.removed, r.kept, r.set_removed) for r in report.replacements] == [
+        ("PMCG1", 2, 1, False)
+    ]
+    async with session_factory() as session:
+        new_set = await session.scalar(
+            select(CardSet).where(CardSet.external_id == "pc-pokemon-japanese-expansion-pack")
+        )
+        assert new_set is not None
+        assert (new_set.name, str(new_set.release_date)) == ("拡張パック", "1996-10-20")
+        names = sorted(
+            (await session.scalars(select(Card.name).where(Card.set_id == new_set.id))).all()
+        )
+        assert names == ["Bill", "リザードン", "リザードン [No Rarity]"]
+        remaining = (
+            await session.scalars(select(Card.id).where(Card.external_id.like("PMCG1-%")))
+        ).all()
+        assert remaining == [kept_id]  # in einer Sammlung → bleibt
+        assert await replaced_by_pricecharting(session, "ja", "PMCG1")
+        assert not await replaced_by_pricecharting(session, "ja", "PMCG2")
+        assert not await replaced_by_pricecharting(session, "en", "PMCG1")
+
+
+def test_japanese_names_from_pokedex() -> None:
+    assert japanese_name("Charizard") == "リザードン"
+    assert japanese_name("Dark Charizard [1st Edition]") == "わるいリザードン [1st Edition]"
+    assert japanese_name("Brock's Onix") == "タケシのイワーク"
+    assert japanese_name("Bill") == "Bill"  # Trainer bleibt englisch

@@ -14,6 +14,14 @@ kennt dort kaum Karten. PriceCharting führt diese Sets vollständig. Der Apify-
   Produkte ohne Nummer (Displays, Booster) sind versiegelt und werden übersprungen.
 * Preise kommen gleich mit (in Euro umgerechnet) und gelten wie ein PriceCharting-Abruf
   (kein zusätzlicher Einzelabruf je Karte).
+
+**Japanische Vintage-Sets** (1996–2006, :data:`JP_VINTAGE`): Die offizielle Datenbank beginnt
+erst 2006, und TCGdex führt diese Sets mit fehlerhaften Namen („奇妙な“, „ノクトウル“) und
+ohne Bilder (Spike ``docs/phase5/jp_vintage.md``). Sie kommen deshalb ebenfalls von
+PriceCharting – Set-Name und Erscheinungsdatum vom TCGdex-Set, Kartennamen japanisch über die
+Pokédex-Nummer („Charizard #6“ → „リザードン“). Die TCGdex-Fassung wird danach entfernt;
+Karten, die jemand in der Sammlung hat, bleiben (und werden gemeldet). Der Katalog-Abgleich
+überspringt ersetzte Sets (:func:`replaced_tcgdex_sets`).
 """
 
 from __future__ import annotations
@@ -27,12 +35,20 @@ from typing import Any
 
 import httpx
 import structlog
-from sqlalchemy import func
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
-from app.models import Card, CardSet, CardSource, ImageSource, PriceCheck, PricePoint
+from app.models import (
+    Card,
+    CardSet,
+    CardSource,
+    CollectionItem,
+    ImageSource,
+    PriceCheck,
+    PricePoint,
+)
 from app.providers.apify import ApifyClient, ApifyError
 from app.providers.fx import EcbRates
 from app.providers.pricing.pricecharting import (
@@ -41,6 +57,7 @@ from app.providers.pricing.pricecharting import (
     RAW_METRIC,
     RAW_VARIANT,
 )
+from app.services.card_names import species_id_by_name, species_name
 from app.services.catalog_numbers import normalize_number
 
 log = structlog.get_logger(__name__)
@@ -64,6 +81,62 @@ LINKS_PAGE_FUNCTION = """async function pageFunction(context) {
     return { links: $('a[href*="/console/pokemon-"]').map((i, a) => $(a).attr('href')).get() };
 }"""
 
+# PriceCharting-Slug → TCGdex-Set, das er ersetzt (``None``: neues Set ohne Gegenstück).
+JP_VINTAGE: dict[str, str | None] = {
+    "pokemon-japanese-expansion-pack": "PMCG1",
+    "pokemon-japanese-jungle": "PMCG2",
+    "pokemon-japanese-mystery-of-the-fossils": "PMCG3",
+    "pokemon-japanese-rocket-gang": "PMCG4",
+    "pokemon-japanese-leaders%27-stadium": "PMCG5",
+    "pokemon-japanese-challenge-from-the-darkness": "PMCG6",
+    "pokemon-japanese-gold-silver-new-world": "neo1",
+    "pokemon-japanese-crossing-the-ruins": "neo2",
+    "pokemon-japanese-awakening-legends": "neo3",
+    "pokemon-japanese-darkness-and-to-light": "neo4",
+    "pokemon-japanese-vs": "VS1",
+    "pokemon-japanese-web": "web1",
+    "pokemon-japanese-expedition-expansion-pack": "E1",
+    "pokemon-japanese-the-town-on-no-map": "E2",
+    "pokemon-japanese-wind-from-the-sea": "E3",
+    "pokemon-japanese-split-earth": "E4",
+    "pokemon-japanese-mysterious-mountains": "E5",
+    # Nicht in der Übersicht von PriceCharting – Schreibweise vermutet, fehlt sie, bleibt
+    # das TCGdex-Set (der Bericht nennt sie).
+    "pokemon-japanese-flight-of-legends": "PCG1",
+    "pokemon-japanese-clash-of-the-blue-sky": "PCG2",
+    "pokemon-japanese-rocket-gang-strikes-back": "PCG3",
+    "pokemon-japanese-golden-sky-silvery-ocean": "PCG4",
+    "pokemon-japanese-mirage-forest": "PCG5",
+    "pokemon-japanese-holon-research": "PCG6",
+    "pokemon-japanese-holon-phantom": "PCG7",
+    "pokemon-japanese-miracle-crystal": "PCG8",
+    "pokemon-japanese-offense-and-defense-of-the-furthest-ends": "PCG9",
+    # Vintage-Sondersets ohne Gegenstück bei TCGdex
+    "pokemon-japanese-vending": None,
+    "pokemon-japanese-southern-islands": None,
+    "pokemon-japanese-neo-premium-file": None,
+    "pokemon-japanese-yamabuki-city-gym": None,
+    "pokemon-japanese-2002-mcdonald%27s": None,
+    "pokemon-japanese-player%27s-club": None,
+    "pokemon-japanese-cd-promo": None,
+}
+# Englische Namenszusätze alter Karten → japanisch („Dark Charizard“ → „わるいリザードン“).
+_JP_PREFIXES = (
+    ("Dark ", "わるい"),
+    ("Light ", "やさしい"),
+    ("Shining ", "ひかる"),
+    ("Rocket's ", "ロケット団の"),
+    ("Brock's ", "タケシの"),
+    ("Misty's ", "カスミの"),
+    ("Lt. Surge's ", "マチスの"),
+    ("Erika's ", "エリカの"),
+    ("Koga's ", "キョウの"),
+    ("Sabrina's ", "ナツメの"),
+    ("Blaine's ", "カツラの"),
+    ("Giovanni's ", "サカキの"),
+)
+_BRACKET = re.compile(r"\s*(\[[^\]]*\])\s*$")
+
 ApifyFactory = Callable[[], ApifyClient]
 
 
@@ -78,6 +151,17 @@ class Console:
 
 
 @dataclass
+class Replacement:
+    """Ersetztes TCGdex-Set: entfernte und (wegen Sammlungen) behaltene Karten."""
+
+    slug: str
+    tcgdex_id: str
+    removed: int = 0
+    kept: int = 0
+    set_removed: bool = False
+
+
+@dataclass
 class CatalogReport:
     consoles: list[Console] = field(default_factory=list)
     sets: int = 0
@@ -86,6 +170,8 @@ class CatalogReport:
     skipped_products: int = 0
     cost_usd: float = 0.0
     errors: list[str] = field(default_factory=list)
+    missing: list[str] = field(default_factory=list)  # Slugs ohne Ergebnis
+    replacements: list[Replacement] = field(default_factory=list)
 
 
 def parse_consoles(html: str, languages: Sequence[str]) -> list[Console]:
@@ -114,6 +200,41 @@ def metric_name(label: str) -> str | None:
     if key.startswith(("grade_", "psa_10")):
         return key
     return None
+
+
+def japanese_name(name: str) -> str:
+    """„Charizard [No Rarity]“ → „リザードン [No Rarity]“, „Dark Charizard“ → „わるいリザードン“.
+
+    Nur Pokémon-Namen (über die Pokédex-Daten); Trainer und Energien bleiben englisch.
+    """
+    bracket = _BRACKET.search(name)
+    base = name[: bracket.start()] if bracket else name
+    prefix = ""
+    for english, local in _JP_PREFIXES:
+        if base.startswith(english):
+            base, prefix = base.removeprefix(english), local
+            break
+    species_id = species_id_by_name(base)
+    local_name = species_name(species_id, "ja") if species_id else None
+    if local_name is None:
+        return name
+    return f"{prefix}{local_name}" + (f" {bracket.group(1)}" if bracket else "")
+
+
+def replaced_tcgdex_sets() -> frozenset[str]:
+    """TCGdex-Sets (Japanisch), die durch PriceCharting-Sets ersetzt werden."""
+    return frozenset(set_id for set_id in JP_VINTAGE.values() if set_id)
+
+
+async def replaced_by_pricecharting(session: AsyncSession, language: str, set_id: str) -> bool:
+    """Wurde dieses TCGdex-Set schon durch ein PriceCharting-Set ersetzt (Abgleich überspringen)?"""
+    if language != "ja" or set_id not in replaced_tcgdex_sets():
+        return False
+    slugs = [f"pc-{slug}" for slug, tcgdex_id in JP_VINTAGE.items() if tcgdex_id == set_id]
+    found = await session.scalar(
+        select(func.count()).where(CardSet.external_id.in_(slugs), CardSet.language == "ja")
+    )
+    return bool(found)
 
 
 def set_name(collection: dict[str, Any]) -> str:
@@ -206,6 +327,32 @@ class PriceChartingCatalog:
             return report
         if dry_run or not report.consoles:
             return report
+        await self._import(report)
+        return report
+
+    async def run_vintage(
+        self, *, dry_run: bool = False, limit: int | None = None
+    ) -> CatalogReport:
+        """Japanische Vintage-Sets (:data:`JP_VINTAGE`) importieren und TCGdex-Fassung ersetzen.
+
+        Probelauf: nichts abrufen, nur je TCGdex-Set zählen, was entfernt bzw. behalten würde.
+        """
+        report = CatalogReport(consoles=[Console(slug, "ja") for slug in JP_VINTAGE][:limit])
+        if dry_run:
+            async with self._factory() as session:
+                for console in report.consoles:
+                    tcgdex_id = JP_VINTAGE[console.slug]
+                    if tcgdex_id:
+                        report.replacements.append(
+                            await _replace_tcgdex_set(
+                                session, console.slug, tcgdex_id, dry_run=True
+                            )
+                        )
+            return report
+        await self._import(report)
+        return report
+
+    async def _import(self, report: CatalogReport) -> None:
         per_euro = (await self._rates.rate("USD")).per_euro
         for start in range(0, len(report.consoles), BATCH):
             batch = report.consoles[start : start + BATCH]
@@ -215,29 +362,40 @@ class PriceChartingCatalog:
                 report.errors.append(f"Apify: {exc}")
                 break  # z. B. Budget – nicht weiter versuchen
             languages_by_slug = {console.slug: console.language for console in batch}
+            returned: set[str] = set()
             for collection in collections:
                 slug = str(collection.get("collectionUrl") or "").rstrip("/").rpartition("/")[2]
-                language = languages_by_slug.get(slug.lower())
-                if language is None:
+                slug = slug.lower()
+                language = languages_by_slug.get(slug)
+                products = collection.get("products") or []
+                if language is None or not products:
                     continue
+                returned.add(slug)
                 async with self._factory() as session:
+                    tcgdex_id = JP_VINTAGE.get(slug) if language == "ja" else None
                     await self._store(
                         session,
-                        slug=slug.lower(),
+                        slug=slug,
                         language=language,
                         collection=collection,
                         per_euro=per_euro,
                         report=report,
+                        tcgdex_set=await _tcgdex_set(session, tcgdex_id),
                     )
+                    if tcgdex_id:
+                        report.replacements.append(
+                            await _replace_tcgdex_set(session, slug, tcgdex_id, dry_run=False)
+                        )
                     await session.commit()
+            report.missing += [c.slug for c in batch if c.slug not in returned]
         log.info(
             "pricecharting_catalog.done",
             consoles=len(report.consoles),
             sets=report.sets,
             cards=report.cards,
+            missing=len(report.missing),
             cost=report.cost_usd,
         )
-        return report
 
     async def _fetch(self, batch: Sequence[Console], report: CatalogReport) -> list[dict[str, Any]]:
         async with self._apify() as client:
@@ -272,9 +430,11 @@ class PriceChartingCatalog:
         collection: dict[str, Any],
         per_euro: Decimal,
         report: CatalogReport,
+        tcgdex_set: CardSet | None = None,
     ) -> None:
+        """``tcgdex_set``: das ersetzte TCGdex-Set (liefert Name, Serie, Erscheinungsdatum)."""
         products = [p for p in collection.get("products") or [] if isinstance(p, dict)]
-        set_values = {
+        set_values: dict[str, Any] = {
             "external_id": f"pc-{slug}"[:64],
             "language": language,
             "name": set_name(collection)[:200] or slug,
@@ -282,12 +442,25 @@ class PriceChartingCatalog:
             "card_count_total": int(collection.get("productCount") or len(products)),
             "synced_at": func.now(),
         }
+        if tcgdex_set is not None:
+            set_values |= {
+                "name": tcgdex_set.name,
+                "series_name": tcgdex_set.series_name or "PriceCharting",
+                "release_date": tcgdex_set.release_date,
+            }
         set_stmt = insert(CardSet).values(set_values)
         set_id = await session.scalar(
             set_stmt.on_conflict_do_update(
                 index_elements=[CardSet.external_id, CardSet.language],
                 set_={
-                    key: set_stmt.excluded[key] for key in ("name", "card_count_total", "synced_at")
+                    key: set_stmt.excluded[key]
+                    for key in (
+                        "name",
+                        "series_name",
+                        "release_date",
+                        "card_count_total",
+                        "synced_at",
+                    )
                 },
             ).returning(CardSet.id)
         )
@@ -300,6 +473,8 @@ class PriceChartingCatalog:
                 report.skipped_products += 1  # versiegelt oder ohne Nummer
                 continue
             name, number = parsed
+            if language == "ja":
+                name = japanese_name(name)
             image = str(product.get("imageUrl") or "")[:500] or None
             card_stmt = insert(Card).values(
                 external_id=f"pc-{product['productId']}",
@@ -381,6 +556,37 @@ class PriceChartingCatalog:
         return True
 
 
+async def _tcgdex_set(session: AsyncSession, external_id: str | None) -> CardSet | None:
+    if external_id is None:
+        return None
+    return await session.scalar(
+        select(CardSet).where(CardSet.external_id == external_id, CardSet.language == "ja")
+    )
+
+
+async def _replace_tcgdex_set(
+    session: AsyncSession, slug: str, external_id: str, *, dry_run: bool
+) -> Replacement:
+    """Karten des TCGdex-Sets entfernen – außer solchen in Sammlungen; leeres Set löschen."""
+    result = Replacement(slug=slug, tcgdex_id=external_id)
+    tcgdex = select(CardSet.id).where(CardSet.external_id == external_id, CardSet.language == "ja")
+    cards = Card.set_id.in_(tcgdex)
+    in_collection = exists().where(CollectionItem.card_id == Card.id)
+    result.kept = int(await session.scalar(select(func.count()).where(cards, in_collection)) or 0)
+    result.removed = int(
+        await session.scalar(select(func.count()).where(cards, ~in_collection)) or 0
+    )
+    if dry_run:
+        return result
+    await session.execute(delete(Card).where(cards, ~in_collection))
+    if not result.kept:
+        deleted = await session.execute(
+            delete(CardSet).where(CardSet.id.in_(tcgdex)).returning(CardSet.id)
+        )
+        result.set_removed = bool(deleted.all())
+    return result
+
+
 def render_report(report: CatalogReport, *, dry_run: bool) -> str:
     lines = [
         f"PriceCharting-Sets: {len(report.consoles)} gefunden "
@@ -392,6 +598,14 @@ def render_report(report: CatalogReport, *, dry_run: bool) -> str:
             f"Importiert: {report.sets} Sets, {report.cards} Karten, davon mit Preis "
             f"{report.priced}; übersprungen (ohne Nummer): {report.skipped_products}; "
             f"Kosten {report.cost_usd:.3f} $"
+        )
+    for item in report.replacements:
+        verb = "würde entfernen" if dry_run else "entfernt"
+        kept = f", behalten (in Sammlungen): {item.kept}" if item.kept else ""
+        lines.append(f"  TCGdex {item.tcgdex_id}: {verb} {item.removed} Karten{kept}")
+    if report.missing:
+        lines.append(
+            "Bei PriceCharting nicht gefunden (TCGdex-Set bleibt): " + ", ".join(report.missing)
         )
     lines += [f"  ! {error}" for error in report.errors]
     return "\n".join(lines)

@@ -10,6 +10,7 @@ Beispiele (im Container: ``docker compose exec api python -m app.cli ...``)::
     python -m app.cli import-ptcg --dry-run        # englische Lücken aus pokemontcg.io
     python -m app.cli import-german --dry-run      # fehlende deutsche Karten aus dem PokéWiki
     python -m app.cli import-pricecharting --dry-run   # Korea/China-Sets von PriceCharting
+    python -m app.cli import-pricecharting --jp-vintage --dry-run   # JP 1996–2006 ersetzen
     python -m app.cli search "nachtara 215"
     python -m app.cli refresh-prices               # Preis-Runde sofort ausführen
     python -m app.cli prices "nachtara 215" --language de
@@ -228,9 +229,12 @@ async def _import_pricecharting(
         EcbRates(user_agent=settings.http_user_agent, url=settings.ecb_rates_url),
         lambda: ApifyClient(token.get_secret_value(), user_agent=settings.http_user_agent),
     )
-    report = await catalog.run(
-        args.languages, dry_run=args.dry_run, limit=args.limit, extra=args.sets or ()
-    )
+    if args.jp_vintage:
+        report = await catalog.run_vintage(dry_run=args.dry_run, limit=args.limit)
+    else:
+        report = await catalog.run(
+            args.languages, dry_run=args.dry_run, limit=args.limit, extra=args.sets or ()
+        )
     print(render_pricecharting_report(report, dry_run=args.dry_run))
     if report.errors:
         sys.exit(1)
@@ -651,6 +655,11 @@ def _add_catalog_commands(commands: Any) -> None:
         "--sets", nargs="+", help="zusätzliche Sets, z. B. pokemon-korean-electric-breaker"
     )
     pricecharting.add_argument("--limit", type=int, help="höchstens so viele Sets (zum Testen)")
+    pricecharting.add_argument(
+        "--jp-vintage",
+        action="store_true",
+        help="japanische Vintage-Sets (1996–2006) statt der fehlerhaften TCGdex-Fassung",
+    )
     pricecharting.set_defaults(handler=_import_pricecharting)
 
 
