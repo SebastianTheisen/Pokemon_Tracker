@@ -15,8 +15,8 @@ Stand: 17.10.2026 · Status: **Phase 5 (Flutter-App „Kartenkiste“) in Arbeit
 | 2 – Preise | ✅ erledigt | Echte Preise mit Beleg (DE/EN/JA/ZH), Worker läuft, NM-Basis = Median, 163 Tests (95 % Coverage) |
 | 3 – Sammlung, Merkliste, Dashboard | ✅ erledigt | VPS-Probe mit echten Preisen = Handrechnung (4.894,67 €), Zugriffsschutz ✅, 204 Tests (95 % Coverage) |
 | 4 – Scanner | ✅ erledigt | VPS-Lauf ✅: Top-1 5/6, 0× sicher-aber-falsch, Ø 2,7 s (max 4,6 s). Latenz-Tuning und Abnahme 85 % → Phase 7. Binder-Scan als Beta; Abnahme Top-1 ≥ 85 % wartet auf weitere Testfotos |
-| 5 – Flutter-App | 🟡 in Arbeit | App „Kartenkiste“; Tailscale vorgezogen (eigenes Gerät im Container); APK-Build per Docker auf dem VPS |
-| 6 – Deployment und Härtung | ⚪ offen | |
+| 5 – Flutter-App | ✅ erledigt | App „Kartenkiste“ im Alltagstest (iPhone), Daten aus verlässlichen Quellen (Phase 5b): ~86.000 Karten, 99 % mit Bild, Cardmarket-Zuordnung JA 84 %/ZH-CN 96 %; Abnahme Android/APK → Phase 6 |
+| 6 – Deployment und Härtung | 🟡 in Arbeit | Backups, Überwachung, Sicherheits-Check, Anleitung für Freunde, APK |
 | 7 – Nachbesserung | ⚪ offen | |
 
 Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
@@ -288,7 +288,7 @@ Ziel: alle Sets, Karten, Bilder und Preise aller Sprachen. Quellen je Bereich: o
 - [x] **PriceCharting-Details** (Migration 0015 `pricecharting_details`): Produktseiten-Abruf speichert POP-Report, Verkäufe je Note, letzte Verkäufe (je Note 10) und Bilder; `GET /cards/{id}/pricecharting`. App: Abschnitt „US-Markt (PriceCharting)“ auf der Kartenseite (Verkäufe je Note, PSA-/CGC-Population, letzte 5 Verkäufe mit Link, in US-Dollar). Preisverlauf wird roh gespeichert (Format noch unbekannt). Tests: Backend 500, Flutter 36
 - [x] TCGdex-Doppel importierter Sets zusammenführen (30th, Futsal) inkl. Cardmarket-Übernahme; Suche „PFL077“; englische Namen japanischer Sets (Set-Code-Liste `app/data/set_names.json`)
 - [x] Restliche Bilder über PriceCharting (`import-pricecharting --images`): Sets mit ≥3 Karten ohne Bild, Seite über den Namen, Karten über Nummer/Namen; deutsche Karten übernehmen das englische Bild
-- [ ] VPS: `--images --dry-run` prüfen, dann echt; Bestand messen
+- [x] VPS 23.10.: PC-Bilder (353 Bilder, 0,17 $) und Lücken Japan (`--gaps`: 117 Karten, z. B. S6a 095 Nachtara VMAX, 0,66 $)
 - [ ] Taiwan: 66 % ohne Cardmarket (Cardmarket führt Traditionell-Chinesisch nicht) – Preise über PriceCharting bzw. Sprachfaktor auf JP-Fassung prüfen
 - [ ] Korea weiter dünn: offizielle Seite sperrt ausländische Zugriffe (410), TCGdex „kommt bald“, PriceCharting nur 4 Sets
 - [x] Preise: Cardmarket-Zuordnung über Kartennamen (`cardmarket-match`, auch im täglichen Import): Ausgabe je Set, Produkt je Karte (Reihenfolge bei gleichen Namen); Preisführer auch für Karten, die TCGdex nicht kennt
@@ -299,6 +299,18 @@ Ziel: alle Sets, Karten, Bilder und Preise aller Sprachen. Quellen je Bereich: o
 - [ ] Auf dem VPS: Link-Filter und Lesezeichen an echten Cardmarket- und eBay-Seiten prüfen (Seitenaufbau nur aus Dokumentation bekannt)
 - [ ] Bild-Import auf dem VPS: `deploy/phase5_bilder.sh` (Probelauf prüfen, Parser ggf. nachschärfen), danach Abdeckung kontrollieren. Offen: Taiwan-Bilder sind große PNGs (~1,6 MB) – ggf. später verkleinerte Vorschau; Korea weiter ohne Quelle
 - [ ] Abnahme: Kern-Flows auf iPhone (PWA) und Android
+
+### Phase 6 – Aufgaben
+
+Ausgangslage (23.10.2026): Compose läuft, API nur auf `127.0.0.1:8000`, erreichbar ausschließlich über das Tailscale-Gerät „kartenkiste“ (HTTPS `*.ts.net`). **Keine Backups.**
+
+- [ ] Backups: tägliches `pg_dump` (komprimiert, Aufbewahrung), Referenzbilder des Scanners mitsichern; Wiederherstellungstest (Dump in Test-Datenbank einspielen, Zählungen vergleichen)
+- [ ] Backup-Ziel außerhalb des VPS (Entscheidung offen)
+- [ ] Überwachung: Health-Prüfung von API, Worker (letzter Lauf), Preisrunde, Cardmarket-Import, Backup-Alter; Benachrichtigung (Entscheidung offen)
+- [ ] Sicherheits-Check: offene Ports/Firewall, Tailscale-Freigaben, Rate-Limits, Admin-Rechte, Abhängigkeiten (`pip-audit`), Container ohne Root
+- [ ] Last-Test: Sammlung mit vielen Karten, gleichzeitige Scans
+- [ ] Android: APK bauen (`deploy/phase5_app.sh --apk`) und auf einem Gerät abnehmen
+- [ ] Anleitung für Freunde („So kommst du rein“: Tailscale, Node-Sharing, Einladungscode, PWA bzw. APK)
 
 ### Änderungsprotokoll
 
