@@ -75,18 +75,34 @@
 ## Japan – Tempo und Detailseite
 
 - 5 von 5 Seiten ok in 15 s (Pause 3.0 s)
-- ⏳ `https://www.pokemon-card.com/card-search/details.php/card/50613` → HTTP 503, Versuch 1
-- ⏳ `https://www.pokemon-card.com/card-search/details.php/card/50613` → HTTP 503, Versuch 2
-- ⏳ `https://www.pokemon-card.com/card-search/details.php/card/50613` → HTTP 503, Versuch 3
-- Detail 50613: HTTP 503
-  - `<h1`: `=========== タイトル ============================================================================================ --> <section class="Section"> <h1 class="Heading1">現在メンテナンスをしております。</h1> <div class="ImageArea"> <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAArsAAAGFCAYAAAD9+zvCAAAgAElEQVR4nOzd95NcWXbg9+81z6TPrMryhQ`
+- Detail 50613: HTTP 200
+  - `<h1`: `===================== カード詳細 ============================================================================================ --> <section class="Section"> <h1 class="Heading1 mt20">タマタマ</h1> <div class="Box"> <div class="LeftBox"> <img class="fit" src="/assets/images/card_images/large/M6a/050613_P_TAMATAMA`
+  - `subtext`: `ss="Box"> <div class="LeftBox"> <img class="fit" src="/assets/images/card_images/large/M6a/050613_P_TAMATAMA.jpg" alt="タマタマ" /> <div class="subtext Text-fjalla"> <img src="/assets/images/card/regulation_logo_1/M6a.gif" class="img-regulation" alt="M6a" /> &nbsp;001&nbsp;/&nbsp;103&nbsp; </div> `
+  - `img-regulation`: `_images/large/M6a/050613_P_TAMATAMA.jpg" alt="タマタマ" /> <div class="subtext Text-fjalla"> <img src="/assets/images/card/regulation_logo_1/M6a.gif" class="img-regulation" alt="M6a" /> &nbsp;001&nbsp;/&nbsp;103&nbsp; </div> <div class="card Text-fjalla"> <h4>No.102 たまごポケモン</h4> `
+  - `拡張パック|商品|収録`: `Manager --> <meta charset="utf-8"> <meta name="author" content="（株）ポケモン,（株）クリーチャーズ" /> <meta name="keywords" content="ポケモンカードゲーム,ポケカ,ポケモン,pokemon,"> <meta name="description" content="ポケモンカードゲームの遊びかた、商品、イベント情報などをお届けする公式サイト"> <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0"> <!--OGP--> <meta property="og:title" content="カード詳細（タマタマ） | ポケカ公式" /> <`
+  - `拡張パック|商品|収録`: `a property="og:type" content="article" /> <meta property="og:url" content="https://www.pokemon-card.com/card-search/details.php/card/50613" /> <meta property="og:description" content="ポケモンカードゲームの遊びかた、商品、イベント情報などをお届けする公式サイト" /> <meta property="og:image" content="https://www.pokemon-card.com/assets/images/og.png?v=1998061658402" /> <meta property="fb:app_id" content="563836863826964" /> <meta name="tw`
+  - `拡張パック|商品|収録`: `r:card" content="summary" /> <meta name="twitter:site" content="@Pokemon_cojp" /> <meta name="twitter:title" content="カード詳細（タマタマ） | ポケカ公式" /> <meta name="twitter:description" content="ポケモンカードゲームの遊びかた、商品、イベント情報などをお届けする公式サイト" /> <meta name="twitter:image" content="https://www.pokemon-card.com/assets/images/og.png?v=1998061658402" /> <link href="https://fonts.googleapis.com/css?family=Fjalla+One" r`
+  - `class="fit"`: `====== --> <section class="Section"> <h1 class="Heading1 mt20">タマタマ</h1> <div class="Box"> <div class="LeftBox"> <img class="fit" src="/assets/images/card_images/large/M6a/050613_P_TAMATAMA.jpg" alt="タマタマ" /> <div class="subtext Text-fjalla"> <img src="/assets/images/card/regulatio`
 
 ## Taiwan – Zählung und Detailseite
 
 - Liste HTTP 200
-- Karten-Links auf Seite 1: 0
-- Skripte (Liste per JavaScript geladen?): []
-- Seitenanfang: `<!doctype html> <html> <head> <meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1.0"> <title>Pokémon Trading Card Game Website</title> </head> <body> <main> This website is under maintenance. </main> <footer> </footer> </body> </html> `
+  - `resultNumber`: ` <div class="resultHeader"> <div class="resultSummary"> <p class="resultLabel">搜尋結果</p> <p class="resultNumber">14587</p> <p class="resultUnit">個</p> <p class="resultPageNumber">第 1 頁</p> <p class="resultTotalPag`
+  - `resultNumber`: `v class="rightColumn"> <div class="spResultHeader"> <div class="resultSummary"> <p class="resultNumber">14587</p> <p class="resultUnit">個</p> <p class="resultPageNumber">第 1 頁</p> `
+  - `張|件`: `</div> </div> </div> <div class="spAddSearchConditions closed"> <div class="spAddSearchConditionsLabel closed">追加條件</div> <div class="specifyConditions accordionMenu"> <div class="conditionRow all"> <h5 class="specify`
+  - `張|件`: ` <div class="cardTypeLabelContainer pokemon"> <div class="cardTypeLabel">寶可夢條件</div> </div> <div class="conditionRow pokemon"> <h5 class="specifyConditionLabel">進化</h5> <di`
+  - `張|件`: ` <div class="cardTypeLabelContainer energy"> <div class="cardTypeLabel">能量卡條件</div> </div> <div class="conditionRow energy"> `
+  - `pageNo=`: ` <meta property="og:type" content="website"> <meta property="og:url" content="http://asia.pokemon-card.com/tw/card-search/list/?pageNo=1"> <meta property="og:image" content="http://asia.pokemon-card.com/build/images/tw/ogp/ogp.png"> <meta property="og:site_name`
+  - `pageNo=`: `paginationItem current"><span>1</span></li> <li class="paginationItem"><a href="/tw/card-search/list/?pageNo=2">2</a></li> <li class="paginationItem"><a href="/tw/card-search/list/?pageNo=3">3</a></li> `
+  - `pageNo=`: `"/tw/card-search/list/?pageNo=2">2</a></li> <li class="paginationItem"><a href="/tw/card-search/list/?pageNo=3">3</a></li> <li class="paginationItem"><a href="/tw/card-search/list/?pageNo=4">4</a></li> `
+- Karten-Links auf Seite 1: 20
+- Detail 19913: HTTP 200
+  - `collectorNumber`: `card.com/tw/card-img/mark/tw_m6af_exp.png"> </span> <span class="alpha"> J </span> <span class="collectorNumber"> 001/103 </span> </p> </section> <section class="extraInformationColumn"> `
+  - `expansion|系列|擴充|商品`: `esheet"> <meta name="author" content="Pokémon"> <meta name="keyword" content="蛋蛋,寶可夢集換式卡牌遊戲,寶可夢集,pokemon"> <meta name="description" content="為您傳遞寶可夢集換式卡牌遊戲的規則・商品・活動資訊的官方網站之[蛋蛋]頁面。"> <meta property="og:title" content="訓練家網站"> <meta property="og:type" content="website"> <meta property="og:url" content="http:/`
+  - `expansion|系列|擴充|商品`: `mon-card.com/build/images/tw/ogp/ogp.png"> <meta property="og:site_name" content="寶可夢集換式卡牌遊戲 訓練家網站"> <meta property="og:description" content="為您傳遞寶可夢集換式卡牌遊戲的規則・商品・活動資訊的官方網站之[蛋蛋]頁面。"> <meta property="og:app_id" content="439325390737330"> <meta property="og:app_id" content="439325390737330"> <link r`
+  - `expansion|系列|擴充|商品`: ` <a href="https://asia.pokemon-card.com/tw/about/"><span>新手指南</span></a> </li> <li class="siteLinkItem"> <a href="https://asia.pokemon-card.com/tw/products/">商品資訊</a> </li> <li class="siteLinkItem"> <a href="https://asia.pokemon-card.com/tw/card-search">卡牌</a> </li> <li class="siteLinkItem"> `
+  - `cardImage`: `veMarker"> 基礎 </span> 蛋蛋 </h1> </header> <div class="cardDetailPage"> <section class="imageColumn"> <div class="cardImage"> <img src="https://asia.pokemon-card.com/tw/card-img/tw00019913.png"> </div> </section> <section class="cardInformationColumn"> <`
+  - `pageHeader`: `ss="line"></span> </button> </li> </ul> </nav> </header> <main class="content tw"> <div class="wrapper"> <header> <h1 class="pageHeader cardDetail"> <span class="evolveMarker"> 基礎 </span> 蛋蛋 </h1> </header> <div class="cardDetailPage"> `
 
 
-_Lauf: 2026-10-21 21:20 UTC, Stand 5d34d3a_
+_Lauf: 2026-10-23 15:12 UTC, Stand 23d8210_
