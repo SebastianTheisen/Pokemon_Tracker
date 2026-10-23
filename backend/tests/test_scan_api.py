@@ -10,10 +10,11 @@ from __future__ import annotations
 import io
 import uuid
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import cv2
 import httpx
 import numpy as np
 import pytest
@@ -25,8 +26,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
 from app.main import create_app
-from app.models import Card, CardReferenceImage, Role, ScanLog
-from app.scanner.imaging import encode_jpeg
+from app.models import Card, CardReferenceImage, CardSet, Role, ScanLog
+from app.scanner.imaging import decode_image, encode_jpeg
 from app.scanner.storage import ReferenceStore
 from app.services.admin import AdminService
 from app.services.scan import prune_reference_files, purge_scan_logs
@@ -38,6 +39,7 @@ from tests.scan_helpers import (
     ScriptedReader,
     build_scan_catalog,
     crop_jpeg,
+    fingerprint,
     lines,
     photo,
     photo_bytes,
@@ -860,3 +862,64 @@ async def test_psa_warns_when_number_differs(
     assert result["psa_warning"] == (
         "Laut PSA ist es Nr. 079 (FA/LUGIA V) – bitte die Karte prüfen."
     )
+
+
+def _stamped(name: str, stamp_from: str) -> bytes:
+    """Kartenausschnitt mit eingesetztem „Jubiläums-Stempel“ (Ausschnitt eines anderen Fotos)."""
+    card = decode_image(crop_jpeg(name))
+    other = decode_image(crop_jpeg(stamp_from))
+    height, width = card.shape[:2]
+    size = int(width * 0.12)
+    stamp = cv2.resize(other[: other.shape[0] // 3, : other.shape[1] // 3], (size, size))
+    top, left = int(height * 0.42), int(width * 0.75)
+    card[top : top + size, left : left + size] = stamp
+    return encode_jpeg(card)
+
+
+async def test_reprint_with_same_number_is_told_apart_by_stamp(
+    client: AsyncClient,
+    admin: Account,
+    reader: ScriptedReader,
+    images: FakeImages,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    original, reprint = crop_jpeg("02.jpg"), _stamped("02.jpg", "05.jpg")
+    async with session_factory() as session:
+        for external_id, official, released, image in (
+            ("dp6", 146, date(2007, 11, 1), original),
+            ("me55c", 30, date(2026, 9, 16), reprint),
+        ):
+            card_set = CardSet(
+                external_id=external_id,
+                language="de",
+                name=external_id,
+                card_count_official=official,
+                release_date=released,
+            )
+            session.add(card_set)
+            await session.flush()
+            url = f"https://assets.tcgdex.net/de/{external_id}/43"
+            images.add(url, image)
+            session.add(
+                Card(
+                    external_id=f"{external_id}-43",
+                    language="de",
+                    set_id=card_set.id,
+                    number="43",
+                    number_norm="43",
+                    name="Selfe",
+                    image_url=url,
+                )
+            )
+        await session.commit()
+    ocr = lines("Selfe", "BASIS", "43/146")  # Nachdrucke tragen die Nummer des Originals
+    for data in (original, reprint):
+        reader.by_image[fingerprint(decode_image(data))] = ocr
+
+    stamped = await _scan(client, admin, reprint)
+    plain = await _scan(client, admin, original)
+
+    assert _best(stamped) == ("me55c-43", "de")
+    assert "Druck per Bildvergleich bestimmt" in " | ".join(stamped["best"]["reasons"])
+    assert stamped["confident"] is True
+    assert _best(plain) == ("dp6-43", "de")

@@ -21,7 +21,7 @@ from urllib.parse import urlsplit
 import httpx
 import structlog
 
-from app.scanner.imaging import InvalidImageError, decode_image
+from app.scanner.imaging import InvalidImageError, UInt8Image, decode_image
 from app.scanner.matching import REFERENCE_FEATURES, ImageFeatures, extract_features
 from app.scanner.storage import FeatureCache
 
@@ -32,6 +32,7 @@ CpuRunner = Callable[..., Awaitable[Any]]
 MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024
 _IMAGE_SUFFIXES = (".webp", ".png", ".jpg", ".jpeg")
 TCGDEX_ASSET_HOST = "assets.tcgdex.net"
+PIXEL_ENTRIES = 8
 
 
 def download_url(image_url: str) -> str:
@@ -71,6 +72,7 @@ class CatalogImageIndex:
         self._memory: OrderedDict[str, ImageFeatures] = OrderedDict()
         self._memory_entries = memory_entries
         self._downloads = asyncio.Semaphore(download_concurrency)
+        self._pixels: OrderedDict[str, UInt8Image] = OrderedDict()
 
     def is_allowed(self, image_url: str) -> bool:
         parts = urlsplit(image_url)
@@ -101,7 +103,8 @@ class CatalogImageIndex:
             self._remember(image_url, features)
         return features
 
-    async def _download(self, image_url: str) -> ImageFeatures | None:
+    async def _fetch(self, image_url: str) -> bytes | None:
+        """Bilddatei laden (``None``: fehlt dauerhaft – gemerkt – oder Netzfehler)."""
         url = download_url(image_url)
         async with self._downloads:
             try:
@@ -119,13 +122,38 @@ class CatalogImageIndex:
                 # Netzfehler: nichts merken, beim nächsten Scan erneut versuchen.
                 log.warning("catalog_image_failed", url=url, error=str(exc))
                 return None
+        return bytes(data)
+
+    async def _download(self, image_url: str) -> ImageFeatures | None:
+        data = await self._fetch(image_url)
+        if data is None:
+            return None
         try:
-            features: ImageFeatures = await self._run_cpu(_features_from_bytes, bytes(data))
+            features: ImageFeatures = await self._run_cpu(_features_from_bytes, data)
         except InvalidImageError:
             self._cache.mark_missing(image_url)
             return None
         await self._run_cpu(self._cache.put, image_url, features)
         return features
+
+    async def image_for(self, image_url: str | None) -> UInt8Image | None:
+        """Das Bild selbst (nur für den Nachdruck-Vergleich – selten, daher kein Datei-Cache)."""
+        if not image_url or not self.is_allowed(image_url):
+            return None
+        if (cached := self._pixels.get(image_url)) is not None:
+            self._pixels.move_to_end(image_url)
+            return cached
+        data = await self._fetch(image_url)
+        if data is None:
+            return None
+        try:
+            image: UInt8Image = await self._run_cpu(decode_image, data)
+        except InvalidImageError:
+            return None
+        self._pixels[image_url] = image
+        while len(self._pixels) > PIXEL_ENTRIES:
+            self._pixels.popitem(last=False)
+        return image
 
     async def features_many(self, urls: Iterable[str | None]) -> list[ImageFeatures | None]:
         """Mehrere Bilder parallel (Downloads begrenzt)."""

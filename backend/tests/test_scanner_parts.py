@@ -30,6 +30,7 @@ from app.scanner.imaging import (
 from app.scanner.matching import ImageFeatures, extract_features, match_score
 from app.scanner.storage import FeatureCache, PendingScans, ReferenceStore
 from app.scanner.text import LanguageGuess, extract_text_features
+from app.scanner.twins import TwinDecision, pick_twin
 from app.services.scan_scoring import (
     Candidate,
     is_confident,
@@ -420,3 +421,12 @@ def test_rapidocr_reader_reads_photo_with_positions() -> None:
     assert any("110/098" in text for text in texts)
     assert all(0 <= line.top <= 1 and 0 <= line.left <= 1 for line in result)
     assert reader.read(np.full((60, 60, 3), 255, dtype=np.uint8)) == []
+
+
+def test_twins_need_the_same_artwork() -> None:
+    """Verschiedene Grafiken sind keine Nachdrucke – der Vergleich hält sich dann heraus."""
+    lugia, mewtu = card_crop(photo("03.jpg")), card_crop(photo("02.jpg"))
+    assert lugia is not None and mewtu is not None
+    assert pick_twin(lugia, [lugia, mewtu]) == TwinDecision()
+    same = pick_twin(lugia, [lugia, lugia.copy()])
+    assert (same.members, same.index) == ((0, 1), None)  # kein sichtbarer Unterschied

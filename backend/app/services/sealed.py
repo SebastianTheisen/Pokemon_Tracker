@@ -33,6 +33,8 @@ from app.services.pricing import nm_basis
 
 CENT = Decimal("0.01")
 SEARCH_LIMIT = 40
+MIN_PARTIAL = 4  # kürzere Anfänge passen auf zu viele Set-Namen
+MAX_PARTIAL_SETS = 5
 # Reihenfolge zählt: „Elite Trainer Box“ ist auch eine „Box“, „Booster Box“ ein Display.
 _KIND_RULES: tuple[tuple[re.Pattern[str], ProductKind], ...] = tuple(
     (re.compile(pattern, re.I), kind)
@@ -92,16 +94,48 @@ async def _set_names_de_en(session: AsyncSession) -> list[tuple[str, str]]:
     return sorted(names.items(), key=lambda pair: len(pair[0]), reverse=True)
 
 
-async def translate_query(session: AsyncSession, query: str) -> str:
-    """Deutsche Suche in Cardmarket-Englisch übersetzen (Set-Namen und Produktarten)."""
+def _translate(query: str, set_names: list[tuple[str, str]]) -> str:
     text = f" {query.casefold()} "
-    for german, english in await _set_names_de_en(session):
+    for german, english in set_names:
         if f" {german} " in text:
             text = text.replace(f" {german} ", f" {english} ")
     for pattern, english in _GERMAN_TERMS:
         text = pattern.sub(english, text)
     # „Booster-Bundle“ = „Booster Bundle“; Wörter werden einzeln im Namen gesucht.
     return " ".join(text.replace("-", " ").split())
+
+
+async def translate_query(session: AsyncSession, query: str) -> str:
+    """Deutsche Suche in Cardmarket-Englisch übersetzen (Set-Namen und Produktarten)."""
+    return _translate(query, await _set_names_de_en(session))
+
+
+def partial_set_queries(
+    query: str, set_names: list[tuple[str, str]], *, limit: int = MAX_PARTIAL_SETS
+) -> list[str]:
+    """Übersetzungen für angefangene deutsche Set-Namen („prismatische“, „karmesin 151“).
+
+    Gesucht wird die längste Folge von Suchwörtern, mit der ein Wort eines deutschen
+    Set-Namens beginnt (mindestens :data:`MIN_PARTIAL` Zeichen); jedes passende Set ergibt
+    eine eigene Suche mit dem englischen Namen (kurze Namen zuerst – das Hauptset).
+    """
+    words = query.casefold().split()
+    for size in range(len(words), 0, -1):
+        for start in range(len(words) - size + 1):
+            phrase = " ".join(words[start : start + size])
+            if len(phrase) < MIN_PARTIAL:
+                continue
+            matches = sorted(
+                {english for german, english in set_names if f" {phrase}" in f" {german}"},
+                key=lambda name: (len(name), name),
+            )
+            if matches:
+                rest = [*words[:start], "{}", *words[start + size :]]
+                return [
+                    _translate(" ".join(rest).replace("{}", english), set_names)
+                    for english in matches[:limit]
+                ]
+    return []
 
 
 def _metrics(raw: dict[str, float]) -> dict[str, Decimal]:
@@ -143,10 +177,20 @@ async def search_sealed(
 ) -> list[SealedOffer]:
     """Versiegelte Produkte, deren Name alle Suchwörter enthält (kurze Namen zuerst).
 
-    Deutsche Begriffe werden übersetzt; findet die Übersetzung nichts, zählt die Eingabe.
+    Deutsche Begriffe werden übersetzt; angefangene deutsche Set-Namen ergänzt
+    (:func:`partial_set_queries`). Findet keine Übersetzung etwas, zählt die Eingabe.
     """
-    translated = await translate_query(session, query)
+    set_names = await _set_names_de_en(session)
+    translated = _translate(query, set_names)
     offers = await _search_words(session, translated.split(), limit)
+    if offers:
+        return offers
+    seen: set[int] = set()
+    for alternative in partial_set_queries(query, set_names):
+        for offer in await _search_words(session, alternative.split(), limit):
+            if offer.cardmarket_product_id not in seen and len(offers) < limit:
+                seen.add(offer.cardmarket_product_id)
+                offers.append(offer)
     if offers or translated == " ".join(query.casefold().split()):
         return offers
     return await _search_words(session, query.casefold().split(), limit)

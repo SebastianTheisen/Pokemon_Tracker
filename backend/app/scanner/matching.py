@@ -73,10 +73,13 @@ def extract_features(image: UInt8Image, *, max_features: int = QUERY_FEATURES) -
     )
 
 
-def match_score(query: ImageFeatures, reference: ImageFeatures) -> int:
-    """Anzahl RANSAC-Inlier zwischen zwei Bildern (0 = kein Zusammenhang)."""
+def match_inliers(
+    query: ImageFeatures, reference: ImageFeatures
+) -> tuple[npt.NDArray[np.intp], npt.NDArray[np.intp]]:
+    """Indizes der RANSAC-Inlier (Foto-Punkte, Referenz-Punkte); leer ohne Zusammenhang."""
+    nothing = (np.zeros(0, dtype=np.intp), np.zeros(0, dtype=np.intp))
     if len(query) < MIN_GOOD_MATCHES or len(reference) < MIN_GOOD_MATCHES:
-        return 0
+        return nothing
     pairs = cv2.BFMatcher(cv2.NORM_L2).knnMatch(
         query.descriptors.astype(np.float32), reference.descriptors.astype(np.float32), k=2
     )
@@ -86,8 +89,18 @@ def match_score(query: ImageFeatures, reference: ImageFeatures) -> int:
         if len(pair) == 2 and pair[0].distance < RATIO_TEST * pair[1].distance  # noqa: PLR2004
     ]
     if len(good) < MIN_GOOD_MATCHES:
-        return 0
-    src = query.points[[match.queryIdx for match in good]]
-    dst = reference.points[[match.trainIdx for match in good]]
-    _, mask = cv2.findHomography(src, dst, cv2.RANSAC, RANSAC_THRESHOLD)
-    return int(mask.sum()) if mask is not None else 0
+        return nothing
+    query_idx = np.array([match.queryIdx for match in good], dtype=np.intp)
+    reference_idx = np.array([match.trainIdx for match in good], dtype=np.intp)
+    _, mask = cv2.findHomography(
+        query.points[query_idx], reference.points[reference_idx], cv2.RANSAC, RANSAC_THRESHOLD
+    )
+    if mask is None:
+        return nothing
+    keep = mask.ravel().astype(bool)
+    return query_idx[keep], reference_idx[keep]
+
+
+def match_score(query: ImageFeatures, reference: ImageFeatures) -> int:
+    """Anzahl RANSAC-Inlier zwischen zwei Bildern (0 = kein Zusammenhang)."""
+    return int(match_inliers(query, reference)[0].size)

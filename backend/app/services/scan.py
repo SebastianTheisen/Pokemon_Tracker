@@ -51,13 +51,16 @@ from app.scanner.runtime import ScannerRuntime
 from app.scanner.slab import SlabLabel
 from app.scanner.storage import ReferenceStore
 from app.scanner.text import NameCandidate, TextFeatures, is_cjk_text
+from app.scanner.twins import TwinDecision, pick_twin
 from app.services.errors import InvalidInputError, NotFoundError, RateLimitedError
 from app.services.scan_scoring import (
     Candidate,
     add_image_reasons,
+    apply_twins,
     is_confident,
     rank,
     score_text,
+    twin_group,
 )
 
 log = structlog.get_logger(__name__)
@@ -338,11 +341,63 @@ class ScanService:
             add_image_reasons(candidate)
         return rank(list(best.values()))
 
-    async def _evaluate(self, analysis: PhotoAnalysis, language_hint: str | None) -> _Evaluation:
+    async def _twin_images(self, twins: Sequence[Candidate]) -> list[str] | None:
+        """Bild-URLs aller Zwillinge in *einer* Sprache (Text darf kein Unterschied sein)."""
+        ids = [twin.card.external_id for twin in twins if twin.card.external_id]
+        rows = await self.session.execute(
+            select(Card.external_id, Card.language, Card.image_url).where(
+                Card.external_id.in_(ids),
+                Card.image_url.is_not(None),
+                Card.image_language.is_(None),
+            )
+        )
+        by_identity: dict[str, dict[str, str]] = {twin.identity: {} for twin in twins}
+        for twin in twins:
+            if twin.card.image_url:
+                language = twin.card.image_language or twin.card.language
+                by_identity[twin.identity][language] = twin.card.image_url
+        for external_id, language, image_url in rows:
+            if external_id in by_identity and image_url:
+                by_identity[external_id].setdefault(language, image_url)
+        common = set.intersection(*(set(urls) for urls in by_identity.values()))
+        for language in (twins[0].card.language, "en", *sorted(common)):
+            if language in common:
+                return [by_identity[twin.identity][language] for twin in twins]
+        return None
+
+    async def _separate_twins(self, ranked: list[Candidate], photo: UInt8Image) -> None:
+        """Original und Nachdruck (gleiche Nummer, gleiche Grafik) am Bild unterscheiden."""
+        twins = twin_group(ranked, self.settings.scanner_max_image_candidates)
+        urls = await self._twin_images(twins) if twins else None
+        if urls is None:
+            return
+        catalog = self.runtime.catalog_images
+        images = [await catalog.image_for(url) for url in urls]
+        if any(image is None for image in images):
+            return
+        decision: TwinDecision = await self.runtime.run_cpu(
+            pick_twin, photo, [image for image in images if image is not None]
+        )
+        if decision.members:
+            winner = None if decision.index is None else twins[decision.index]
+            apply_twins([twins[index] for index in decision.members], winner)
+        log.info(
+            "scan.twins",
+            cards=[twin.identity for twin in twins],
+            members=decision.members,
+            winner=decision.index,
+            distances=[round(value, 1) for value in decision.distances],
+        )
+
+    async def _evaluate(
+        self, analysis: PhotoAnalysis, image: UInt8Image, language_hint: str | None
+    ) -> _Evaluation:
         ranked = await self._text_candidates(analysis.text, language_hint)
         if not ranked:
             return _Evaluation(await self._rescue_by_references(analysis.features), rescue=True)
         await self._image_match(ranked, analysis.features)
+        ranked = rank(ranked)
+        await self._separate_twins(ranked, analysis.reference_image(image))
         return _Evaluation(rank(ranked))
 
     # ------------------------------------------------------------------ Ablauf
@@ -378,10 +433,10 @@ class ScanService:
                 find_crop=find_crop,
             )
         )
-        evaluation = await self._evaluate(analysis, language_hint)
+        evaluation = await self._evaluate(analysis, image, language_hint)
         if korean_allowed and self._korean_may_help(analysis, evaluation, language_hint):
             korean = await self.runtime.run_cpu(add_korean_pass, analysis, image, reader)
-            korean_evaluation = await self._evaluate(korean, language_hint)
+            korean_evaluation = await self._evaluate(korean, image, language_hint)
             # Nur übernehmen, wenn es besser wird – das KO-Modell liest andere Schriften falsch.
             if _best_score(korean_evaluation) > _best_score(evaluation):
                 analysis, evaluation = korean, korean_evaluation

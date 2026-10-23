@@ -11,6 +11,7 @@ Setcode passt              0,25    ``S12`` (bzw. „512“) gelesen, Set-ID ``S1
 Name passt                 ≤ 0,35  „ルギアV“ ↔ „ルギアV“ (unscharf, Logos wie „ex“ egal)
 Bildabgleich               ≤ 0,60  RANSAC-Inlier; volle Punkte ab 150
 Sprache passt nicht        − 0,05 … 0,30
+Nachdruck unterschieden    0,20    Stempel der 30th Celebration im Foto (:mod:`twins`)
 =========================  ======  ===============================================
 
 **Sicherer Treffer** (die App zeigt dann „Erkannt als …“), wenn
@@ -19,6 +20,9 @@ Sprache passt nicht        − 0,05 … 0,30
   übereinstimmen, **und**
 * der Abstand zur besten *anderen* Karte mindestens 0,15 beträgt. Dieselbe Karte in einer
   anderen Sprache zählt nicht als Konkurrenz.
+
+Gleiches Motiv mit gleicher Nummer in mehreren Sets (Nachdrucke) und kein klarer
+Unterschied im Bild: nie sicher.
 
 Sonst zeigt die App „Falsche Karte? Selbst suchen“ mit der Kandidatenliste.
 """
@@ -45,6 +49,7 @@ MIN_NAME_SIMILARITY = 0.6
 STRONG_LANGUAGE_PENALTY = 0.25
 HINT_LANGUAGE_PENALTY = 0.30
 WEAK_LANGUAGE_PENALTY = 0.05
+TWIN_POINTS = 0.20
 _MIN_CONTAINED_RATIO = 0.6
 
 
@@ -96,6 +101,8 @@ class Candidate:
     language_penalty: float = 0.0
     catalog_inliers: int | None = None
     reference_inliers: int | None = None
+    twin_points: float = 0.0
+    twin_undecided: bool = False
     reasons: list[str] = field(default_factory=list)
 
     @property
@@ -122,7 +129,7 @@ class Candidate:
 
     @property
     def score(self) -> float:
-        return self.text_score + self.image_score
+        return self.text_score + self.image_score + self.twin_points
 
     @property
     def confidence(self) -> float:
@@ -177,6 +184,44 @@ def add_image_reasons(candidate: Candidate) -> None:
         candidate.reasons.append(f"Eigenes Referenzbild: {candidate.reference_inliers}")
 
 
+def twin_group(ranked: Sequence[Candidate], limit: int) -> list[Candidate]:
+    """Der beste Kandidat und Karten gleichen Namens, gleicher Nummer und Sprache aus anderen
+    Sets – mögliche Nachdrucke (ob die Grafik gleich ist, prüft :mod:`app.scanner.twins`)."""
+    if not ranked:
+        return []
+    best = ranked[0].card
+    key = (best.language, best.number_norm, compact_key(best.name))
+    group = [ranked[0]] + [
+        candidate
+        for candidate in ranked[1:limit]
+        if candidate.card.set_id != best.set_id
+        and (candidate.card.language, candidate.card.number_norm, compact_key(candidate.card.name))
+        == key
+    ]
+    return group if len(group) > 1 else []
+
+
+def apply_twins(twins: Sequence[Candidate], winner: Candidate | None) -> None:
+    """Ergebnis des Nachdruck-Vergleichs übernehmen.
+
+    Klarer Unterschied: Nachdrucke tragen die Nummer des Originals („43/146“), und die Grafik
+    ist dieselbe – Setgröße und Bildabgleich zählen daher für alle gleich, der Gewinner
+    bekommt :data:`TWIN_POINTS`. Kein klarer Unterschied: Reihenfolge bleibt, aber unsicher.
+    """
+    if winner is None:
+        for twin in twins:
+            twin.twin_undecided = True
+            twin.reasons.append("Gleiches Motiv in mehreren Sets – bitte prüfen")
+        return
+    total = any(twin.total_match for twin in twins)
+    inliers = max((twin.catalog_inliers or 0 for twin in twins), default=0)
+    for twin in twins:
+        twin.total_match = twin.total_match or (total and twin.number_match)
+        twin.catalog_inliers = max(twin.catalog_inliers or 0, inliers) or None
+    winner.twin_points = TWIN_POINTS
+    winner.reasons.append("Druck per Bildvergleich bestimmt (z. B. Jubiläums-Stempel)")
+
+
 def rank(candidates: Sequence[Candidate]) -> list[Candidate]:
     """Beste zuerst; bei Gleichstand neuere Sets vor älteren."""
     return sorted(
@@ -194,7 +239,7 @@ def is_confident(ranked: Sequence[Candidate]) -> bool:
     if not ranked:
         return False
     best = ranked[0]
-    if not best.strong_evidence or best.score < MIN_CONFIDENT_SCORE:
+    if best.twin_undecided or not best.strong_evidence or best.score < MIN_CONFIDENT_SCORE:
         return False
     competitor = next((c for c in ranked[1:] if c.identity != best.identity), None)
     return competitor is None or best.score - competitor.score >= CONFIDENT_MARGIN

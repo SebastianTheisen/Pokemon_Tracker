@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import Settings
 from app.models import CardSet, CmExpansion, Product, ProductKind
 from app.services.cardmarket_catalog import run_catalog_import
-from app.services.sealed import kind_for, translate_query
+from app.services.sealed import kind_for, partial_set_queries, translate_query
 from tests.conftest import RegisterUser
 from tests.test_cardmarket_catalog import CHINESE_GLURAK, catalog_transport
 
@@ -199,7 +199,28 @@ async def test_german_search_terms_and_set_names(
         return [offer["cardmarket_product_id"] for offer in found.json()]
 
     assert await ids("Prismatische Entwicklungen Top-Trainer-Box") == [ETB]
-    assert await ids("prismatische ttb") == []  # „prismatische“ allein ist kein Set-Name
+    assert await ids("prismatische ttb") == [ETB]  # angefangener Set-Name wird ergänzt
+    assert {ETB, BUNDLE} <= set(await ids("Prismatische"))
     assert await ids("Prismatic Booster-Bundle") == [BUNDLE]
     # Englische Eingabe funktioniert weiter.
     assert await ids("prismatic elite") == [ETB]
+
+
+def test_partial_german_set_names() -> None:
+    names = [
+        ("karmesin & purpur – 151", "scarlet & violet – 151"),
+        ("prismatische entwicklungen", "prismatic evolutions"),
+        ("erwachte legenden", "legends awakened"),
+        ("karmesin & purpur", "scarlet & violet"),
+    ]
+    assert partial_set_queries("prismatische ttb", names) == [
+        "prismatic evolutions elite trainer box"
+    ]
+    assert partial_set_queries("Erwachte", names) == ["legends awakened"]
+    assert partial_set_queries("karmesin display", names) == [
+        "scarlet & violet booster box",
+        "scarlet & violet – 151 booster box",
+    ]
+    assert partial_set_queries("entwick", names) == ["prismatic evolutions"]  # Wortanfang reicht
+    assert partial_set_queries("wick", names) == []  # nur am Wortanfang
+    assert partial_set_queries("kar", names) == []  # zu kurz
