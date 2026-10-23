@@ -304,9 +304,9 @@ Ziel: alle Sets, Karten, Bilder und Preise aller Sprachen. Quellen je Bereich: o
 
 Ausgangslage (23.10.2026): Compose läuft, API nur auf `127.0.0.1:8000`, erreichbar ausschließlich über das Tailscale-Gerät „kartenkiste“ (HTTPS `*.ts.net`). **Keine Backups.**
 
-- [ ] Backups: tägliches `pg_dump` (komprimiert, Aufbewahrung), Referenzbilder des Scanners mitsichern; Wiederherstellungstest (Dump in Test-Datenbank einspielen, Zählungen vergleichen)
-- [ ] Backup-Ziel außerhalb des VPS (Entscheidung offen)
-- [ ] Überwachung: Health-Prüfung von API, Worker (letzter Lauf), Preisrunde, Cardmarket-Import, Backup-Alter; Benachrichtigung (Entscheidung offen)
+- [x] Backups (Entscheidung: nur auf dem VPS): Dienst `backup` – täglich 02:30 UTC `pg_dump` + Scanner-Daten nach `./backups`, 14 Tage; Wiederherstellungstest `deploy/phase6_restore_test.sh`
+- [ ] VPS: `deploy/phase6_setup.sh` (erste Sicherung, ntfy-Thema), dann `deploy/phase6_restore_test.sh`
+- [x] Überwachung (Entscheidung: ntfy-Push): Dienst `monitor` (`app/monitor.py`) – API, Worker-Lebenszeichen, Preisrunde, Cardmarket-Import, Sicherung, Speicherplatz; Meldung bei Störung, Erinnerung nach 24 h, Entwarnung
 - [ ] Sicherheits-Check: offene Ports/Firewall, Tailscale-Freigaben, Rate-Limits, Admin-Rechte, Abhängigkeiten (`pip-audit`), Container ohne Root
 - [ ] Last-Test: Sammlung mit vielen Karten, gleichzeitige Scans
 - [ ] Android: APK bauen (`deploy/phase5_app.sh --apk`) und auf einem Gerät abnehmen

@@ -229,6 +229,24 @@ class Settings(BaseSettings):
         description="Ordner mit dem Flutter-Web-Build; wird unter / ausgeliefert (PWA).",
     )
 
+    # --- Überwachung (Dienst „monitor“, Push über ntfy) --------------------------
+    ntfy_url: str = Field(default="https://ntfy.sh", description="ntfy-Server")
+    ntfy_topic: SecretStr | None = Field(
+        default=None,
+        description="Geheimes ntfy-Thema (wie ein Passwort); ohne Thema nur Log-Ausgabe.",
+    )
+    monitor_api_url: str = Field(default="http://api:8000/api/v1/health")
+    monitor_backup_dir: Path = Field(default=Path("/backups"))
+    monitor_interval_minutes: int = Field(default=10, ge=1, le=120)
+    monitor_remind_hours: int = Field(
+        default=24, ge=1, description="Weiter bestehende Störung so oft erneut melden."
+    )
+    monitor_backup_max_age_hours: int = Field(default=30, ge=1)
+    monitor_heartbeat_max_minutes: int = Field(default=20, ge=5)
+    monitor_price_run_max_age_hours: int = Field(default=36, ge=1)
+    monitor_cardmarket_max_age_hours: int = Field(default=60, ge=1)
+    monitor_min_free_disk_percent: int = Field(default=10, ge=1, le=90)
+
     # --- Scanner ------------------------------------------------------------
     scanner_data_dir: Path = Field(
         default=Path("data/scanner"),

@@ -249,6 +249,21 @@ async def cardmarket_forever(
             await asyncio.sleep(3600)  # nicht in einer Fehlerschleife hämmern
 
 
+HEARTBEAT_FILE = "worker_heartbeat"
+HEARTBEAT_EVERY = timedelta(minutes=5)
+
+
+async def heartbeat_forever(settings: Settings) -> None:
+    """Lebenszeichen für die Überwachung (:mod:`app.monitor`): Zeitstempel in eine Datei."""
+    path = settings.scanner_data_dir / HEARTBEAT_FILE
+    while True:
+        try:
+            await asyncio.to_thread(path.write_text, datetime.now(UTC).isoformat())
+        except OSError:
+            log.exception("worker.heartbeat_failed")
+        await asyncio.sleep(HEARTBEAT_EVERY.total_seconds())
+
+
 CARD_DETAILS_START_DELAY = timedelta(minutes=10)
 
 
@@ -287,6 +302,7 @@ async def run_forever(settings: Settings) -> None:
             images = asyncio.create_task(image_import_forever(session_factory, settings))
             cardmarket = asyncio.create_task(cardmarket_forever(session_factory, settings, client))
             details = asyncio.create_task(card_details_forever(session_factory, settings, client))
+            heartbeat = asyncio.create_task(heartbeat_forever(settings))
             try:
                 while True:
                     next_run = next_run_after(
@@ -306,6 +322,7 @@ async def run_forever(settings: Settings) -> None:
                 images.cancel()
                 cardmarket.cancel()
                 details.cancel()
+                heartbeat.cancel()
     finally:
         await engine.dispose()
 

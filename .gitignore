@@ -25,3 +25,6 @@ docs/spikes_ergebnisse.tar.gz
 
 # Scanner-Daten bei lokaler Entwicklung (Merkmal-Cache, Referenzbilder)
 backend/data/
+
+# Sicherungen auf dem VPS (deploy/backup/backup.sh)
+backups/
