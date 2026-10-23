@@ -25,7 +25,7 @@ from typing import Any
 
 import httpx
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
@@ -49,6 +49,7 @@ class SetChange:
 class PtcgReport:
     changes: list[SetChange] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    codes: int = 0  # Sets mit Setkürzel (alle Sprachen)
 
     @property
     def added(self) -> int:
@@ -108,10 +109,14 @@ async def import_ptcg(
         reference: list[dict[str, Any]] = response.json()
         async with session_factory() as session:
             ours = await _english_sets(session)
+        codes: dict[str, str] = {}
         for ptcg_set in reference:
             mine = ours.get(str(ptcg_set["id"]).casefold()) or ours.get(
                 f"name:{set_key(str(ptcg_set['name']))}"
             )
+            code = str(ptcg_set.get("ptcgoCode") or "").strip()[:16]
+            if code:
+                codes[mine[0].external_id if mine else str(ptcg_set["id"])[:64]] = code
             total = int(ptcg_set.get("total") or 0)
             if mine is not None and mine[1] >= total:
                 continue
@@ -130,8 +135,25 @@ async def import_ptcg(
                     report.changes.append(change)
                 if not dry_run:
                     await session.commit()
+    if not dry_run:
+        async with session_factory() as session:
+            report.codes = await _store_codes(session, codes)
+            await session.commit()
     log.info("ptcg_import.done", added=report.added, sets=len(report.changes), dry_run=dry_run)
     return report
+
+
+async def _store_codes(session: AsyncSession, codes: dict[str, str]) -> int:
+    """Setkürzel („PFL“) an alle Sprachfassungen eines Sets schreiben (gleiche Set-ID)."""
+    changed = 0
+    for external_id, code in codes.items():
+        result = await session.execute(
+            update(CardSet)
+            .where(CardSet.external_id == external_id, CardSet.code.is_distinct_from(code))
+            .values(code=code)
+        )
+        changed += result.rowcount or 0  # type: ignore[attr-defined]
+    return changed
 
 
 async def _apply(

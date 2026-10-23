@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Any
 
 import structlog
@@ -48,6 +49,7 @@ class LanguageReport:
     sets_skipped: int = 0
     sets_digital: int = 0
     sets_replaced: int = 0
+    sets_duplicate: int = 0  # schon aus pokemontcg.io vorhanden (siehe _covering_set)
     cards_upserted: int = 0
     errors: list[str] = field(default_factory=list)
 
@@ -83,6 +85,73 @@ def _sets_to_fetch(
         else:
             to_fetch.append(brief)
     return to_fetch, skipped
+
+
+DUPLICATE_MAX_DAYS = 7
+DUPLICATE_MIN_NAME_SHARE = 0.7
+_IMPORTED_SOURCES = (CardSource.POKEMONTCG, CardSource.TRANSLATED)
+
+
+async def _covering_set(session: AsyncSession, language: str, detail: SetDetail) -> CardSet | None:
+    """Gibt es das Set schon aus pokemontcg.io (bzw. davon abgeleitet) unter eigener ID?
+
+    Beispiel: „30th Celebration: Classic Collection“ kam als ``me55c`` aus pokemontcg.io
+    (mit Bildern und den aufgedruckten Original-Nummern 4/102 …); TCGdex legte es später
+    unter eigener ID ohne Bilder und mit fortlaufenden Nummern an. Gleich gilt ein Set, das
+    nur importierte Karten hat, höchstens eine Woche auseinander erschien und dessen
+    Kartennamen zu mindestens 70 % übereinstimmen.
+    """
+    if detail.release_date is None or not detail.cards:
+        return None
+    window = timedelta(days=DUPLICATE_MAX_DAYS)
+    candidates = (
+        await session.scalars(
+            select(CardSet).where(
+                CardSet.language == language,
+                CardSet.external_id != detail.id,
+                CardSet.release_date.between(
+                    detail.release_date - window, detail.release_date + window
+                ),
+            )
+        )
+    ).all()
+    wanted = {card.name.casefold() for card in detail.cards}
+    for candidate in candidates:
+        rows = (
+            await session.execute(select(Card.name, Card.source).where(Card.set_id == candidate.id))
+        ).all()
+        if not rows or any(source not in _IMPORTED_SOURCES for _, source in rows):
+            continue
+        names = {name.casefold() for name, _ in rows}
+        if len(wanted & names) >= DUPLICATE_MIN_NAME_SHARE * len(wanted):
+            return candidate
+    return None
+
+
+async def _merge_into_covering_set(session: AsyncSession, language: str, detail: SetDetail) -> bool:
+    """TCGdex-Doppel eines importierten Sets nicht anlegen (bzw. wieder entfernen).
+
+    Das importierte Set bleibt (Bilder, aufgedruckte Nummern – wichtig für den Scanner) und
+    übernimmt nur den offiziellen Set-Namen dieser Sprache von TCGdex. Karten des Doppels,
+    die schon jemand gesammelt hat, bleiben.
+    """
+    covering = await _covering_set(session, language, detail)
+    if covering is None:
+        return False
+    if language != "en":
+        covering.name = detail.name  # z. B. „30 Jahre: Klassische Sammlung“
+    duplicate = select(CardSet.id).where(
+        CardSet.external_id == detail.id, CardSet.language == language
+    )
+    in_collection = exists().where(CollectionItem.card_id == Card.id)
+    await session.execute(delete(Card).where(Card.set_id.in_(duplicate), ~in_collection))
+    await session.execute(
+        delete(CardSet).where(CardSet.id.in_(duplicate), ~exists().where(Card.set_id == CardSet.id))
+    )
+    log.info(
+        "catalog.sync.duplicate_set", language=language, set=detail.id, kept=covering.external_id
+    )
+    return True
 
 
 async def _store_set(session: AsyncSession, language: str, detail: SetDetail) -> int:
@@ -196,6 +265,10 @@ async def sync_language(
         async with session_factory() as session:
             if await replaced_by_pricecharting(session, language, result.id):
                 report.sets_replaced += 1  # fehlerhafte Vintage-Daten, kommt von PriceCharting
+                continue
+            if await _merge_into_covering_set(session, language, result):
+                report.sets_duplicate += 1
+                await session.commit()
                 continue
             report.cards_upserted += await _store_set(session, language, result)
             await session.commit()
