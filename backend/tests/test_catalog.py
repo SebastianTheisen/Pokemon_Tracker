@@ -426,8 +426,9 @@ def _thirty(set_id: str, name: str, cards: list[tuple[str, str]]) -> dict[str, o
     }
 
 
+@pytest.mark.parametrize("released", ["2026-09-17", None])
 async def test_tcgdex_duplicate_of_imported_set_is_merged(
-    session_factory: async_sessionmaker[AsyncSession],
+    session_factory: async_sessionmaker[AsyncSession], released: str | None
 ) -> None:
     """TCGdex legt ein Set an, das schon aus pokemontcg.io kam (eigene ID, mit Bildern)."""
     async with session_factory() as session:
@@ -455,6 +456,7 @@ async def test_tcgdex_duplicate_of_imported_set_is_merged(
             "30 Jahre: Klassische Sammlung",
             [("001", "Glurak"), ("002", "Pikachu"), ("003", "Selfe")],
         )
+        | {"releaseDate": released}
     }
 
     reports = await _sync(fake, session_factory, languages=["de"])

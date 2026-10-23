@@ -89,6 +89,7 @@ def _sets_to_fetch(
 
 DUPLICATE_MAX_DAYS = 7
 DUPLICATE_MIN_NAME_SHARE = 0.7
+DUPLICATE_MIN_NAME_SHARE_UNDATED = 0.75
 _IMPORTED_SOURCES = (CardSource.POKEMONTCG, CardSource.TRANSLATED)
 
 
@@ -99,22 +100,24 @@ async def _covering_set(session: AsyncSession, language: str, detail: SetDetail)
     (mit Bildern und den aufgedruckten Original-Nummern 4/102 …); TCGdex legte es später
     unter eigener ID ohne Bilder und mit fortlaufenden Nummern an. Gleich gilt ein Set, das
     nur importierte Karten hat, höchstens eine Woche auseinander erschien und dessen
-    Kartennamen zu mindestens 70 % übereinstimmen.
+    Kartennamen zu mindestens 70 % übereinstimmen. Ohne Erscheinungsdatum bei TCGdex (so beim
+    deutschen 30th-Set) zählt nur der Inhalt – dann zusätzlich Kartenzahl ±2 (75 % der Namen).
     """
-    if detail.release_date is None or not detail.cards:
+    if not detail.cards:
         return None
-    window = timedelta(days=DUPLICATE_MAX_DAYS)
-    candidates = (
-        await session.scalars(
-            select(CardSet).where(
-                CardSet.language == language,
-                CardSet.external_id != detail.id,
-                CardSet.release_date.between(
-                    detail.release_date - window, detail.release_date + window
-                ),
-            )
+    condition = [CardSet.language == language, CardSet.external_id != detail.id]
+    share = DUPLICATE_MIN_NAME_SHARE
+    if detail.release_date is not None:
+        window = timedelta(days=DUPLICATE_MAX_DAYS)
+        condition.append(
+            CardSet.release_date.between(detail.release_date - window, detail.release_date + window)
         )
-    ).all()
+    else:
+        share = DUPLICATE_MIN_NAME_SHARE_UNDATED
+        imported_only = select(Card.set_id).where(Card.source.in_(_IMPORTED_SOURCES))
+        others = select(Card.set_id).where(Card.source.not_in(_IMPORTED_SOURCES))
+        condition += [CardSet.id.in_(imported_only), CardSet.id.not_in(others)]
+    candidates = (await session.scalars(select(CardSet).where(*condition))).all()
     wanted = {card.name.casefold() for card in detail.cards}
     for candidate in candidates:
         rows = (
@@ -122,8 +125,10 @@ async def _covering_set(session: AsyncSession, language: str, detail: SetDetail)
         ).all()
         if not rows or any(source not in _IMPORTED_SOURCES for _, source in rows):
             continue
+        if detail.release_date is None and abs(len(rows) - len(detail.cards)) > 2:  # noqa: PLR2004
+            continue
         names = {name.casefold() for name, _ in rows}
-        if len(wanted & names) >= DUPLICATE_MIN_NAME_SHARE * len(wanted):
+        if len(wanted & names) >= share * len(wanted):
             return candidate
     return None
 
