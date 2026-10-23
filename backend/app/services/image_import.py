@@ -54,7 +54,7 @@ from app.providers.card_images.http import PoliteClient, SourceError
 from app.providers.card_images.official import OfficialDatabase, OfficialDetail
 from app.providers.card_images.pokemon_card_jp import PokemonCardJp
 from app.providers.card_images.pokemon_card_tw import PokemonCardTw
-from app.providers.card_images.pokemontcg import PokemontcgDataset, SetRef, match_sets
+from app.providers.card_images.pokemontcg import PokemontcgDataset, PtcgCard, SetRef, match_sets
 from app.scanner.text import compact_key
 from app.services.catalog_numbers import normalize_number
 from app.services.catalog_sync import fill_image_fallbacks
@@ -206,13 +206,37 @@ async def import_pokemontcg(
             if language == "en" or external_id not in english_names:
                 english_names[external_id] = name if language == "en" else None
         needed = await session.execute(
-            select(Card.id, Card.number, CardSet.external_id)
+            select(Card.id, Card.number, Card.external_id, Card.name, CardSet.external_id)
             .join(CardSet, Card.set_id == CardSet.id)
             .where(Card.language.in_(WESTERN_LANGUAGES), _missing_native_image())
         )
-        by_set: defaultdict[str, list[tuple[Any, str]]] = defaultdict(list)
-        for card_id, number, set_external_id in needed:
-            by_set[set_external_id].append((card_id, number))
+        by_set: defaultdict[str, list[tuple[Any, str, str | None]]] = defaultdict(list)
+        card_ids: dict[Any, str | None] = {}
+        for card_id, number, card_external_id, card_name, set_external_id in needed:
+            by_set[set_external_id].append((card_id, number, card_name))
+            card_ids[card_id] = card_external_id
+        # Englischer Name je Karte (deutsche Karten: über die gemeinsame ID) – für die
+        # Zuordnung über den Namen, wenn die Nummern anders geschrieben sind („CC015“).
+        english = dict(
+            (
+                await session.execute(
+                    select(Card.external_id, Card.name).where(
+                        Card.language == "en",
+                        Card.external_id.in_([i for i in card_ids.values() if i]),
+                    )
+                )
+            ).all()
+        )
+        by_set = defaultdict(
+            list,
+            {
+                set_id: [
+                    (card_id, number, english.get(card_ids[card_id]) or card_name)
+                    for card_id, number, card_name in cards
+                ]
+                for set_id, cards in by_set.items()
+            },
+        )
     if not by_set:
         report.notes.append("Keine Karte ohne Bild.")
         return report
@@ -244,9 +268,12 @@ async def import_pokemontcg(
         images = {
             normalize_number(card.number): card.image_url for card in their_cards if card.image_url
         }
+        by_name = _unique_images_by_name(their_cards)
         candidates: list[ImageCandidate] = []
-        for card_id, number in cards:
-            url = images.get(normalize_number(number))
+        for card_id, number, english_name in cards:
+            url = images.get(normalize_number(number)) or by_name.get(
+                _ptcg_name_key(english_name or "")
+            )
             if url is None:
                 report.unmatched += 1
                 continue
@@ -256,6 +283,19 @@ async def import_pokemontcg(
             report.images_set += await _apply(session, candidates, dry_run=dry_run)
             await session.commit()
     return report
+
+
+def _ptcg_name_key(name: str) -> str:
+    """„Umbreon ☆“ = „Umbreon ★“ = „umbreon“ (Stern, Leer- und Satzzeichen zählen nicht)."""
+    return re.sub(r"[\W_]+", "", name.casefold())
+
+
+def _unique_images_by_name(cards: Iterable[PtcgCard]) -> dict[str, str]:
+    """Bild je Name – nur Namen, die im Set genau einmal vorkommen."""
+    grouped: defaultdict[str, list[str | None]] = defaultdict(list)
+    for card in cards:
+        grouped[_ptcg_name_key(card.name)].append(card.image_url)
+    return {key: urls[0] for key, urls in grouped.items() if len(urls) == 1 and urls[0]}
 
 
 # --------------------------------------------------------------------------- pokemon.com

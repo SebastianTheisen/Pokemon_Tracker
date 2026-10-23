@@ -345,6 +345,9 @@ async def _seed(factory: async_sessionmaker[AsyncSession]) -> dict[str, Card]:
             "en68": card(("swsh4.5sv", "en"), "SV068", "Eiscue", "swsh4.5sv-SV068"),
             "de68": card(("swsh4.5sv", "de"), "SV068", "Kubuin", "swsh4.5sv-SV068"),
             "de84": card(("swsh4.5sv", "de"), "SV084", "Pelzebub", "swsh4.5sv-SV084"),
+            # Nummern anders geschrieben als bei pokemontcg.io → Zuordnung über den Namen
+            "en_cc": card(("swsh4.5sv", "en"), "CC015", "Umbreon ☆", "swsh4.5sv-CC015"),
+            "de_cc": card(("swsh4.5sv", "de"), "CC015", "Nachtara ☆", "swsh4.5sv-CC015"),
             "ja1": card(("M6a", "ja"), "001", "タマタマ", "M6a-001"),
             "tw1": card(("SV7a", "zh-tw"), "001", "蛋蛋", "SV7a-001"),
         }
@@ -382,6 +385,13 @@ class FakeSources:
                     },
                 }
                 for n, name in ((68, "Eiscue"), (84, "Grimmsnarl"))
+            ] + [
+                {
+                    "id": "swsh45sv-15_A",
+                    "name": "Umbreon ★",
+                    "number": "15_A",
+                    "images": {"large": "https://images.pokemontcg.io/swsh45sv/15_A_hires.png"},
+                }
             ]
             return httpx.Response(200, content=json.dumps(cards))
         if request.url.host == "assets.pokemon.com":
@@ -426,7 +436,8 @@ async def test_full_run_fills_images_from_all_sources(
     )
 
     by_source = {item.source: item for item in report.sources}
-    assert by_source["pokemontcg"].images_set == 3  # EN eigene Sprache, 2× DE als Ersatz
+    # EN eigene Sprache, 2× DE als Ersatz, Umbreon ☆ (EN, DE) über den Namen
+    assert by_source["pokemontcg"].images_set == 5
     assert by_source["pokemon.com"].images_set == 1  # DE-Bild ersetzt englisches Ersatzbild
     # Promo 132/M-P und 005/050 im neuen Set ZZ9 (Japan: Set wird angelegt)
     assert by_source["pokemon-card.com"].cards_created == 2
@@ -469,7 +480,10 @@ async def test_full_run_fills_images_from_all_sources(
         assert {(p.url.rsplit("_", 1)[1], p.found) for p in probes} == {
             ("SV068.png", True),
             ("SV084.png", False),
+            ("CC015.png", False),
         }
+        nachtara = rows[cards["de_cc"].id]
+        assert nachtara.image_url == "https://images.pokemontcg.io/swsh45sv/15_A_hires.png"
         run = await session.scalar(select(ImageImportRun))
         assert run is not None and run.finished_at is not None
     assert "pokemon-card.com" in render_report(report)
