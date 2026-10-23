@@ -411,6 +411,11 @@ async def test_search_by_set_code_and_number(
         ("en", "Umbreon VMAX", "215")
     ]
     assert await _search(session_factory, "EVS999") == []
+    # Kürzel + Nummer + Name: der Name grenzt ein (Reihenfolge egal)
+    assert await _search(session_factory, "nachtara evs 215") == [("de", "Nachtara VMAX", "215")]
+    assert await _search(session_factory, "evs215 nachtara") == [("de", "Nachtara VMAX", "215")]
+    # normale Namenssuche bleibt unberührt
+    assert ("de", "Nachtara VMAX", "215") in await _search(session_factory, "nachtara 215")
 
 
 def _thirty(set_id: str, name: str, cards: list[tuple[str, str]]) -> dict[str, object]:

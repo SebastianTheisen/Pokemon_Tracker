@@ -23,7 +23,7 @@ from sqlalchemy import ColumnElement, Select, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Card, CardSet
-from app.services.card_names import foreign_search_terms
+from app.services.card_names import foreign_search_terms, translate_card_name
 from app.services.catalog_numbers import ParsedQuery, normalize_number, parse_query
 from app.services.errors import NotFoundError
 
@@ -31,6 +31,7 @@ DEFAULT_LIMIT = 30
 MAX_LIMIT = 100
 _CODE_REST = re.compile(r"^\d{1,3}[a-z]?$")
 _MAX_CODE = 8
+MAX_CODE_QUERY_WORDS = 4
 
 
 @dataclass(frozen=True)
@@ -125,34 +126,64 @@ def code_candidates(query: str) -> list[tuple[str, str]]:
     return candidates
 
 
+def code_parts(query: str) -> list[tuple[list[tuple[str, str]], str]]:
+    """Mögliche Lesarten „Kürzel + Nummer (+ Name)“: „nachtara s6a 095“ →
+    Kandidaten aus „s6a 095“ bzw. „s6a095“ und der Rest „nachtara“ als Name."""
+    tokens = query.split()
+    readings = []
+    for start in range(len(tokens)):
+        for size in (2, 1):
+            part = tokens[start : start + size]
+            if len(part) != size:
+                continue
+            candidates = code_candidates("".join(part))
+            if candidates:
+                rest = " ".join(tokens[:start] + tokens[start + size :])
+                readings.append((candidates, rest))
+    return readings
+
+
+def _name_matches(card: Card, name: str) -> bool:
+    """Grenzt Kürzel-Treffer ein: Name (auch übersetzt, z. B. „ブラッキー“ ↔ „Nachtara“)."""
+    wanted = name.casefold()
+    names = [card.name, translate_card_name(card.name, card.language) or ""]
+    return any(wanted in candidate.casefold() for candidate in names if candidate)
+
+
 async def _search_set_code(
     session: AsyncSession, query: str, *, language: str | None, limit: int
 ) -> list[SearchHit]:
-    """„PFL077“: Karten mit dieser Nummer im Set mit diesem Kürzel (längstes Kürzel gewinnt)."""
-    if len(query.split()) > 2:  # noqa: PLR2004 – Kürzel und Nummer, höchstens getrennt
+    """„PFL077“, „s6a 095“, „nachtara s6a 095“: Karten mit dieser Nummer im Set mit diesem
+    Kürzel (längstes Kürzel gewinnt); weitere Wörter grenzen über den Namen ein."""
+    if len(query.split()) > MAX_CODE_QUERY_WORDS:
         return []
-    candidates = code_candidates(query)
-    if not candidates:
-        return []
-    codes = [code for code, _ in candidates]
-    rows = (
-        await session.execute(
-            select(CardSet.id, func.lower(CardSet.code), func.lower(CardSet.external_id)).where(
-                or_(func.lower(CardSet.code).in_(codes), func.lower(CardSet.external_id).in_(codes))
+    for candidates, name in code_parts(query):
+        codes = [code for code, _ in candidates]
+        rows = (
+            await session.execute(
+                select(CardSet.id, func.lower(CardSet.code), func.lower(CardSet.external_id)).where(
+                    or_(
+                        func.lower(CardSet.code).in_(codes),
+                        func.lower(CardSet.external_id).in_(codes),
+                    )
+                )
             )
-        )
-    ).all()
-    for code, rest in reversed(candidates):  # längstes Kürzel zuerst
-        set_ids = [row[0] for row in rows if code in (row[1], row[2])]
-        if not set_ids:
-            continue
-        statement = select(Card).where(
-            Card.set_id.in_(set_ids), Card.number_norm == normalize_number(rest)
-        )
-        if language is not None:
-            statement = statement.where(Card.language == language)
-        cards = (await session.scalars(_ordered(statement, limit))).unique()
-        return [SearchHit(card=card, score=1.0) for card in cards]
+        ).all()
+        for code, rest in reversed(candidates):  # längstes Kürzel zuerst
+            set_ids = [row[0] for row in rows if code in (row[1], row[2])]
+            if not set_ids:
+                continue
+            statement = select(Card).where(
+                Card.set_id.in_(set_ids), Card.number_norm == normalize_number(rest)
+            )
+            if language is not None:
+                statement = statement.where(Card.language == language)
+            cards = list((await session.scalars(_ordered(statement, limit))).unique())
+            if name:
+                # Name passt nicht? Kürzel und Nummer sind eindeutiger – dann alle zeigen.
+                cards = [card for card in cards if _name_matches(card, name)] or cards
+            if cards:
+                return [SearchHit(card=card, score=1.0) for card in cards]
     return []
 
 
