@@ -20,9 +20,10 @@ SETS = [
         "total": 3,
         "printedTotal": 30,
         "releaseDate": "2026/09/16",
+        "ptcgoCode": "CLC",
         "images": {"logo": "https://images.scrydex.com/pokemon/me55c-logo/logo"},
     },
-    {"id": "sm35", "name": "Shining Legends", "total": 3},
+    {"id": "sm35", "name": "Shining Legends", "total": 3, "ptcgoCode": "SLG"},
     {"id": "base1", "name": "Base", "total": 1},
 ]
 CARDS = {
@@ -116,6 +117,9 @@ async def test_missing_sets_and_cards_are_added(
         )
         assert charizard.card_set.name == "30th Celebration: Classic Collection"
         assert str(charizard.card_set.release_date) == "2026-09-16"
+        assert charizard.card_set.code == "CLC"
+        shining = await session.scalar(select(CardSet).where(CardSet.external_id == "sm3.5"))
+        assert shining is not None and shining.code == "SLG"  # Kürzel auch für TCGdex-Sets
         gx = await session.scalar(select(Card).where(Card.name == "Pinsir-GX"))
         assert gx is not None and gx.external_id == "sm3.5-2"  # TCGdex-Schema des Sets
         shared = (await session.scalars(select(Card).where(Card.number == "106"))).all()

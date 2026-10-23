@@ -62,6 +62,8 @@ class CardSet(UuidPrimaryKeyMixin, Base):
     language: Mapped[str] = mapped_column(String(8), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     series_name: Mapped[str | None] = mapped_column(String(200))
+    # Offizielles Kürzel, wie es auf der Karte steht („PFL“, „SVI“) – für die Suche „PFL077“.
+    code: Mapped[str | None] = mapped_column(String(16))
     release_date: Mapped[date | None] = mapped_column(Date)
     card_count_official: Mapped[int | None] = mapped_column(Integer)
     card_count_total: Mapped[int | None] = mapped_column(Integer)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import func, select
@@ -384,3 +386,85 @@ async def test_stored_pocket_sets_are_removed_except_collection_cards(
         assert remaining == ["Pocket 1"]  # liegt in einer Sammlung → bleibt samt Set
         assert await session.get(CardSet, pocket.id) is not None
         assert await session.scalar(select(func.count()).select_from(Card)) == 12
+
+
+# ------------------------------------------------- Setkürzel und doppelte Sets
+
+
+async def test_search_by_set_code_and_number(
+    session_factory: async_sessionmaker[AsyncSession], synced: FakeTcgdex
+) -> None:
+    async with session_factory() as session:
+        for card_set in (await session.scalars(select(CardSet))).all():
+            if card_set.external_id == "swsh7":
+                card_set.code = "EVS"
+        await session.commit()
+
+    assert sorted(await _search(session_factory, "EVS215")) == [
+        ("de", "Nachtara VMAX", "215"),
+        ("en", "Umbreon VMAX", "215"),
+    ]
+    assert await _search(session_factory, "evs 215", language="de") == [
+        ("de", "Nachtara VMAX", "215")
+    ]
+    assert await _search(session_factory, "swsh7-215", language="en") == [
+        ("en", "Umbreon VMAX", "215")
+    ]
+    assert await _search(session_factory, "EVS999") == []
+
+
+def _thirty(set_id: str, name: str, cards: list[tuple[str, str]]) -> dict[str, object]:
+    return {
+        "id": set_id,
+        "name": name,
+        "cardCount": {"total": len(cards), "official": len(cards)},
+        "serie": {"id": "me", "name": "Mega-Entwicklung"},
+        "releaseDate": "2026-09-17",
+        "cards": [
+            {"id": f"{set_id}-{number}", "localId": number, "name": card} for number, card in cards
+        ],
+    }
+
+
+async def test_tcgdex_duplicate_of_imported_set_is_merged(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """TCGdex legt ein Set an, das schon aus pokemontcg.io kam (eigene ID, mit Bildern)."""
+    async with session_factory() as session:
+        imported = CardSet(
+            external_id="me55c",
+            language="de",
+            name="30th Celebration: Classic Collection",
+            release_date=date(2026, 9, 16),
+        )
+        session.add(imported)
+        await session.flush()
+        session.add_all(
+            [
+                Card(external_id=f"me55c-{n}", language="de", set_id=imported.id, number=n,
+                     number_norm=n, name=name, source=CardSource.TRANSLATED,
+                     image_url=f"https://images.scrydex.com/pokemon/me55c-{n}/large")
+                for n, name in (("4", "Glurak"), ("58", "Pikachu"), ("43", "Selfe"))
+            ]
+        )  # fmt: skip
+        await session.commit()
+    fake = FakeTcgdex()
+    fake.catalog["de"] = {
+        "me02.5": _thirty(
+            "me02.5",
+            "30 Jahre: Klassische Sammlung",
+            [("001", "Glurak"), ("002", "Pikachu"), ("003", "Selfe")],
+        )
+    }
+
+    reports = await _sync(fake, session_factory, languages=["de"])
+
+    assert reports[0].sets_duplicate == 1
+    async with session_factory() as session:
+        assert await session.scalar(select(CardSet).where(CardSet.external_id == "me02.5")) is None
+        kept = await session.scalar(select(CardSet).where(CardSet.external_id == "me55c"))
+        assert kept is not None and kept.name == "30 Jahre: Klassische Sammlung"
+        numbers = sorted(
+            (await session.scalars(select(Card.number).where(Card.set_id == kept.id))).all()
+        )
+        assert numbers == ["4", "43", "58"]  # aufgedruckte Nummern bleiben

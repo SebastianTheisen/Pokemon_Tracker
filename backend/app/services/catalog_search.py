@@ -7,10 +7,14 @@ Ablauf für ``"nachtara 215"``:
    gefiltert nach Nummer. Bester Score je TCGdex-ID.
 3. Alle Sprachfassungen dieser IDs zurückgeben – so findet „Umbreon 215“ auch die deutsche
    „Nachtara VMAX“ und umgekehrt.
+
+Setkürzel + Nummer wie auf der Karte („PFL077“, „pfl 77“, „SV8a-217“): Kürzel (offiziell,
+:attr:`CardSet.code`) oder Set-ID, dann genau diese Nummer – in allen Sprachen.
 """
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -20,11 +24,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Card, CardSet
 from app.services.card_names import foreign_search_terms
-from app.services.catalog_numbers import ParsedQuery, parse_query
+from app.services.catalog_numbers import ParsedQuery, normalize_number, parse_query
 from app.services.errors import NotFoundError
 
 DEFAULT_LIMIT = 30
 MAX_LIMIT = 100
+_CODE_REST = re.compile(r"^\d{1,3}[a-z]?$")
+_MAX_CODE = 8
 
 
 @dataclass(frozen=True)
@@ -68,6 +74,9 @@ async def search_cards(
 ) -> list[SearchHit]:
     """Sucht Karten. ``language`` filtert die Ergebnisse auf eine Sprache."""
     limit = max(1, min(limit, MAX_LIMIT))
+    by_code = await _search_set_code(session, query, language=language, limit=limit)
+    if by_code:
+        return by_code
     parsed: ParsedQuery = parse_query(query)
     if parsed.is_empty:
         return []
@@ -103,6 +112,48 @@ async def search_cards(
         )
     )
     return ordered[:limit]
+
+
+def code_candidates(query: str) -> list[tuple[str, str]]:
+    """Mögliche Aufteilungen in (Kürzel, Nummer): „PFL077“ → [(„pfl“, „077“), …]."""
+    compact = re.sub(r"[\s-]+", "", query.casefold())
+    candidates = []
+    for split in range(2, min(len(compact), _MAX_CODE) + 1):
+        code, rest = compact[:split], compact[split:]
+        if any(char.isalpha() for char in code) and _CODE_REST.match(rest):
+            candidates.append((code, rest))
+    return candidates
+
+
+async def _search_set_code(
+    session: AsyncSession, query: str, *, language: str | None, limit: int
+) -> list[SearchHit]:
+    """„PFL077“: Karten mit dieser Nummer im Set mit diesem Kürzel (längstes Kürzel gewinnt)."""
+    if len(query.split()) > 2:  # noqa: PLR2004 – Kürzel und Nummer, höchstens getrennt
+        return []
+    candidates = code_candidates(query)
+    if not candidates:
+        return []
+    codes = [code for code, _ in candidates]
+    rows = (
+        await session.execute(
+            select(CardSet.id, func.lower(CardSet.code), func.lower(CardSet.external_id)).where(
+                or_(func.lower(CardSet.code).in_(codes), func.lower(CardSet.external_id).in_(codes))
+            )
+        )
+    ).all()
+    for code, rest in reversed(candidates):  # längstes Kürzel zuerst
+        set_ids = [row[0] for row in rows if code in (row[1], row[2])]
+        if not set_ids:
+            continue
+        statement = select(Card).where(
+            Card.set_id.in_(set_ids), Card.number_norm == normalize_number(rest)
+        )
+        if language is not None:
+            statement = statement.where(Card.language == language)
+        cards = (await session.scalars(_ordered(statement, limit))).unique()
+        return [SearchHit(card=card, score=1.0) for card in cards]
+    return []
 
 
 async def _hits_for_term(
