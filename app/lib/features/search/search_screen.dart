@@ -475,16 +475,23 @@ class QuickAddButton extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Tooltip(
-    message: 'Hinzufügen – lange drücken für mehr',
-    child: InkResponse(
-      key: Key('quick-add-${card.id}'),
-      radius: 24,
-      onTap: () => _add(context, ref),
-      onLongPress: () => _menu(context, ref),
-      child: const Padding(
-        padding: EdgeInsets.all(8),
-        child: Icon(Icons.add_circle_outline, color: AppColors.primary),
+  Widget build(BuildContext context, WidgetRef ref) => Semantics(
+    // Eigener Knoten: sonst verschmilzt der Knopf mit der Trefferzeile und ein Tipp auf die
+    // Zeile (Bedienungshilfen, Web-Semantik) würde hinzufügen statt die Karte zu öffnen.
+    container: true,
+    button: true,
+    label: '${card.displayName} hinzufügen',
+    child: Tooltip(
+      message: 'Hinzufügen – lange drücken für mehr',
+      child: InkResponse(
+        key: Key('quick-add-${card.id}'),
+        radius: 24,
+        onTap: () => _add(context, ref),
+        onLongPress: () => _menu(context, ref),
+        child: const Padding(
+          padding: EdgeInsets.all(8),
+          child: Icon(Icons.add_circle_outline, color: AppColors.primary),
+        ),
       ),
     ),
   );

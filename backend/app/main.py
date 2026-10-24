@@ -28,6 +28,7 @@ from app.providers.psa import PsaClient
 from app.providers.tcgdex import TcgdexClient
 from app.scanner.ocr import RapidOcrReader, TextReader
 from app.scanner.runtime import ScannerRuntime
+from app.services.image_proxy import ImageProxy
 from app.services.price_health import SourceHealth
 from app.services.rate_limit import FailureLimiter
 
@@ -68,6 +69,11 @@ def create_app(
                 list(price_providers)
                 if price_providers is not None
                 else build_price_providers(settings, tcgdex)
+            )
+            app.state.image_proxy = ImageProxy(
+                image_client,
+                settings.scanner_data_dir / "image-cache",
+                allowed_hosts=[*settings.scanner_image_hosts, *settings.image_proxy_extra_hosts],
             )
             app.state.scanner = ScannerRuntime(
                 settings, text_reader or RapidOcrReader(), image_client

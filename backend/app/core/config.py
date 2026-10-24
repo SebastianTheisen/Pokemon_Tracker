@@ -297,6 +297,10 @@ class Settings(BaseSettings):
         ],
         description="Nur von diesen Hosts werden Katalogbilder geladen (Schutz vor SSRF).",
     )
+    image_proxy_extra_hosts: list[str] = Field(
+        default_factory=lambda: ["tcgplayer-cdn.tcgplayer.com", "product-images.tcgplayer.com"],
+        description="Zusätzlich für die Bildauslieferung erlaubt (Bilder versiegelter Produkte).",
+    )
 
     @model_validator(mode="after")
     def _require_strong_secret_in_production(self) -> Settings:

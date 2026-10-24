@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/images.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
@@ -379,12 +380,29 @@ class _ProductImage extends StatelessWidget {
         padding: const EdgeInsets.all(6),
         child: url == null
             ? placeholder
-            : Image.network(
-                url!,
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => fallback != null && fallback != url
-                    ? Image.network(fallback!, fit: BoxFit.contain)
-                    : placeholder,
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final ratio = MediaQuery.devicePixelRatioOf(context);
+                  // Über den eigenen Bilddienst (verkleinert), notfalls direkt.
+                  String load(String source) =>
+                      proxiedImageUrl(
+                        source,
+                        logicalWidth: constraints.maxWidth.isFinite ? constraints.maxWidth : 200,
+                        pixelRatio: ratio,
+                      ) ??
+                      source;
+                  return Image.network(
+                    load(url!),
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, _, _) => Image.network(
+                      url!,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) => fallback != null && fallback != url
+                          ? Image.network(load(fallback!), fit: BoxFit.contain)
+                          : placeholder,
+                    ),
+                  );
+                },
               ),
       ),
     );

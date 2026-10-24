@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/api.dart';
 import '../core/format.dart';
+import '../core/images.dart';
 import '../core/theme.dart';
 import '../models/models.dart';
 
@@ -94,19 +95,35 @@ class CardImage extends StatelessWidget {
       alignment: Alignment.center,
       child: Icon(Icons.style, color: AppColors.textMuted, size: width / 2.5),
     );
+    final fit = contain ? BoxFit.contain : BoxFit.cover;
+    final pixelRatio = MediaQuery.devicePixelRatioOf(context);
+    // Direkt: nur als Notlösung (eigener Bilddienst nicht erreichbar) – dann ggf. als
+    // <img>-Element, weil viele Bildserver kein CORS erlauben.
+    Widget direct(String source) => Image.network(
+      source,
+      fit: fit,
+      cacheWidth: (width * pixelRatio).ceil(),
+      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
+      errorBuilder: (_, _, _) => placeholder,
+    );
+    final source = url;
+    final proxied = source == null
+        ? null
+        : proxiedImageUrl(source, logicalWidth: width, pixelRatio: pixelRatio);
     return ClipRRect(
       borderRadius: BorderRadius.circular(width / 14),
       child: SizedBox(
         width: width,
         height: width * 88 / 63,
-        child: url == null
+        child: source == null
             ? placeholder
+            : proxied == null
+            ? direct(source)
             : Image.network(
-                url!,
-                fit: contain ? BoxFit.contain : BoxFit.cover,
-                // Web: Bilder fremder Server ohne CORS über ein <img>-Element laden.
-                webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
-                errorBuilder: (_, _, _) => placeholder,
+                proxied,
+                fit: fit,
+                // Normalfall: verkleinert vom eigenen Server (gleiche Herkunft, kleiner Speicher).
+                errorBuilder: (_, _, _) => direct(source),
               ),
       ),
     );

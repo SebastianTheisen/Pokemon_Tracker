@@ -11,6 +11,7 @@ from app.api.v1 import (
     contributions,
     friends,
     health,
+    images,
     me,
     pricing,
     reports,
@@ -30,3 +31,4 @@ api_router.include_router(scan.router)
 api_router.include_router(alerts.router)
 api_router.include_router(friends.router)
 api_router.include_router(reports.router)
+api_router.include_router(images.router)
