@@ -355,10 +355,37 @@ class _CardBodyState extends ConsumerState<_CardBody> {
             onRetry: () => ref.invalidate(pricesProvider(card.id)),
             builder: _priceSection,
           ),
+          const SizedBox(height: 16),
+          // Weiteres aufklappbar – die Seite bleibt kurz, nichts geht verloren.
+          FoldSection(
+            id: 'history',
+            title: 'Preisverlauf (Cardmarket-Trend)',
+            initiallyOpen: true,
+            child: _History(cardId: card.id, variant: _variant),
+          ),
           if (prices.value case final data?) _GradeComparison(card: card, prices: data),
-          const SectionTitle('Preisverlauf (Cardmarket-Trend)'),
-          _History(cardId: card.id, variant: _variant),
           _UsMarket(cardId: card.id),
+          if (prices.value case final data? when data.offers.isNotEmpty)
+            FoldSection(
+              id: 'sources',
+              title: 'Quellen und Belege',
+              summary: '${data.offers.length}',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final offer in data.offers) _OfferTile(offer: offer),
+                  if (data.lastCheckedAt != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                      child: Text(
+                        'Zuletzt geprüft: ${dateTime(data.lastCheckedAt)}',
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -419,23 +446,7 @@ class _CardBodyState extends ConsumerState<_CardBody> {
             ),
           ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final condition in conditions)
-                ChoiceChip(
-                  label: Text(condition),
-                  tooltip: conditionLabels[condition],
-                  selected: _condition == condition,
-                  onSelected: (_) => setState(() => _condition = condition),
-                ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -463,36 +474,35 @@ class _CardBodyState extends ConsumerState<_CardBody> {
               ),
             ),
           ),
-        if (byCondition.length > 1) ...[
-          const SectionTitle('Andere Zustände'),
-          for (final condition in conditions)
-            if (condition != _condition && byCondition[condition] != null)
-              ListTile(
-                dense: true,
-                title: Text('$condition · ${conditionLabels[condition]}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (byCondition[condition]!.isEstimate)
-                      const Padding(
-                        padding: EdgeInsets.only(right: 8),
-                        child: Tag('Schätzung', color: AppColors.warning),
+        // Andere Zustände erst auf Wunsch; Antippen zeigt den Zustand oben groß.
+        if (byCondition.length > 1)
+          FoldSection(
+            id: 'conditions',
+            title: 'Alle Zustände',
+            summary: '${byCondition.length}',
+            child: Column(
+              children: [
+                for (final condition in conditions)
+                  if (byCondition[condition] case final price?)
+                    ListTile(
+                      key: Key('condition-$condition'),
+                      dense: true,
+                      selected: condition == _condition,
+                      onTap: () => setState(() => _condition = condition),
+                      title: Text('$condition · ${conditionLabels[condition]}'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (price.isEstimate)
+                            const Padding(
+                              padding: EdgeInsets.only(right: 8),
+                              child: Tag('Schätzung', color: AppColors.warning),
+                            ),
+                          Text(money(price.value)),
+                        ],
                       ),
-                    Text(money(byCondition[condition]!.value)),
-                  ],
-                ),
-              ),
-        ],
-        if (prices.offers.isNotEmpty) ...[
-          const SectionTitle('Quellen'),
-          for (final offer in prices.offers) _OfferTile(offer: offer),
-        ],
-        if (prices.lastCheckedAt != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Text(
-              'Zuletzt geprüft: ${dateTime(prices.lastCheckedAt)}',
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                    ),
+              ],
             ),
           ),
       ],
@@ -686,59 +696,63 @@ class _UsMarket extends ConsumerWidget {
     if (details == null || !details.available) return const SizedBox.shrink();
     const muted = TextStyle(color: AppColors.textMuted, fontSize: 12);
     final volume = details.salesVolume.entries.toList()..sort((a, b) => b.value - a.value);
-    return Column(
+    return FoldSection(
       key: const Key('us-market'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SectionTitle('US-Markt (PriceCharting)'),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (volume.isNotEmpty) ...[
-                const Text('Verkäufe je Note', style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final entry in volume.take(10)) Tag('${entry.key}: ${entry.value}×'),
-                  ],
-                ),
-                const SizedBox(height: 12),
-              ],
-              for (final company in details.population.entries) ...[
-                Text(
-                  '${company.key}-Population: ${_population(company.value)}',
-                  style: const TextStyle(fontSize: 13),
-                ),
-                const SizedBox(height: 4),
-              ],
-              if (details.recentSales.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                const Text('Letzte Verkäufe', style: TextStyle(fontWeight: FontWeight.w600)),
-                for (final sale in details.recentSales.take(_shownSales))
-                  ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      '${sale.grade} · ${money(sale.priceUsd.toStringAsFixed(2), currency: 'USD')}',
-                    ),
-                    subtitle: Text(
-                      [sale.date, sale.title].whereType<String>().join(' · '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: sale.url == null ? null : const Icon(Icons.open_in_new, size: 16),
-                    onTap: sale.url == null ? null : () => openLink(context, sale.url!),
+      id: 'us-market',
+      title: 'US-Markt (PriceCharting)',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (volume.isNotEmpty) ...[
+                  const Text('Verkäufe je Note', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final entry in volume.take(10)) Tag('${entry.key}: ${entry.value}×'),
+                    ],
                   ),
+                  const SizedBox(height: 12),
+                ],
+                for (final company in details.population.entries) ...[
+                  Text(
+                    '${company.key}-Population: ${_population(company.value)}',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                ],
+                if (details.recentSales.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text('Letzte Verkäufe', style: TextStyle(fontWeight: FontWeight.w600)),
+                  for (final sale in details.recentSales.take(_shownSales))
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        '${sale.grade} · ${money(sale.priceUsd.toStringAsFixed(2), currency: 'USD')}',
+                      ),
+                      subtitle: Text(
+                        [sale.date, sale.title].whereType<String>().join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: sale.url == null ? null : const Icon(Icons.open_in_new, size: 16),
+                      onTap: sale.url == null ? null : () => openLink(context, sale.url!),
+                    ),
+                ],
+                Text('US-Dollar, meist eBay.com · Stand ${date(details.fetchedAt)}', style: muted),
+                const SizedBox(height: 8),
               ],
-              Text('US-Dollar, meist eBay.com · Stand ${date(details.fetchedAt)}', style: muted),
-            ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -824,33 +838,43 @@ class _GradeComparison extends StatelessWidget {
         .map((c) => double.tryParse(c.value))
         .firstOrNull;
     final best = rows.last.value;
-    return Column(
+    return FoldSection(
       key: const Key('grade-comparison'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SectionTitle('Noten vergleichen'),
-        if (raw != null)
-          _GradeTile(label: 'Roh (Near Mint)', value: raw, source: 'Cardmarket', share: raw / best),
-        for (final row in rows)
-          _GradeTile(
-            label: row.label,
-            value: row.value,
-            source: row.source,
-            share: row.value / best,
-            factor: raw == null || raw == 0 ? null : row.value / raw,
-            onAdd: row.grading == null
-                ? null
-                : () => showItemSheet(context, card: card, grading: row.grading),
+      id: 'grades',
+      title: 'Noten vergleichen',
+      summary: 'bis ${money(best.toStringAsFixed(2))}',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (raw != null)
+            _GradeTile(
+              label: 'Roh (Near Mint)',
+              value: raw,
+              source: 'Cardmarket',
+              share: raw / best,
+            ),
+          for (final row in rows)
+            _GradeTile(
+              label: row.label,
+              value: row.value,
+              source: row.source,
+              share: row.value / best,
+              factor: raw == null || raw == 0 ? null : row.value / raw,
+              onAdd: row.grading == null
+                  ? null
+                  : () => showItemSheet(context, card: card, grading: row.grading),
+            ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: Text(
+              'Slab-Preise: US-Verkäufe (PriceCharting, in € umgerechnet) bzw. deine gespeicherten '
+              'eBay-Verkäufe. „×“ = Vielfaches des Rohpreises. Antippen: als Slab hinzufügen.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
           ),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
-          child: Text(
-            'Slab-Preise: US-Verkäufe (PriceCharting, in € umgerechnet) bzw. deine gespeicherten '
-            'eBay-Verkäufe. „×“ = Vielfaches des Rohpreises. Antippen: als Slab hinzufügen.',
-            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-          ),
-        ),
-      ],
+          const SizedBox(height: 8),
+        ],
+      ),
     );
   }
 }

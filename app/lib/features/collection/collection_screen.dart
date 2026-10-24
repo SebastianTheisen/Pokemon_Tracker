@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
+import '../../core/prefs.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
@@ -150,6 +151,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     final items = ref.watch(itemsProvider(_filter));
     final folders = ref.watch(foldersProvider).value ?? const <Folder>[];
     final pageItems = items.value?.items ?? const <CollectionItem>[];
+    final listView = ref.watch(uiPrefsProvider.select((prefs) => prefs.listView));
     return PopScope(
       canPop: !_selecting,
       onPopInvokedWithResult: (didPop, _) {
@@ -186,32 +188,50 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                 data: (page) => page.items.isEmpty
                     ? [SliverFillRemaining(hasScrollBody: false, child: _empty())]
                     : [
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                          sliver: SliverGrid(
-                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                              maxCrossAxisExtent: 130,
-                              mainAxisSpacing: 16,
-                              crossAxisSpacing: 12,
-                              childAspectRatio: 0.5, // Bild + Wert + Name ohne Überlauf
+                        if (listView)
+                          SliverPadding(
+                            padding: const EdgeInsets.only(top: 4, bottom: 24),
+                            sliver: SliverList.separated(
+                              itemCount: page.items.length,
+                              separatorBuilder: (_, _) => const Divider(height: 1, indent: 72),
+                              itemBuilder: (context, index) {
+                                final item = page.items[index];
+                                return _ItemRow(
+                                  item: item,
+                                  selected: _selecting ? _selected.contains(item.id) : null,
+                                  onLongPress: () => _toggle(item),
+                                  onTap: _selecting ? () => _toggle(item) : () => _open(item),
+                                );
+                              },
                             ),
-                            delegate: SliverChildBuilderDelegate(
-                              childCount: page.items.length,
-                              (context, index) => LayoutBuilder(
-                                builder: (context, constraints) {
-                                  final item = page.items[index];
-                                  return ItemThumb(
-                                    item: item,
-                                    width: constraints.maxWidth,
-                                    selected: _selecting ? _selected.contains(item.id) : null,
-                                    onLongPress: () => _toggle(item),
-                                    onTap: _selecting ? () => _toggle(item) : () => _open(item),
-                                  );
-                                },
+                          )
+                        else
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                            sliver: SliverGrid(
+                              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 130,
+                                mainAxisSpacing: 16,
+                                crossAxisSpacing: 12,
+                                childAspectRatio: 0.5, // Bild + Wert + Name ohne Überlauf
+                              ),
+                              delegate: SliverChildBuilderDelegate(
+                                childCount: page.items.length,
+                                (context, index) => LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    final item = page.items[index];
+                                    return ItemThumb(
+                                      item: item,
+                                      width: constraints.maxWidth,
+                                      selected: _selecting ? _selected.contains(item.id) : null,
+                                      onLongPress: () => _toggle(item),
+                                      onTap: _selecting ? () => _toggle(item) : () => _open(item),
+                                    );
+                                  },
+                                ),
                               ),
                             ),
                           ),
-                        ),
                         if (page.total > page.items.length)
                           SliverToBoxAdapter(
                             child: Padding(
@@ -399,6 +419,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             children: [
+              _gap(_viewToggle()),
               _gap(
                 Badge(
                   isLabelVisible: _filter.extraCount > 0,
@@ -471,6 +492,18 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Raster (Bilder) oder Liste (mehr auf einen Blick) – merkt sich die Wahl auf dem Gerät.
+  Widget _viewToggle() {
+    final listView = ref.watch(uiPrefsProvider.select((prefs) => prefs.listView));
+    return IconButton.outlined(
+      key: const Key('collection-view'),
+      tooltip: listView ? 'Als Raster zeigen' : 'Als Liste zeigen',
+      visualDensity: VisualDensity.compact,
+      onPressed: () => ref.read(uiPrefsProvider.notifier).setListView(value: !listView),
+      icon: Icon(listView ? Icons.grid_view : Icons.view_list),
     );
   }
 
@@ -586,6 +619,60 @@ class _SummaryHeader extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Listenansicht: kleines Bild, Name, Set und Fassung, Wert und Gewinn.
+class _ItemRow extends StatelessWidget {
+  const _ItemRow({required this.item, required this.onTap, this.onLongPress, this.selected});
+
+  final CollectionItem item;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+
+  /// Auswahlmodus: Haken bzw. Kreis; `null` = kein Auswahlmodus.
+  final bool? selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = item.value;
+    final profit = value.profit;
+    return ListTile(
+      key: Key('item-row-${item.id}'),
+      onTap: onTap,
+      onLongPress: onLongPress,
+      leading: switch (selected) {
+        final isSelected? => Icon(
+          isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+          color: isSelected ? AppColors.primary : AppColors.textMuted,
+        ),
+        null => CardImage(url: item.image, width: 40, contain: item.card == null),
+      },
+      title: Row(
+        children: [
+          Flexible(child: Text(item.title, overflow: TextOverflow.ellipsis)),
+          if (item.quantity > 1) ...[
+            const SizedBox(width: 6),
+            Tag('×${item.quantity}', color: AppColors.accent),
+          ],
+        ],
+      ),
+      subtitle: Text(
+        [if (item.card != null) item.card!.subtitle, item.label].join(' · '),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: AppColors.textMuted),
+      ),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(money(value.totalValue), style: const TextStyle(fontWeight: FontWeight.w700)),
+          if (profit != null)
+            Text(signedMoney(profit), style: TextStyle(color: profitColor(profit), fontSize: 12)),
+        ],
       ),
     );
   }

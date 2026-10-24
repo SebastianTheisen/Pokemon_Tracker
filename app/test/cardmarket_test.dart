@@ -409,6 +409,9 @@ void usMarketTests() {
 
     final section = find.byKey(const Key('us-market'));
     await tester.scrollUntilVisible(section, 300, scrollable: find.byType(Scrollable).first);
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -200));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('fold-us-market')));
     await tester.pumpAndSettle();
     expect(find.text('US-Markt (PriceCharting)'), findsOneWidget);
     expect(find.text('Ungraded: 60×'), findsOneWidget);

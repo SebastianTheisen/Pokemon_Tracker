@@ -113,6 +113,73 @@ class CardImage extends StatelessWidget {
   }
 }
 
+/// Aufklappbarer Abschnitt: Überschrift mit kurzer Zusammenfassung, Inhalt erst auf Tipp.
+/// Hält lange Seiten (Kartenseite) übersichtlich.
+class FoldSection extends StatefulWidget {
+  const FoldSection({
+    required this.id,
+    required this.title,
+    required this.child,
+    this.summary,
+    this.initiallyOpen = false,
+    super.key,
+  });
+
+  /// Für Tests und Wiedererkennung: Schlüssel `fold-<id>` am Kopf.
+  final String id;
+  final String title;
+
+  /// Kurz rechts neben der Überschrift (z. B. „bis 9.029,50 €“), solange zugeklappt.
+  final String? summary;
+  final bool initiallyOpen;
+  final Widget child;
+
+  @override
+  State<FoldSection> createState() => _FoldSectionState();
+}
+
+class _FoldSectionState extends State<FoldSection> {
+  late bool _open = widget.initiallyOpen;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const Divider(height: 1, indent: 16, endIndent: 16),
+      InkWell(
+        key: Key('fold-${widget.id}'),
+        onTap: () => setState(() => _open = !_open),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.title,
+                  style: Theme.of(context).textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (!_open && widget.summary != null)
+                Flexible(
+                  child: Text(
+                    widget.summary!,
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppColors.textMuted),
+                  ),
+                ),
+              Icon(_open ? Icons.expand_less : Icons.expand_more, color: AppColors.textMuted),
+            ],
+          ),
+        ),
+      ),
+      if (_open) widget.child,
+    ],
+  );
+}
+
 class SectionTitle extends StatelessWidget {
   const SectionTitle(this.text, {this.trailing, super.key});
 

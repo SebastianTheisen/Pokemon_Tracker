@@ -2,10 +2,20 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme.dart';
+import '../onboarding/onboarding.dart';
 
 typedef _Topic = ({IconData icon, String title, List<String> steps});
 
 const List<_Topic> _topics = [
+  (
+    icon: Icons.style_outlined,
+    title: 'Deine Karten bearbeiten',
+    steps: [
+      'Karte in der Sammlung antippen → Kartenseite mit Preis und Verlauf.',
+      'Im grünen Kasten „In deiner Sammlung“ deine Zeile antippen: bearbeiten (Zustand, Slab, Kaufpreis, Ordner), zum Tausch geben, Preisalarm oder entfernen.',
+      'Weitere Abschnitte (alle Zustände, Noten vergleichen, US-Markt, Quellen) klappst du per Tipp auf.',
+    ],
+  ),
   (
     icon: Icons.photo_camera_outlined,
     title: 'Karte scannen',
@@ -39,7 +49,7 @@ const List<_Topic> _topics = [
     icon: Icons.trending_up,
     title: 'Gewinn und Verlust',
     steps: [
-      'Trag den Kaufpreis ein (nach dem Scan oder über „Bearbeiten“).',
+      'Trag den Kaufpreis ein (nach dem Scan oder: Karte antippen → deine Zeile im grünen Kasten → Bearbeiten).',
       'Startseite und Sammlung zeigen dann „Investiert“ und „Gewinn“ in € und % – gesamt und je Ordner.',
       'Sortieren nach „Höchster Gewinn“ bzw. „Größter Verlust“; Filter „Kaufpreis fehlt noch“ zum Nachtragen.',
     ],
@@ -48,8 +58,10 @@ const List<_Topic> _topics = [
     icon: Icons.folder_outlined,
     title: 'Ordner und Mehrfachauswahl',
     steps: [
-      'Ordner anlegen: Sammlung → Ordner-Symbol. Jeder Ordner hat eigenen Wert, Gewinn und Kurve.',
-      'Lange auf eine Karte drücken → weitere antippen → verschieben, kopieren oder entfernen.',
+      'Ordner anlegen: Sammlung → „⋮“ → Ordner verwalten. Jeder Ordner hat eigenen Wert, Gewinn und Kurve.',
+      'Ordner wechseln: Schalter „Alle Ordner ▾“ unter der Suche.',
+      'Lange auf eine Karte drücken (oder „⋮“ → Mehrere auswählen) → weitere antippen → verschieben, kopieren oder entfernen.',
+      'Raster oder Liste: Symbol ganz links in der Schalterleiste.',
       'Personen-Symbol beim Ordner: für Freunde sichtbar (ohne Kaufpreise und Notizen).',
     ],
   ),
@@ -76,7 +88,7 @@ const List<_Topic> _topics = [
     title: 'Freunde und Tausch',
     steps: [
       'Mehr → Freunde: Sammlungen, die andere freigegeben haben.',
-      'Karte beim Freund antippen → „Zum Tausch“. Eigene Karte: Menü → „Zum Tausch geben“.',
+      'Karte beim Freund antippen → „Zum Tausch“. Eigene Karte: Karte antippen → deine Zeile → „Zum Tausch geben“.',
       'Der Tausch-Rechner zeigt, wer wie viel Wert bekommt. Speichern merkt den Tausch (damals vs. heute).',
     ],
   ),
@@ -84,7 +96,7 @@ const List<_Topic> _topics = [
     icon: Icons.inventory_2_outlined,
     title: 'Versiegeltes',
     steps: [
-      'Sammlung → Knopf „Versiegelt“: Sets durchblättern oder suchen (auch deutsch, z. B. „Top-Trainer-Box“).',
+      'Sammlung → „+“ → Versiegeltes (oder Startseite → Versiegelt): Sets durchblättern oder suchen (auch deutsch, z. B. „Top-Trainer-Box“).',
       'Produkt antippen → Sprache, Anzahl, Kaufpreis und Ordner wählen.',
     ],
   ),
@@ -106,6 +118,15 @@ class HelpScreen extends StatelessWidget {
     body: ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: OutlinedButton.icon(
+            key: const Key('help-onboarding'),
+            onPressed: () => showOnboarding(context),
+            icon: const Icon(Icons.play_circle_outline),
+            label: const Text('Kurze Einführung ansehen'),
+          ),
+        ),
         for (final topic in _topics)
           Card(
             clipBehavior: Clip.antiAlias,

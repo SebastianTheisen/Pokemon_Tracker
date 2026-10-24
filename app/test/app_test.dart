@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kartenkiste/app.dart';
+import 'package:kartenkiste/core/prefs.dart';
 import 'package:kartenkiste/core/push/push_bridge.dart';
 import 'package:kartenkiste/router.dart';
 import 'package:kartenkiste/models/json.dart';
@@ -72,15 +73,21 @@ void main() {
     expect(find.text('1.805,90\u00a0€'), findsWidgets);
     expect(find.text('Schätzung'), findsWidgets);
     expect(find.text('Beleg ansehen'), findsOneWidget);
-    final lowest = find.textContaining('Tiefster Preis: 1.790,00\u00a0€');
+    // Kartenseite aufgeräumt: Quellen und andere Zustände sind aufklappbar.
     final mainList = find.byType(Scrollable).first;
+    final lowest = find.textContaining('Tiefster Preis: 1.790,00\u00a0€'); // Verlauf ist offen
     await tester.scrollUntilVisible(lowest, 300, scrollable: mainList);
     expect(lowest, findsOneWidget);
-    await tester.scrollUntilVisible(find.text('EX'), -300, scrollable: mainList);
 
-    await tester.tap(find.text('EX'));
+    final conditionsFold = find.byKey(const Key('fold-conditions'));
+    await tester.scrollUntilVisible(conditionsFold, -300, scrollable: mainList);
+    await tester.tap(conditionsFold);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('condition-EX')));
+    await tester.tap(find.byKey(const Key('condition-EX')));
     await tester.pumpAndSettle();
     expect(find.text('1.535,02\u00a0€'), findsWidgets);
+    expect(find.textContaining('ab EX'), findsOneWidget); // Cardmarket-Link folgt dem Zustand
   });
 
   testWidgets('ohne belegten Preis wird keine Zahl erfunden', (tester) async {
@@ -1021,6 +1028,11 @@ void cardPageTests() {
     final section = find.byKey(const Key('grade-comparison'));
     await tester.scrollUntilVisible(section, 300, scrollable: find.byType(Scrollable).first);
     expect(find.text('Noten vergleichen'), findsOneWidget);
+    expect(find.text('bis 8.500,00\u00a0€'), findsOneWidget); // Zusammenfassung, zugeklappt
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -200));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('fold-grades')));
+    await tester.pumpAndSettle();
     expect(find.text('Roh (Near Mint)'), findsOneWidget);
     expect(find.text('PSA 9'), findsOneWidget);
     expect(find.text('×2,0'), findsOneWidget); // 3611,80 / 1805,90
@@ -1042,6 +1054,8 @@ void cardPageTests() {
     await openCard(tester);
     final chips = find.byKey(const Key('range-1J'));
     await tester.scrollUntilVisible(chips, 300, scrollable: find.byType(Scrollable).first);
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -200));
+    await tester.pumpAndSettle();
     expect(api.calls, contains('history:90'));
     expect(find.textContaining('+15,90\u00a0€ (+0,9 %) in 3 Monaten'), findsOneWidget);
     await tester.tap(chips);
@@ -1215,7 +1229,7 @@ void usabilityTests() {
         },
       ];
     await pumpApp(tester, api);
-    await tester.tap(find.byKey(const Key('tab-Listen')));
+    await tester.tap(find.byKey(const Key('tab-Merkliste')));
     await tester.pumpAndSettle();
 
     expect(find.text('2 Einträge · zusammen 125,00\u00a0€'), findsOneWidget);
@@ -1246,5 +1260,36 @@ void usabilityTests() {
     await tester.pumpAndSettle();
     expect(find.text('Sammlung'), findsWidgets);
     expect(find.byKey(const Key('selection-count')), findsNothing);
+  });
+
+  testWidgets('Erster Start: Anleitung mit drei Seiten, danach nie wieder', (tester) async {
+    final prefs = MemoryPrefsStore();
+    await pumpApp(tester, FakeApi(loggedIn: true), prefs: prefs);
+    expect(find.text('Karte scannen'), findsWidgets);
+    await tester.tap(find.byKey(const Key('onboarding-next')));
+    await tester.pumpAndSettle();
+    expect(find.text('Deine Sammlung'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('onboarding-next')));
+    await tester.pumpAndSettle();
+    expect(find.text('Los geht’s'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('onboarding-next')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('onboarding-next')), findsNothing);
+    expect(prefs.values['onboarded'], 'true');
+  });
+
+  testWidgets('Sammlung als Liste: Umschalter merkt sich die Wahl', (tester) async {
+    final prefs = MemoryPrefsStore({'onboarded': 'true'});
+    await pumpApp(tester, FakeApi(loggedIn: true), prefs: prefs);
+    await tester.tap(find.byKey(const Key('tab-Sammlung')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('item-row-i1')), findsNothing);
+    await tester.tap(find.byKey(const Key('collection-view')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('item-row-i1')), findsOneWidget);
+    expect(prefs.values['list_view'], 'true');
+    await tester.tap(find.byKey(const Key('item-row-i1')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('condition-value')), findsOneWidget); // Kartenseite
   });
 }

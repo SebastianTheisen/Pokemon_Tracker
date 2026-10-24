@@ -1,13 +1,34 @@
-// Untere Navigation: Übersicht, Sammlung, zentraler Scan-Button, Suche, Listen, Mehr.
+// Untere Navigation: Übersicht, Sammlung, zentraler Scan-Button, Suche, Merkliste, Mehr.
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/prefs.dart';
 import '../../core/theme.dart';
+import '../onboarding/onboarding.dart';
 
-class HomeShell extends StatelessWidget {
+class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({required this.shell, super.key});
 
   final StatefulNavigationShell shell;
+
+  @override
+  ConsumerState<HomeShell> createState() => _HomeShellState();
+}
+
+class _HomeShellState extends ConsumerState<HomeShell> {
+  bool _onboardingShown = false;
+
+  /// Beim ersten Start (je Gerät) einmal die Anleitung – erst wenn die Einstellungen geladen sind.
+  void _maybeShowOnboarding(UiPrefs prefs) {
+    if (_onboardingShown || !prefs.loaded || prefs.onboarded) return;
+    _onboardingShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await showOnboarding(context);
+      ref.read(uiPrefsProvider.notifier).finishOnboarding();
+    });
+  }
 
   static const _tabs = [
     (icon: Icons.dashboard_outlined, active: Icons.dashboard, label: 'Übersicht'),
@@ -17,12 +38,14 @@ class HomeShell extends StatelessWidget {
       label: 'Sammlung',
     ),
     (icon: Icons.search, active: Icons.search, label: 'Suche'),
-    (icon: Icons.favorite_border, active: Icons.favorite, label: 'Listen'),
+    (icon: Icons.favorite_border, active: Icons.favorite, label: 'Merkliste'),
     (icon: Icons.more_horiz, active: Icons.more_horiz, label: 'Mehr'),
   ];
 
   @override
   Widget build(BuildContext context) {
+    _maybeShowOnboarding(ref.watch(uiPrefsProvider));
+    final shell = widget.shell;
     Widget tab(int index) {
       final item = _tabs[index];
       final selected = shell.currentIndex == index;

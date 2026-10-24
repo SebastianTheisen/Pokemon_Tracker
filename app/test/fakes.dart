@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:kartenkiste/app.dart';
 import 'package:kartenkiste/core/api.dart';
+import 'package:kartenkiste/core/prefs.dart';
 import 'package:kartenkiste/core/providers.dart';
 import 'package:kartenkiste/core/push/push_bridge.dart';
 import 'package:kartenkiste/core/token_store.dart';
@@ -993,6 +994,7 @@ Future<void> pumpApp(
   FakeApi api, {
   FakeImageSource? images,
   PushBridge? push,
+  PrefsStore? prefs,
 }) async {
   await initializeDateFormatting('de_DE');
   tester.view.physicalSize = const Size(1170, 2532);
@@ -1005,6 +1007,8 @@ Future<void> pumpApp(
         apiProvider.overrideWithValue(api),
         imageSourceProvider.overrideWithValue(images ?? FakeImageSource()),
         pushBridgeProvider.overrideWithValue(push ?? FakePushBridge()),
+        // Standard: Anleitung schon gesehen, damit sie die übrigen Tests nicht verdeckt.
+        prefsStoreProvider.overrideWithValue(prefs ?? MemoryPrefsStore({'onboarded': 'true'})),
       ],
       child: const KartenkisteApp(),
     ),

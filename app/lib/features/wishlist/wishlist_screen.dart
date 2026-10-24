@@ -1,4 +1,4 @@
-// Listen: die Merkliste (eine je Nutzer) – wie die Watchlist bei Collectr mit Bild, Preis und
+// Merkliste (eine je Nutzer) – wie die Watchlist bei Collectr mit Bild, Preis und
 // Veränderung der letzten Tage.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
