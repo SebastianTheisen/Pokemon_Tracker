@@ -305,12 +305,14 @@ Ziel: alle Sets, Karten, Bilder und Preise aller Sprachen. Quellen je Bereich: o
 Ausgangslage (23.10.2026): Compose läuft, API nur auf `127.0.0.1:8000`, erreichbar ausschließlich über das Tailscale-Gerät „kartenkiste“ (HTTPS `*.ts.net`). **Keine Backups.**
 
 - [x] Backups (Entscheidung: nur auf dem VPS): Dienst `backup` – täglich 02:30 UTC `pg_dump` + Scanner-Daten nach `./backups`, 14 Tage; Wiederherstellungstest `deploy/phase6_restore_test.sh`
-- [ ] VPS: `deploy/phase6_setup.sh` (erste Sicherung, ntfy-Thema), dann `deploy/phase6_restore_test.sh`
+- [x] VPS 24.10.: Einrichtung ✅ (erste Sicherung 13 MB + 52 MB, alle 6 Prüfungen OK), Wiederherstellungstest ✅ (9 Tabellen identisch, 5 s)
 - [x] Überwachung (Entscheidung: ntfy-Push): Dienst `monitor` (`app/monitor.py`) – API, Worker-Lebenszeichen, Preisrunde, Cardmarket-Import, Sicherung, Speicherplatz; Meldung bei Störung, Erinnerung nach 24 h, Entwarnung
-- [ ] Sicherheits-Check: offene Ports/Firewall, Tailscale-Freigaben, Rate-Limits, Admin-Rechte, Abhängigkeiten (`pip-audit`), Container ohne Root
-- [ ] Last-Test: Sammlung mit vielen Karten, gleichzeitige Scans
+- [x] Abhängigkeiten: `pip-audit` → certifi-Lücke (PYSEC-2026-4320) behoben, sonst keine
+- [x] Sicherheits-Header (nosniff, kein Einbetten, kein Referrer, Kamera nur für die App, HSTS)
+- [ ] VPS: Sicherheits-Check `deploy/phase6_security.sh` (Ports, Firewall, Container-Nutzer, .env, ohne Anmeldung 401)
+- [ ] VPS: Lasttest `deploy/phase6_loadtest.sh` (Health 20 parallel, Suche 10 parallel, Sammlungswert 2.000 Karten)
 - [ ] Android: APK bauen (`deploy/phase5_app.sh --apk`) und auf einem Gerät abnehmen
-- [ ] Anleitung für Freunde („So kommst du rein“: Tailscale, Node-Sharing, Einladungscode, PWA bzw. APK)
+- [x] Anleitung für Freunde: [`docs/ANLEITUNG_FREUNDE.md`](docs/ANLEITUNG_FREUNDE.md)
 
 ### Änderungsprotokoll
 

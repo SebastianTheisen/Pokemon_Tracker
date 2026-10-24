@@ -15,6 +15,7 @@ from app import __version__
 from app.api.compression import SelectiveGZip
 from app.api.errors import register_error_handlers
 from app.api.limits import MULTIPART_OVERHEAD, UploadSizeLimit
+from app.api.security_headers import SecurityHeaders
 from app.api.v1 import api_router
 from app.api.web import mount_web_app
 from app.core.config import Settings, get_settings
@@ -124,6 +125,7 @@ def create_app(
         return files * settings.scan_max_upload_mb * 1024 * 1024 + MULTIPART_OVERHEAD
 
     app.add_middleware(SelectiveGZip)
+    app.add_middleware(SecurityHeaders)
     app.add_middleware(UploadSizeLimit, prefix="/api/v1/scan", max_bytes=scan_upload_limit)
     register_error_handlers(app)
     app.include_router(api_router)
