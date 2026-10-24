@@ -8,6 +8,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
+import '../../widgets/skeleton.dart';
 import '../../widgets/value_chart.dart';
 import '../alerts/alerts_screen.dart';
 import '../../core/prefs.dart';
@@ -95,6 +96,7 @@ class DashboardScreen extends ConsumerWidget {
               AsyncBody(
                 value: summary,
                 onRetry: () => invalidateCollection(ref),
+                loading: const Shimmer(child: SkeletonBox(height: 220, radius: 24)),
                 builder: (data) =>
                     data.items == 0 ? const _WelcomeHero() : _ValueHero(summary: data),
               ),

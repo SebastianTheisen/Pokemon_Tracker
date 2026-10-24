@@ -13,6 +13,7 @@ import '../../core/push/push_bridge.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
+import '../../widgets/skeleton.dart';
 
 final alertsProvider = FutureProvider.autoDispose<List<PriceAlert>>(
   (ref) => ref.watch(apiProvider).alerts(),
@@ -155,7 +156,7 @@ class _PushCardState extends ConsumerState<_PushCard> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: state.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const SkeletonList(rows: 2),
           error: (error, _) => Text('$error'),
           data: (data) {
             final (icon, color, text) = switch (data) {

@@ -11,6 +11,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
@@ -118,6 +119,7 @@ class _SealedAddScreenState extends ConsumerState<SealedAddScreen> {
       });
     });
     if (!ok || !mounted) return;
+    unawaited(HapticFeedback.mediumImpact());
     ref.invalidate(itemsProvider);
     invalidateCollection(ref);
     showMessage(context, 'Hinzugefügt: ${choice.quantity}× ${offer.name}');

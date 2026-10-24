@@ -1457,4 +1457,51 @@ void usabilityTests() {
     expect(find.text('▲ 4,2 %'), findsOneWidget);
     expect(find.textContaining('0,4 %'), findsNothing);
   });
+
+  testWidgets('Entfernen ohne Nachfrage, „Rückgängig“ legt die Position wieder an', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..ownedJson = [
+        {
+          'card_id': 'c1',
+          'folder_id': 'f1',
+          'folder_name': 'Sammlung',
+          'variant': 'normal',
+          'grading_company': null,
+          'grade': null,
+          'quantity': 1,
+          'item_ids': ['i1'],
+        },
+      ];
+    await pumpApp(tester, api);
+    await tester.tap(find.text('Sammlung').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nachtara VMAX').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('owned-edit-f1-null')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Entfernen'));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('deleteItem:i1'));
+    expect(find.text('„Nachtara VMAX“ entfernt'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('undo-delete')));
+    await tester.pumpAndSettle();
+    expect(api.lastItemBody?['card_id'], 'c1');
+    expect(api.lastItemBody?['folder_id'], 'f1');
+    expect(api.lastItemBody?['condition'], 'NM');
+  });
+
+  testWidgets('Set komplett: Glückwunsch und Konfetti (verschwindet von selbst)', (tester) async {
+    final api = FakeApi(loggedIn: true)..setProgressExtra = {'cards_owned': 4};
+    await pumpApp(tester, api);
+    final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
+        .read(routerProvider);
+    unawaited(router.push('/sets/s1'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Set komplett! 🎉'), findsOneWidget);
+    expect(find.byKey(const Key('confetti')), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('confetti')), findsNothing);
+  });
 }

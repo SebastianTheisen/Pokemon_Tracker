@@ -7,19 +7,29 @@ import '../core/format.dart';
 import '../core/images.dart';
 import '../core/theme.dart';
 import '../models/models.dart';
+import 'skeleton.dart';
 
 /// Zeigt Laden/Fehler/Daten eines Providers einheitlich an.
 class AsyncBody<T> extends StatelessWidget {
-  const AsyncBody({required this.value, required this.builder, this.onRetry, super.key});
+  const AsyncBody({
+    required this.value,
+    required this.builder,
+    this.onRetry,
+    this.loading,
+    super.key,
+  });
 
   final AsyncValue<T> value;
   final Widget Function(T data) builder;
   final VoidCallback? onRetry;
 
+  /// Platzhalter beim Laden (Standard: schimmernde Liste).
+  final Widget? loading;
+
   @override
   Widget build(BuildContext context) => value.when(
     data: builder,
-    loading: () => const Center(child: CircularProgressIndicator()),
+    loading: () => loading ?? const SkeletonList(),
     error: (error, _) => ErrorView(message: '$error', onRetry: onRetry),
   );
 }

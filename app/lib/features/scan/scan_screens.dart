@@ -3,7 +3,10 @@
 // Ablauf: Foto → Backend erkennt die Karte → Ergebnis mit Alternativen anzeigen →
 // Nutzer bestätigt oder wählt selbst → Bestätigung ans Backend (wird sein eigenes
 // Referenzbild) → optional direkt zur Sammlung oder Merkliste.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -153,7 +156,10 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
       _busy = false;
       if (ok) _added = item;
     });
-    if (ok) invalidateCollection(ref);
+    if (ok) {
+      unawaited(HapticFeedback.mediumImpact());
+      invalidateCollection(ref);
+    }
   }
 
   /// Nicht als Slab erkannt, ist aber einer: Formular mit Slab-Auswahl (Firma, Note, Black

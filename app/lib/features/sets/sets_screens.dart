@@ -11,6 +11,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
+import '../../widgets/confetti.dart';
 import '../collection/collection_screen.dart';
 import '../wishlist/wishlist_screen.dart';
 
@@ -170,8 +171,23 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
               })
                 card,
           ];
-          return CustomScrollView(
+          final complete = data.cardsTotal > 0 && data.cardsOwned >= data.cardsTotal;
+          final scroll = CustomScrollView(
             slivers: [
+              if (complete)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: Text(
+                      data.masterTotal > 0 && data.masterOwned >= data.masterTotal
+                          ? 'Master-Set komplett! 🏆'
+                          : 'Set komplett! 🎉',
+                      key: const Key('set-complete'),
+                      style: Theme.of(context).textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w800, color: AppColors.gain),
+                    ),
+                  ),
+                ),
               SliverToBoxAdapter(child: _header(data)),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -204,6 +220,8 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
               ),
             ],
           );
+          // Feiern wie in Dex: Konfetti, wenn das Set voll ist.
+          return complete ? Stack(children: [scroll, const ConfettiBurst()]) : scroll;
         },
       ),
     );

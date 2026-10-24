@@ -1,5 +1,8 @@
 // Formular zum Hinzufügen bzw. Bearbeiten einer Sammlungsposition (als Bottom-Sheet).
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
@@ -138,7 +141,10 @@ class _ItemFormState extends ConsumerState<ItemForm> {
     });
     if (!mounted) return;
     setState(() => _busy = false);
-    if (ok) Navigator.of(context).pop(saved);
+    if (ok) {
+      unawaited(HapticFeedback.mediumImpact()); // spürbare Bestätigung (Android; iPhone ohne)
+      Navigator.of(context).pop(saved);
+    }
   }
 
   bool get _hasExtras =>

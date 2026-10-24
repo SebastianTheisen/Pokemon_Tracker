@@ -740,6 +740,7 @@ class FakeApi extends Api {
       'master_owned': 3,
       'missing_set_value': '5.00',
       'missing_value': '7.50',
+      ...?setProgressExtra,
       'cards':
           setCardsOverride ??
           [
@@ -753,6 +754,9 @@ class FakeApi extends Api {
 
   /// Karten der Set-Seite (Standard: k1…k4).
   List<Json>? setCardsOverride;
+
+  /// Weitere Werte der Set-Seite (z. B. `cards_owned`).
+  Json? setProgressExtra;
 
   @override
   Future<SetAnalytics> setAnalytics(String setId) async {

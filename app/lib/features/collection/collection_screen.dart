@@ -13,6 +13,7 @@ import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
 import '../../widgets/range_chips.dart';
+import '../../widgets/skeleton.dart';
 import '../../widgets/value_chart.dart';
 import '../dashboard/dashboard_screen.dart';
 import 'item_filter.dart';
@@ -184,9 +185,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                   delegate: _PinnedBar(child: _filters(folders)),
                 ),
                 ...items.when(
-                  loading: () => [
-                    const SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
-                  ],
+                  loading: () => [const SliverToBoxAdapter(child: SkeletonGrid())],
                   error: (error, _) => [
                     SliverFillRemaining(
                       child: ErrorView(message: '$error', onRetry: _reload),
@@ -874,29 +873,44 @@ Future<void> showItemActions(
   } else if (action == 'edit') {
     if (await showItemSheet(context, item: item) != null) onChanged();
   } else if (action == 'delete') {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Position entfernen?'),
-        content: Text('„${item.title}“ (${item.label}) wird aus der Sammlung entfernt.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Abbrechen'),
+    // Wie bei Gmail: sofort entfernen, „Rückgängig“ statt Nachfrage.
+    final api = ref.read(apiProvider);
+    if (!await runAction(context, () => api.deleteItem(item.id)) || !context.mounted) return;
+    onChanged();
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('„${item.title}“ entfernt'),
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            key: const Key('undo-delete'),
+            label: 'Rückgängig',
+            onPressed: () async {
+              await api.addItem(restoreBody(item));
+              onChanged();
+            },
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Entfernen'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-    if (await runAction(context, () => ref.read(apiProvider).deleteItem(item.id))) {
-      onChanged();
-    }
+        ),
+      );
   }
 }
+
+/// Felder, um eine entfernte Position wieder anzulegen („Rückgängig“).
+Map<String, Object?> restoreBody(CollectionItem item) => {
+  'card_id': ?item.card?.id,
+  'product_id': ?item.product?.id,
+  'folder_id': item.folderId,
+  if (item.card != null) 'variant': item.variant,
+  if (item.card != null && item.gradingCompany == null) 'condition': item.condition,
+  'quantity': item.quantity,
+  'purchase_price': item.purchasePrice,
+  'purchase_date': ?item.purchaseDate?.toIso8601String().substring(0, 10),
+  'custom_price': item.customPrice,
+  'note': item.note,
+  'grading_company': ?item.gradingCompany,
+  'grade': ?item.grade,
+};
 
 /// Liste der Positionen nur zum Ansehen (Admin-Ansicht fremder Sammlungen).
 class ReadOnlyItemTile extends StatelessWidget {

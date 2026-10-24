@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -377,10 +378,36 @@ class _CreateCardDialogState extends ConsumerState<CreateCardDialog> {
 
 /// „+“ in der Suche: Tippen fügt 1× Near Mint hinzu (mit „Rückgängig“), langer Druck öffnet
 /// das Schnellmenü (Reverse Holo, mit Details, Merkliste).
-class QuickAddButton extends ConsumerWidget {
+class QuickAddButton extends ConsumerStatefulWidget {
   const QuickAddButton({required this.card, super.key});
 
   final CardInfo card;
+
+  @override
+  ConsumerState<QuickAddButton> createState() => _QuickAddButtonState();
+}
+
+class _QuickAddButtonState extends ConsumerState<QuickAddButton> {
+  /// Kurz nach dem Hinzufügen: Häkchen statt Plus (sichtbare Bestätigung).
+  bool _done = false;
+  Timer? _reset;
+
+  CardInfo get card => widget.card;
+
+  @override
+  void dispose() {
+    _reset?.cancel();
+    super.dispose();
+  }
+
+  void _confirm() {
+    unawaited(HapticFeedback.mediumImpact());
+    setState(() => _done = true);
+    _reset?.cancel();
+    _reset = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) setState(() => _done = false);
+    });
+  }
 
   Future<void> _add(BuildContext context, WidgetRef ref, {String variant = 'normal'}) async {
     final api = ref.read(apiProvider);
@@ -400,6 +427,7 @@ class QuickAddButton extends ConsumerWidget {
       });
     });
     if (!ok || !context.mounted) return;
+    _confirm();
     invalidateCollection(ref);
     final added = item!;
     ScaffoldMessenger.of(context)
@@ -475,7 +503,7 @@ class QuickAddButton extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Semantics(
+  Widget build(BuildContext context) => Semantics(
     // Eigener Knoten: sonst verschmilzt der Knopf mit der Trefferzeile und ein Tipp auf die
     // Zeile (Bedienungshilfen, Web-Semantik) würde hinzufügen statt die Karte zu öffnen.
     container: true,
@@ -488,9 +516,20 @@ class QuickAddButton extends ConsumerWidget {
         radius: 24,
         onTap: () => _add(context, ref),
         onLongPress: () => _menu(context, ref),
-        child: const Padding(
-          padding: EdgeInsets.all(8),
-          child: Icon(Icons.add_circle_outline, color: AppColors.primary),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            transitionBuilder: (child, animation) =>
+                ScaleTransition(scale: animation, child: child),
+            child: _done
+                ? Icon(Icons.check_circle, key: const ValueKey('done'), color: AppColors.gain)
+                : const Icon(
+                    Icons.add_circle_outline,
+                    key: ValueKey('add'),
+                    color: AppColors.primary,
+                  ),
+          ),
         ),
       ),
     ),
