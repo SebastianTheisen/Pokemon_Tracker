@@ -681,6 +681,27 @@ class CollectionService:
             )
         return list(grouped.values())
 
+    async def item_trends(
+        self, items: Sequence[CollectionItem], *, days: int = 7
+    ) -> dict[uuid.UUID, Decimal]:
+        """Prozentuale Trend-Veränderung je Position (nur Rohkarten in normaler Fassung –
+        für andere gibt es keinen täglichen Verlauf)."""
+        raw = {
+            item.id: item.card_id
+            for item in items
+            if item.card_id is not None
+            and item.grading_company is None
+            and item.variant == "normal"
+        }
+        changes = await trend_changes(
+            self._session, list(set(raw.values())), now=self._now(), days=days
+        )
+        return {
+            item_id: changes[card_id].change_pct
+            for item_id, card_id in raw.items()
+            if card_id in changes
+        }
+
     async def price_movers(self, *, days: int = 7, limit: int = 5) -> Movers:
         """Gewinner und Verlierer der eigenen Rohkarten (Cardmarket-Trend) im Zeitraum."""
         return await price_movers(

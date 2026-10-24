@@ -403,3 +403,37 @@ class _CountUpMoneyState extends State<CountUpMoney> {
     ),
   );
 }
+
+/// Kleines Abzeichen „▲ 4,2 %“ (7 Tage) – unter 1 % nicht gezeigt, das wäre nur Rauschen.
+class TrendBadge extends StatelessWidget {
+  const TrendBadge({required this.percent, this.solid = false, super.key});
+
+  final String? percent;
+
+  /// Auf Bildern: deckender Hintergrund für Lesbarkeit.
+  final bool solid;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = parseAmount(percent);
+    if (value == null || value.abs() < 1) return const SizedBox.shrink();
+    final color = value > 0 ? AppColors.gain : AppColors.loss;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: solid ? color : color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        '${value > 0 ? '▲' : '▼'} ${value.abs().toStringAsFixed(1).replaceAll('.', ',')} %',
+        semanticsLabel:
+            '${value > 0 ? 'plus' : 'minus'} ${value.abs().toStringAsFixed(1)} Prozent in 7 Tagen',
+        style: TextStyle(
+          color: solid ? Colors.white : color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}

@@ -1444,4 +1444,17 @@ void usabilityTests() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('range-change')), findsOneWidget);
   });
+
+  testWidgets('Sammlung: 7-Tage-Abzeichen am Bild, unter 1 % keins', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..itemsOverride = [
+        {...itemJson(), 'trend_7d_pct': '4.2'},
+        {...itemJson(id: 'i2', total: '50.00'), 'trend_7d_pct': '-0.4'},
+      ];
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('tab-Sammlung')));
+    await tester.pumpAndSettle();
+    expect(find.text('▲ 4,2 %'), findsOneWidget);
+    expect(find.textContaining('0,4 %'), findsNothing);
+  });
 }

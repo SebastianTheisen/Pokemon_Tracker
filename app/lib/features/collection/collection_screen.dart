@@ -706,6 +706,10 @@ class _ItemRow extends StatelessWidget {
             const SizedBox(width: 6),
             Tag('×${item.quantity}', color: AppColors.accent),
           ],
+          if (item.trend7dPct != null) ...[
+            const SizedBox(width: 6),
+            TrendBadge(percent: item.trend7dPct),
+          ],
         ],
       ),
       subtitle: Text(

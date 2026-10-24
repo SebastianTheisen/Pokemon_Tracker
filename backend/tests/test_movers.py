@@ -118,3 +118,24 @@ async def test_wishlist_shows_trend_of_last_week(
         "Mew": (None, None),
     }
     assert {e["change_days"] for e in entries} == {7}
+
+
+async def test_collection_items_carry_seven_day_trend(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Abzeichen „▲ 25 %“ je Karte in der Sammlung – nur Rohkarten mit Verlauf."""
+    user = await register_user("max@example.com")
+    riser = await make_card(session_factory, external_id="a-1", name="Glurak", number="1")
+    await _trend(session_factory, riser, 10, "10.00")
+    await _trend(session_factory, riser, 1, "12.50")
+    await _own(client, user.headers, riser)
+    await _own(client, user.headers, riser, grading_company="PSA", grade="10")  # kein Verlauf
+
+    items = (await client.get(f"{API}/collection/items", headers=user.headers)).json()["items"]
+
+    assert sorted((i["kind"], i["trend_7d_pct"]) for i in items) == [
+        ("graded", None),
+        ("raw", "25.0"),
+    ]

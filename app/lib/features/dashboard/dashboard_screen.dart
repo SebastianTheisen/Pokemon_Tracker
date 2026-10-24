@@ -556,6 +556,13 @@ class ItemThumb extends StatelessWidget {
                       shadows: const [Shadow(blurRadius: 4)],
                     ),
                   ),
+                // Wie bei Collectr: Bewegung der letzten 7 Tage direkt am Bild.
+                if (item.trend7dPct != null)
+                  Positioned(
+                    left: 4,
+                    bottom: 4,
+                    child: TrendBadge(percent: item.trend7dPct, solid: true),
+                  ),
                 if (item.quantity > 1 || item.kind == 'graded')
                   Positioned(
                     right: 4,

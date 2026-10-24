@@ -201,6 +201,10 @@ class ItemOut(BaseModel):
     value: ValueOut
     created_at: datetime
     updated_at: datetime
+    trend_7d_pct: Decimal | None = Field(
+        default=None,
+        description="Veränderung des Cardmarket-Trends in 7 Tagen (Rohkarte, normal); sonst null",
+    )
 
     @classmethod
     def build(cls, valued: ValuedItem) -> ItemOut:

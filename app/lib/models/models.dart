@@ -815,6 +815,7 @@ class CollectionItem {
     this.note,
     this.gradingCompany,
     this.grade,
+    this.trend7dPct,
   });
 
   factory CollectionItem.fromJson(Json json) => CollectionItem(
@@ -834,7 +835,11 @@ class CollectionItem {
     grade: json.strOrNull('grade'),
     value: ItemValue.fromJson(json.obj('value')),
     createdAt: json.time('created_at'),
+    trend7dPct: json.strOrNull('trend_7d_pct'),
   );
+
+  /// Veränderung des Marktpreises in 7 Tagen in Prozent („4.2“) – nur Rohkarten mit Verlauf.
+  final String? trend7dPct;
 
   final String id;
   final String folderId;

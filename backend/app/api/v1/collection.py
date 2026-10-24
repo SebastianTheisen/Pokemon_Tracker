@@ -125,7 +125,14 @@ async def list_items(
         with_purchase=with_purchase,
     )
     items, total = await collection.list_items(item_filter, sort=sort, limit=limit, offset=offset)
-    return ItemPage(items=[ItemOut.build(i) for i in items], total=total)
+    trends = await collection.item_trends([valued.item for valued in items])
+    return ItemPage(
+        items=[
+            ItemOut.build(i).model_copy(update={"trend_7d_pct": trends.get(i.item.id)})
+            for i in items
+        ],
+        total=total,
+    )
 
 
 class OwnedOut(BaseModel):
