@@ -16,8 +16,8 @@ Stand: 17.10.2026 · Status: **Phase 5 (Flutter-App „Kartenkiste“) in Arbeit
 | 3 – Sammlung, Merkliste, Dashboard | ✅ erledigt | VPS-Probe mit echten Preisen = Handrechnung (4.894,67 €), Zugriffsschutz ✅, 204 Tests (95 % Coverage) |
 | 4 – Scanner | ✅ erledigt | VPS-Lauf ✅: Top-1 5/6, 0× sicher-aber-falsch, Ø 2,7 s (max 4,6 s). Latenz-Tuning und Abnahme 85 % → Phase 7. Binder-Scan als Beta; Abnahme Top-1 ≥ 85 % wartet auf weitere Testfotos |
 | 5 – Flutter-App | ✅ erledigt | App „Kartenkiste“ im Alltagstest (iPhone), Daten aus verlässlichen Quellen (Phase 5b): ~86.000 Karten, 99 % mit Bild, Cardmarket-Zuordnung JA 84 %/ZH-CN 96 %; Abnahme Android/APK → Phase 6 |
-| 6 – Deployment und Härtung | 🟡 in Arbeit | Backups, Überwachung, Sicherheits-Check, Anleitung für Freunde, APK |
-| 7 – Nachbesserung | ⚪ offen | |
+| 6 – Deployment und Härtung | ✅ erledigt | Tägliche Sicherung (Wiederherstellung getestet), Überwachung mit ntfy-Push, Sicherheits-Check ✅, Lasttest ✅ (Suche 166 ms), Anleitung für Freunde; APK vorerst nicht nötig |
+| 7 – Nachbesserung | 🟡 in Arbeit | |
 
 Legende: ⚪ offen · 🟡 in Arbeit · 🔴 blockiert · ✅ erledigt
 
@@ -312,7 +312,7 @@ Ausgangslage (23.10.2026): Compose läuft, API nur auf `127.0.0.1:8000`, erreich
 - [x] VPS 24.10. Sicherheits-Check: Kartenkiste nur über 127.0.0.1 + Tailscale erreichbar, Container ohne Root, .env 600, Header ✅, ohne Anmeldung 401. Weitere offene Ports gehören zu anderen Apps auf dem VPS (nicht angefasst)
 - [x] VPS 24.10. Lasttest: Sammlungswert 2.000 Karten 0,3 s ✅; Suche 10 parallel Median 1,4 s / max 3,8 s ❌ → Suche fasst alle Schreibweisen in einer Abfrage zusammen (statt bis zu 10)
 - [x] Ursache (Abfrageplan auf dem VPS + Profil lokal mit 85.000 Karten): ~1.900 reguläre Ausdrücke je Suche für die Übersetzungen (~0,3 s CPU) und OR über alle Schreibweisen → Postgres liest alle Karten. Behoben: Teilstring-Vorfilter, `UNION ALL` je Schreibweise (Index) – lokal 500 ms → 30 ms
-- [ ] VPS: Lasttest wiederholen (Ziel Suche Median < 0,5 s)
+- [x] VPS 24.10. Lasttest wiederholt: Suche 10 parallel Median **166 ms** (vorher 1.376 ms), max 761 ms; Health 137 ms; Sammlungswert 2.000 Karten 309 ms ✅
 - [x] Android-APK: vorerst nicht nötig (Entscheidung 24.10.; PWA reicht, APK-Build bleibt verfügbar)
 - [x] Anleitung für Freunde: [`docs/ANLEITUNG_FREUNDE.md`](docs/ANLEITUNG_FREUNDE.md)
 
