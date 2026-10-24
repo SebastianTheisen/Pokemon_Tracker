@@ -893,6 +893,45 @@ void ownedTests() {
     expect(find.text('Binder · Reverse Holo'), findsOneWidget);
   });
 
+  testWidgets('Kartenseite: Slab zählt mit Notenpreis; ohne Preis klarer Hinweis + eBay', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true)
+      ..ownedJson = [
+        {
+          ...owned('f1', 'Sammlung', 1),
+          'grading_company': 'PSA',
+          'grade': '10',
+          'unit_value': null,
+          'value_kind': 'none',
+        },
+        {
+          ...owned('f2', 'Binder', 1),
+          'grading_company': 'PSA',
+          'grade': '9',
+          'unit_value': '1200.00',
+          'value_kind': 'external',
+          'value_source': 'pricecharting',
+          'value_basis': 'PriceCharting Note 9 (US-Preis umgerechnet)',
+        },
+      ];
+    await pumpApp(tester, api);
+    final topCard = find.text('Nachtara VMAX').first;
+    await tester.ensureVisible(topCard);
+    await tester.pumpAndSettle();
+    await tester.tap(topCard);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Noch kein Preis für PSA 10 – wird gesucht'), findsOneWidget);
+    expect(find.text('1.200,00\u00a0€'), findsOneWidget);
+    expect(
+      find.text('Wert in der Sammlung · PriceCharting Note 9 (US-Preis umgerechnet)'),
+      findsOneWidget,
+    );
+    expect(find.text('Preis für PSA 10 aus eBay-Verkäufen holen'), findsOneWidget);
+    expect(find.text('Preis ungegradet (Rohkarte)'), findsOneWidget);
+  });
+
   testWidgets('Scan: Ordner wählen, Wahl gilt auch für das nächste Hinzufügen', (tester) async {
     final api = FakeApi(loggedIn: true)
       ..foldersJson = [

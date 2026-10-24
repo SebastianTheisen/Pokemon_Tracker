@@ -324,7 +324,10 @@ class _CardBodyState extends ConsumerState<_CardBody> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: OwnedPanel(cardId: card.id),
+            child: OwnedPanel(
+              cardId: card.id,
+              onFetchSlabPrice: (grading) => openEbaySold(context, ref, card, grading: grading),
+            ),
           ),
           CardmarketEditionTile(
             cardId: card.id,
@@ -385,7 +388,7 @@ class _CardBodyState extends ConsumerState<_CardBody> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionTitle('Preis'),
+        const SectionTitle('Preis ungegradet (Rohkarte)'),
         if (variants.length > 1)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),

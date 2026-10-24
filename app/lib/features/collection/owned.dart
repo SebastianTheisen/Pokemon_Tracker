@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
@@ -47,16 +48,21 @@ class OwnedLine extends StatelessWidget {
   );
 }
 
-/// Kartenseite: Bestand je Ordner und Fassung.
+/// Kartenseite: Bestand je Ordner und Fassung – mit dem Wert, mit dem die Position in der
+/// Sammlung zählt. Slabs zählen mit dem Preis ihrer Note, nicht mit dem Rohpreis oben.
 class OwnedPanel extends ConsumerWidget {
-  const OwnedPanel({required this.cardId, super.key});
+  const OwnedPanel({required this.cardId, this.onFetchSlabPrice, super.key});
 
   final String cardId;
+
+  /// „eBay-Verkäufe holen“ für einen Slab ohne Preis (Firma und Note, z. B. „PSA 10“).
+  final void Function(String grading)? onFetchSlabPrice;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final entries = ref.watch(ownedProvider(cardId)).value?[cardId] ?? const <OwnedEntry>[];
     if (entries.isEmpty) return const SizedBox.shrink();
+    final missing = entries.where((e) => e.isSlab && e.unitValue == null).toList();
     return Container(
       key: const Key('owned-panel'),
       margin: const EdgeInsets.only(top: 12),
@@ -76,25 +82,88 @@ class OwnedPanel extends ConsumerWidget {
           const SizedBox(height: 4),
           for (final entry in entries)
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: 6),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.folder_outlined, size: 16, color: AppColors.textMuted),
+                  Icon(
+                    entry.isSlab ? Icons.workspace_premium_outlined : Icons.folder_outlined,
+                    size: 18,
+                    color: AppColors.textMuted,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
-                    child: Text(
-                      [entry.folderName, ?entry.version].join(' · '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          [entry.folderName, ?entry.version].join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          entry.unitValue == null
+                              ? (entry.isSlab
+                                    ? 'Noch kein Preis für ${entry.version} – wird gesucht'
+                                    : 'Kein Preis bekannt')
+                              : _valueLabel(entry),
+                          key: Key('owned-value-${entry.folderId}-${entry.version}'),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: entry.unitValue == null
+                                ? AppColors.warning
+                                : AppColors.textMuted,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  Text('${entry.quantity}×', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${entry.quantity}×',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      if (entry.unitValue case final value?)
+                        Text(money(value), style: const TextStyle(fontWeight: FontWeight.w700)),
+                    ],
+                  ),
                 ],
               ),
+            ),
+          if (missing.isNotEmpty && onFetchSlabPrice != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: const Key('owned-fetch-slab'),
+                onPressed: () => onFetchSlabPrice!(missing.first.version!),
+                icon: const Icon(Icons.sell_outlined, size: 18),
+                label: Text('Preis für ${missing.first.version} aus eBay-Verkäufen holen'),
+              ),
+            ),
+          if (missing.isNotEmpty)
+            TextButton.icon(
+              key: const Key('owned-reload'),
+              onPressed: () => ref.invalidate(ownedProvider),
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Neu laden'),
             ),
         ],
       ),
     );
+  }
+
+  /// „Wert in der Sammlung · PriceCharting PSA 10 (US-Preis umgerechnet)“
+  static String _valueLabel(OwnedEntry entry) {
+    final source =
+        entry.valueBasis ??
+        switch (entry.valueKind) {
+          'manual' => 'dein Eigenpreis',
+          'estimated' => 'Schätzung',
+          _ => entry.valueSource ?? 'Beleg',
+        };
+    return 'Wert in der Sammlung · $source';
   }
 }
 

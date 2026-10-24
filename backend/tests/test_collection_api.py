@@ -17,10 +17,11 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.v1 import collection as collection_api
 from app.core.config import Settings
 from app.models import AuditLog, Card, FolderSnapshot, PortfolioSnapshot
 from app.services.price_health import SourceHealth
-from app.services.pricing import tracked_card_ids
+from app.services.pricing import PriceService, tracked_card_ids
 from app.worker import refresh_tracked_prices
 from tests.conftest import Account, RegisterUser
 from tests.pricing_helpers import UPDATED, FakeProvider, cardmarket, make_card
@@ -770,3 +771,47 @@ async def test_owned_cards_by_folder_and_version(
         ("Sammlung", "normal", None, None, 3),
     }
     assert {o["card_id"] for o in owned} == {str(card_a.id)}  # Bobs Karte zählt nicht
+
+
+async def test_owned_shows_collection_value_and_slab_switch_fetches_grade_prices(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    cards: tuple[Card, Card],
+    price_provider: FakeProvider,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rohkarte → Slab: der Wert ist der Notenpreis (nicht der Rohpreis), und die Notenpreise
+    werden gleich im Hintergrund geholt statt erst in der Tagesrunde."""
+    alice = await register_user("alice@example.com")
+    price_provider.quotes = [cardmarket("trend", "100")]
+    card = cards[0]
+    item = await _add(client, alice, card_id=str(card.id))
+
+    async def owned() -> list[dict[str, Any]]:
+        response = await client.get(
+            f"{API}/collection/owned", params={"card_id": str(card.id)}, headers=alice.headers
+        )
+        data: list[dict[str, Any]] = response.json()
+        return data
+
+    raw = (await owned())[0]
+    assert (raw["unit_value"], raw["value_kind"], raw["condition"]) == ("100.00", "estimated", "NM")
+
+    refreshed: list[str] = []
+    original = PriceService.refresh
+
+    async def recording_refresh(self: PriceService, target: Card, **kwargs: Any) -> Any:
+        refreshed.append(str(target.id))
+        return await original(self, target, **kwargs)
+
+    monkeypatch.setattr(collection_api.PriceService, "refresh", recording_refresh)
+    switched = await client.patch(
+        f"{API}/collection/items/{item['id']}",
+        json={"grading_company": "PSA", "grade": "10"},
+        headers=alice.headers,
+    )
+    assert switched.json()["value"]["unit_value"] is None  # kein Rohpreis für den Slab
+    assert refreshed == [str(card.id)]  # Notenpreise werden gleich geholt
+
+    slab = (await owned())[0]
+    assert (slab["grading_company"], slab["grade"], slab["unit_value"]) == ("PSA", "10", None)

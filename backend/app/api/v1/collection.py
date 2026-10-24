@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import uuid
 from decimal import Decimal
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Query, Response, status
+import structlog
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response, status
 from pydantic import BaseModel, Field
 
 from app.api.deps import CurrentUser, PriceServiceDep, SessionDep
 from app.core.config import CatalogLanguage
+from app.models import Card
 from app.providers.pricing import Condition
 from app.schemas.catalog import CardOut, SetOut
 from app.schemas.collection import (
@@ -38,11 +40,13 @@ from app.schemas.collection import (
 )
 from app.services.collection import CollectionService, ItemFilter, ItemInput, SortKey
 from app.services.errors import InvalidInputError
+from app.services.pricing import PriceService
 from app.services.set_analytics import CardMarket, SetAnalytics, set_analytics
 from app.services.set_progress import SetProgressService
 from app.services.valuation import ItemKind
 
 router = APIRouter(tags=["collection"])
+log = structlog.get_logger(__name__)
 
 
 def get_collection(
@@ -132,6 +136,11 @@ class OwnedOut(BaseModel):
     grading_company: str | None
     grade: str | None
     quantity: int
+    condition: str | None
+    unit_value: Decimal | None = Field(description="Stückwert in der Sammlung; null = kein Preis")
+    value_kind: str
+    value_source: str | None
+    value_basis: str | None
 
 
 @router.get("/collection/owned")
@@ -143,10 +152,36 @@ async def owned_cards(
     return [OwnedOut(**entry.__dict__) for entry in await collection.owned_cards(card_id)]
 
 
+async def refresh_slab_prices(app_state: Any, card_id: uuid.UUID) -> None:
+    """Nach dem Speichern eines Slabs: Notenpreise (PriceCharting) gleich holen statt erst in der
+    nächsten Tagesrunde. Läuft nach der Antwort; Fehler landen nur im Log."""
+    try:
+        async with app_state.session_factory() as session:
+            card = await session.get(Card, card_id)
+            if card is None:
+                return
+            prices = PriceService(
+                session, app_state.settings, app_state.price_providers, app_state.price_health
+            )
+            await prices.refresh(card)
+            await session.commit()
+    except Exception:
+        log.exception("collection.slab_refresh_failed", card=str(card_id))
+
+
+def _schedule_slab_refresh(request: Request, background: BackgroundTasks, item: ItemOut) -> None:
+    if item.kind == "graded" and item.card is not None and item.value.unit_value is None:
+        background.add_task(refresh_slab_prices, request.app.state, item.card.id)
+
+
 @router.post("/collection/items", status_code=status.HTTP_201_CREATED)
-async def add_item(body: ItemCreate, collection: Collection) -> ItemOut:
+async def add_item(
+    body: ItemCreate, collection: Collection, request: Request, background: BackgroundTasks
+) -> ItemOut:
     item = await collection.add_item(ItemInput(**body.model_dump()))
-    return await _item_out(collection, item.id)
+    out = await _item_out(collection, item.id)
+    _schedule_slab_refresh(request, background, out)
+    return out
 
 
 @router.post("/collection/items/bulk")
@@ -168,9 +203,17 @@ async def get_item(item_id: uuid.UUID, collection: Collection) -> ItemOut:
 
 
 @router.patch("/collection/items/{item_id}")
-async def update_item(item_id: uuid.UUID, body: ItemUpdate, collection: Collection) -> ItemOut:
+async def update_item(
+    item_id: uuid.UUID,
+    body: ItemUpdate,
+    collection: Collection,
+    request: Request,
+    background: BackgroundTasks,
+) -> ItemOut:
     await collection.update_item(item_id, body.model_dump(exclude_unset=True))
-    return await _item_out(collection, item_id)
+    out = await _item_out(collection, item_id)
+    _schedule_slab_refresh(request, background, out)
+    return out
 
 
 @router.delete("/collection/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)

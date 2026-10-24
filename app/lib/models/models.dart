@@ -1940,6 +1940,11 @@ class OwnedEntry {
     required this.quantity,
     this.gradingCompany,
     this.grade,
+    this.condition,
+    this.unitValue,
+    this.valueKind = 'none',
+    this.valueSource,
+    this.valueBasis,
   });
 
   factory OwnedEntry.fromJson(Json json) => OwnedEntry(
@@ -1950,7 +1955,24 @@ class OwnedEntry {
     gradingCompany: json.strOrNull('grading_company'),
     grade: json.strOrNull('grade'),
     quantity: json.integer('quantity'),
+    condition: json.strOrNull('condition'),
+    unitValue: json.strOrNull('unit_value'),
+    valueKind: json.strOrNull('value_kind') ?? 'none',
+    valueSource: json.strOrNull('value_source'),
+    valueBasis: json.strOrNull('value_basis'),
   );
+
+  final String? condition;
+
+  /// Stückwert, mit dem die Position in der Sammlung zählt (`null`: noch kein Preis).
+  final String? unitValue;
+
+  /// manual | external | estimated | none
+  final String valueKind;
+  final String? valueSource;
+  final String? valueBasis;
+
+  bool get isSlab => gradingCompany != null;
 
   final String cardId;
   final String folderId;
@@ -1960,10 +1982,15 @@ class OwnedEntry {
   final String? grade;
   final int quantity;
 
-  /// „Reverse Holo“, „PSA 10“ – `null` bei normaler Rohkarte.
-  String? get version => gradingCompany != null
-      ? '$gradingCompany ${grade ?? ''}'.trim()
-      : (variant == 'reverse' ? 'Reverse Holo' : null);
+  /// „Reverse Holo“, „PSA 10“, „LP“ – `null` bei normaler Rohkarte in Near Mint.
+  String? get version {
+    if (gradingCompany != null) return '$gradingCompany ${grade ?? ''}'.trim();
+    final parts = [
+      if (variant == 'reverse') 'Reverse Holo',
+      if (condition != null && condition != 'NM') condition!,
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
 }
 
 /// Karte in der Set-Analyse (Cardmarket-Preisführer).

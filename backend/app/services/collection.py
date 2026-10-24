@@ -159,6 +159,12 @@ class OwnedEntry:
     grading_company: str | None
     grade: str | None
     quantity: int
+    condition: str | None = None
+    unit_value: Decimal | None = None
+    """Stückwert, mit dem die Position in der Sammlung zählt (``None``: noch kein Preis)."""
+    value_kind: str = "none"
+    value_source: str | None = None
+    value_basis: str | None = None
 
 
 @dataclass(frozen=True)
@@ -614,48 +620,54 @@ class CollectionService:
         return valued[offset : offset + limit], len(valued)
 
     async def owned_cards(self, card_ids: Sequence[uuid.UUID]) -> list[OwnedEntry]:
-        """Wie oft und in welchem Ordner liegen diese Karten (für Suche und Kartenseite)?"""
+        """Wie oft und in welchem Ordner liegen diese Karten – mit dem Stückwert, mit dem sie in
+        der Sammlung zählen (Rohkarte: Zustandspreis, Slab: Preis der Note)."""
         if not card_ids:
             return []
-        rows = await self._session.execute(
-            select(
-                CollectionItem.card_id,
-                Folder.id,
-                Folder.name,
-                CollectionItem.variant,
-                CollectionItem.grading_company,
-                CollectionItem.grade,
-                func.sum(CollectionItem.quantity),
+        items = list(
+            (
+                await self._session.scalars(
+                    select(CollectionItem).where(
+                        CollectionItem.user_id == self._owner.id,
+                        CollectionItem.card_id.in_(list(dict.fromkeys(card_ids))),
+                    )
+                )
             )
-            .join(Folder, Folder.id == CollectionItem.folder_id)
-            .where(
-                CollectionItem.user_id == self._owner.id,
-                CollectionItem.card_id.in_(list(dict.fromkeys(card_ids))),
-            )
-            .group_by(
-                CollectionItem.card_id,
-                Folder.id,
-                Folder.name,
-                Folder.sort_order,
-                CollectionItem.variant,
-                CollectionItem.grading_company,
-                CollectionItem.grade,
-            )
-            .order_by(CollectionItem.card_id, Folder.sort_order, Folder.name)
+            .unique()
+            .all()
         )
-        return [
-            OwnedEntry(
-                card_id=card_id,
-                folder_id=folder_id,
-                folder_name=folder_name,
-                variant=variant,
-                grading_company=company.value if company else None,
-                grade=grade,
-                quantity=int(quantity),
+        prices = await self._prices.prices_for_cards(
+            [i.card_id for i in items if i.card_id is not None], self._owner
+        )
+        grouped: dict[tuple[object, ...], OwnedEntry] = {}
+        for item in sorted(items, key=lambda i: (i.folder.sort_order, i.folder.name)):
+            if item.card_id is None:  # durch den Filter ausgeschlossen; für den Typprüfer
+                continue
+            value = value_item(item, prices)
+            key = (
+                item.card_id,
+                item.folder_id,
+                item.variant,
+                item.condition,
+                item.grading_company,
+                item.grade,
             )
-            for card_id, folder_id, folder_name, variant, company, grade, quantity in rows
-            if card_id is not None  # durch den Filter garantiert; für den Typprüfer
-        ]
+            previous = grouped.get(key)
+            grouped[key] = OwnedEntry(
+                card_id=item.card_id,
+                folder_id=item.folder_id,
+                folder_name=item.folder.name,
+                variant=item.variant,
+                grading_company=item.grading_company.value if item.grading_company else None,
+                grade=item.grade,
+                quantity=item.quantity + (previous.quantity if previous else 0),
+                condition=item.condition,
+                unit_value=value.unit_value,
+                value_kind=value.kind,
+                value_source=value.source,
+                value_basis=value.basis,
+            )
+        return list(grouped.values())
 
     async def price_movers(self, *, days: int = 7, limit: int = 5) -> Movers:
         """Gewinner und Verlierer der eigenen Rohkarten (Cardmarket-Trend) im Zeitraum."""
