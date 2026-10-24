@@ -1504,4 +1504,27 @@ void usabilityTests() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('confetti')), findsNothing);
   });
+
+  testWidgets('Karte als Bild teilen: Vorschau, PNG geht ans Teilen-Menü', (tester) async {
+    final device = FakeDevice();
+    await pumpApp(tester, FakeApi(loggedIn: true), device: device);
+    final topCard = find.text('Nachtara VMAX').first;
+    await tester.ensureVisible(topCard);
+    await tester.pumpAndSettle();
+    await tester.tap(topCard);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('card-share')));
+    await tester.pumpAndSettle();
+    expect(find.text('Wert (Near Mint)'), findsOneWidget);
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key('share-confirm')));
+      for (var i = 0; i < 20 && device.shared.isEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump();
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(device.shared.single.filename, 'kartenkiste-215.png');
+    expect(device.shared.single.bytes, greaterThan(1000)); // echtes PNG
+  });
 }

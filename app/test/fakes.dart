@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:kartenkiste/app.dart';
 import 'package:kartenkiste/core/api.dart';
+import 'package:kartenkiste/core/device/device.dart';
 import 'package:kartenkiste/core/prefs.dart';
 import 'package:kartenkiste/core/providers.dart';
 import 'package:kartenkiste/core/push/push_bridge.dart';
@@ -1014,6 +1015,7 @@ Future<void> pumpApp(
   FakeImageSource? images,
   PushBridge? push,
   PrefsStore? prefs,
+  DeviceBridge? device,
 }) async {
   await initializeDateFormatting('de_DE');
   tester.view.physicalSize = const Size(1170, 2532);
@@ -1026,6 +1028,7 @@ Future<void> pumpApp(
         apiProvider.overrideWithValue(api),
         imageSourceProvider.overrideWithValue(images ?? FakeImageSource()),
         pushBridgeProvider.overrideWithValue(push ?? FakePushBridge()),
+        deviceProvider.overrideWithValue(device ?? FakeDevice()),
         // Standard: Anleitung gesehen, Erste Schritte aus – verdecken sonst die übrigen Tests.
         prefsStoreProvider.overrideWithValue(
           prefs ?? MemoryPrefsStore({'onboarded': 'true', 'first_steps_hidden': 'true'}),
@@ -1035,4 +1038,35 @@ Future<void> pumpApp(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+/// Gerätefunktionen zum Mitschreiben (Teilen, Installieren).
+class FakeDevice implements DeviceBridge {
+  FakeDevice({this.state = InstallState.none});
+
+  InstallState state;
+  final shared = <({String filename, int bytes, String text})>[];
+  int installs = 0;
+
+  @override
+  Future<bool> requestTilt() async => false;
+
+  @override
+  Stream<({double beta, double gamma})> tilt() => const Stream.empty();
+
+  @override
+  Future<ShareOutcome> shareImage(Uint8List png, String filename, String text) async {
+    shared.add((filename: filename, bytes: png.length, text: text));
+    return ShareOutcome.shared;
+  }
+
+  @override
+  InstallState installState() => state;
+
+  @override
+  Future<bool> install() async {
+    installs++;
+    state = InstallState.installed;
+    return true;
+  }
 }

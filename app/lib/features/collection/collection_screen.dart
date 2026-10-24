@@ -16,6 +16,7 @@ import '../../widgets/range_chips.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/value_chart.dart';
 import '../dashboard/dashboard_screen.dart';
+import '../share/share_image.dart';
 import 'item_filter.dart';
 import 'item_sheet.dart';
 
@@ -322,10 +323,17 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       PopupMenuButton<String>(
         key: const Key('collection-more'),
         tooltip: 'Mehr Optionen',
-        onSelected: (action) => action == 'folders'
-            ? _manageFolders(context, folders)
-            : setState(() => _selectMode = true),
+        onSelected: (action) => switch (action) {
+          'folders' => _manageFolders(context, folders),
+          'share' => _share(folders),
+          _ => setState(() => _selectMode = true),
+        },
         itemBuilder: (_) => const [
+          PopupMenuItem(
+            key: Key('collection-share'),
+            value: 'share',
+            child: ListTile(leading: Icon(Icons.ios_share), title: Text('Als Bild teilen')),
+          ),
           PopupMenuItem(
             value: 'folders',
             child: ListTile(leading: Icon(Icons.folder_outlined), title: Text('Ordner verwalten')),
@@ -343,6 +351,29 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       ),
     ],
   );
+
+  /// Sammlung bzw. gewählten Ordner als Bild teilen: Wert und die wertvollsten Karten.
+  Future<void> _share(List<Folder> folders) async {
+    final summary = ref.read(folderSummaryProvider(_filter.folderId)).value;
+    final items = [...?ref.read(itemsProvider(_filter)).value?.items]
+      ..sort(
+        (a, b) =>
+            (parseAmount(b.value.totalValue) ?? 0).compareTo(parseAmount(a.value.totalValue) ?? 0),
+      );
+    if (summary == null || items.isEmpty) return;
+    final folder = folders.where((f) => f.id == _filter.folderId).firstOrNull;
+    await showShareImage(
+      context,
+      content: CollectionShareContent(
+        title: folder?.name ?? 'Meine Sammlung',
+        totalValue: summary.totalValue,
+        items: items,
+        count: summary.items,
+      ),
+      filename: 'kartenkiste-sammlung.png',
+      text: 'Meine Pokémon-Sammlung in der Kartenkiste',
+    );
+  }
 
   PreferredSizeWidget _selectionBar(List<CollectionItem> pageItems, List<Folder> folders) => AppBar(
     leading: IconButton(

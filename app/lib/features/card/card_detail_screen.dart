@@ -20,6 +20,7 @@ import '../../widgets/value_chart.dart';
 import '../cardmarket/cardmarket_edition.dart';
 import '../collection/collection_screen.dart';
 import '../sets/sets_screens.dart';
+import '../share/share_image.dart';
 import 'card_viewer.dart';
 import '../collection/item_sheet.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -184,6 +185,13 @@ class CardDetailScreen extends ConsumerWidget {
         actions: [
           if (card.value case final info?)
             IconButton(
+              key: const Key('card-share'),
+              tooltip: 'Als Bild teilen',
+              onPressed: () => _share(context, ref, info),
+              icon: const Icon(Icons.ios_share),
+            ),
+          if (card.value case final info?)
+            IconButton(
               key: const Key('card-alert'),
               tooltip: 'Preisalarm',
               onPressed: () => showAlertSheet(
@@ -234,6 +242,20 @@ class CardDetailScreen extends ConsumerWidget {
                 ),
               ),
             ),
+    );
+  }
+
+  Future<void> _share(BuildContext context, WidgetRef ref, CardInfo card) {
+    final prices = ref.read(pricesProvider(card.id)).value;
+    final nm = prices?.conditions
+        .where((c) => c.variant == 'normal' && c.condition == 'NM')
+        .firstOrNull;
+    final owned = ref.read(ownedProvider(card.id)).value?[card.id] ?? const <OwnedEntry>[];
+    return showShareImage(
+      context,
+      content: CardShareContent(card: card, price: nm?.value, owned: ownedTotal(owned)),
+      filename: 'kartenkiste-${card.number}.png',
+      text: '${card.displayName} (${card.subtitle}) – aus meiner Kartenkiste',
     );
   }
 
