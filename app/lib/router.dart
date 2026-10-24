@@ -1,12 +1,11 @@
 // Navigation (go_router). Ohne Sitzung führt jeder Weg zur Anmeldung.
-import 'features/alerts/alerts_screen.dart';
-
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'app.dart';
 import 'core/providers.dart';
+import 'features/alerts/alerts_screen.dart';
 import 'features/admin/admin_screens.dart';
 import 'features/auth/auth_screens.dart';
 import 'features/card/card_detail_screen.dart';
@@ -25,6 +24,7 @@ import 'features/scan/scan_screens.dart';
 import 'features/search/search_screen.dart';
 import 'features/shell/home_shell.dart';
 import 'features/wishlist/wishlist_screen.dart';
+import 'widgets/common.dart';
 
 const _publicPaths = {'/login', '/register', '/reset'};
 
@@ -64,7 +64,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (path.startsWith('/admin') && !(session.value?.isAdmin ?? false)) return '/home';
       return null;
     },
+    // Unbekannte Adresse (alter Link, Tippfehler): freundlich zurück statt „Page Not Found“.
+    errorBuilder: (context, state) => Scaffold(
+      appBar: AppBar(title: const Text('Seite nicht gefunden')),
+      body: EmptyView(
+        icon: Icons.explore_off_outlined,
+        message: 'Diese Seite gibt es nicht (mehr).',
+        action: FilledButton.icon(
+          key: const Key('error-home'),
+          onPressed: () => context.go('/home'),
+          icon: const Icon(Icons.home_outlined),
+          label: const Text('Zur Übersicht'),
+        ),
+      ),
+    ),
     routes: [
+      GoRoute(path: '/', redirect: (_, _) => '/home'),
       GoRoute(path: '/splash', builder: (_, _) => const SplashScreen()),
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
       GoRoute(path: '/register', builder: (_, _) => const RegisterScreen()),

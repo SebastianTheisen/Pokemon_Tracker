@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kartenkiste/app.dart';
 import 'package:kartenkiste/core/push/push_bridge.dart';
+import 'package:kartenkiste/router.dart';
 import 'package:kartenkiste/models/json.dart';
 
 import 'fakes.dart';
@@ -1148,5 +1151,23 @@ void usabilityTests() {
     await tester.tap(find.byKey(const Key('push-weekly')));
     await tester.pumpAndSettle();
     expect(api.calls, contains('weekly:false'));
+  });
+
+  testWidgets('Unbekannte Adresse: freundliche Seite mit Weg zurück zur Übersicht', (tester) async {
+    await pumpApp(tester, FakeApi(loggedIn: true));
+    final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
+        .read(routerProvider);
+
+    router.go('/gibt-es-nicht');
+    await tester.pumpAndSettle();
+    expect(find.text('Seite nicht gefunden'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('error-home')));
+    await tester.pumpAndSettle();
+    expect(find.text('Seite nicht gefunden'), findsNothing);
+
+    router.go('/');
+    await tester.pumpAndSettle();
+    expect(router.state.matchedLocation, '/home');
   });
 }

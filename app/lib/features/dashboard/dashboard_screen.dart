@@ -83,21 +83,11 @@ class DashboardScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Hallo ${user?.displayName ?? ''} 👋',
-                      style: Theme.of(context).textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  IconButton.filledTonal(
-                    tooltip: 'Suchen',
-                    onPressed: () => context.go('/search'),
-                    icon: const Icon(Icons.search),
-                  ),
-                ],
+              // Suchen steckt in der unteren Leiste und in den Schnellzugriffen – kein dritter Knopf.
+              Text(
+                'Hallo ${user?.displayName ?? ''} 👋',
+                style: Theme.of(context).textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               AsyncBody(
