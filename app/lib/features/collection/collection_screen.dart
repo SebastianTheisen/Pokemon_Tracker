@@ -695,52 +695,6 @@ class _FolderManager extends ConsumerWidget {
   }
 }
 
-class SetOverviewScreen extends ConsumerWidget {
-  const SetOverviewScreen({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final sets = ref.watch(collectionSetsProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Sets')),
-      body: AsyncBody(
-        value: sets,
-        onRetry: () => ref.invalidate(collectionSetsProvider),
-        builder: (list) => list.isEmpty
-            ? const EmptyView(icon: Icons.layers_outlined, message: 'Noch keine Karten.')
-            : ListView.separated(
-                itemCount: list.length,
-                separatorBuilder: (_, _) => const Divider(),
-                itemBuilder: (context, index) {
-                  final entry = list[index];
-                  final total = entry.cardSet.officialCount;
-                  final progress = total == null || total == 0 ? null : entry.ownedCards / total;
-                  return ListTile(
-                    title: Text(
-                      '${entry.cardSet.displayName} (${languageTag(entry.cardSet.language)})',
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (entry.cardSet.originalName case final original?) Text(original),
-                        Text(
-                          '${entry.ownedCards}${total == null ? '' : ' / $total'} Karten · '
-                          '${money(entry.value)}',
-                        ),
-                        if (progress != null) ...[
-                          const SizedBox(height: 6),
-                          LinearProgressIndicator(value: progress.clamp(0, 1)),
-                        ],
-                      ],
-                    ),
-                  );
-                },
-              ),
-      ),
-    );
-  }
-}
-
 /// Zielordner wählen (Verschieben/Kopieren).
 Future<String?> _pickFolder(BuildContext context, List<Folder> folders, {required String title}) =>
     showModalBottomSheet<String>(

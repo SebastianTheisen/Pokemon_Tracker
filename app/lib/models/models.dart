@@ -1019,6 +1019,9 @@ class SetOverview {
     required this.positions,
     required this.value,
     required this.ownedCards,
+    this.cardsTotal,
+    this.masterTotal,
+    this.masterOwned,
   });
 
   factory SetOverview.fromJson(Json json) => SetOverview(
@@ -1026,12 +1029,93 @@ class SetOverview {
     positions: json.integer('positions'),
     value: json.str('value'),
     ownedCards: json.integer('owned_cards'),
+    cardsTotal: json.intOrNull('cards_total'),
+    masterTotal: json.intOrNull('master_total'),
+    masterOwned: json.intOrNull('master_owned'),
   );
 
   final CardSet cardSet;
   final int positions;
   final String value;
   final int ownedCards;
+
+  /// Karten des Sets im Katalog (inkl. Secret Rares).
+  final int? cardsTotal;
+
+  /// Master-Set: Plätze inkl. Reverse Holo.
+  final int? masterTotal;
+  final int? masterOwned;
+}
+
+/// Eine Karte im Set-Fortschritt: Besitz je Fassung, Merkliste, Preis.
+class CardProgress {
+  const CardProgress({
+    required this.card,
+    required this.ownedNormal,
+    required this.ownedReverse,
+    required this.reverse,
+    required this.onWishlist,
+    this.nmValue,
+    this.reverseValue,
+  });
+
+  factory CardProgress.fromJson(Json json) => CardProgress(
+    card: CardInfo.fromJson(json.obj('card')),
+    ownedNormal: json.integer('owned_normal'),
+    ownedReverse: json.integer('owned_reverse'),
+    reverse: json.flag('reverse'),
+    onWishlist: json.flag('on_wishlist'),
+    nmValue: json.strOrNull('nm_value'),
+    reverseValue: json.strOrNull('reverse_value'),
+  );
+
+  final CardInfo card;
+  final int ownedNormal;
+  final int ownedReverse;
+
+  /// Gibt es die Karte als Reverse Holo (eigener Platz im Master-Set)?
+  final bool reverse;
+  final bool onWishlist;
+  final String? nmValue;
+  final String? reverseValue;
+
+  bool get owned => ownedNormal + ownedReverse > 0;
+
+  /// Im Master-Set komplett (Hauptfassung und ggf. Reverse)?
+  bool get masterComplete => ownedNormal > 0 && (!reverse || ownedReverse > 0);
+}
+
+class SetProgress {
+  const SetProgress({
+    required this.cardSet,
+    required this.cardsTotal,
+    required this.cardsOwned,
+    required this.masterTotal,
+    required this.masterOwned,
+    required this.missingSetValue,
+    required this.missingValue,
+    required this.cards,
+  });
+
+  factory SetProgress.fromJson(Json json) => SetProgress(
+    cardSet: CardSet.fromJson(json.obj('card_set')),
+    cardsTotal: json.integer('cards_total'),
+    cardsOwned: json.integer('cards_owned'),
+    masterTotal: json.integer('master_total'),
+    masterOwned: json.integer('master_owned'),
+    missingSetValue: json.str('missing_set_value'),
+    missingValue: json.str('missing_value'),
+    cards: json.list('cards', CardProgress.fromJson),
+  );
+
+  final CardSet cardSet;
+  final int cardsTotal;
+  final int cardsOwned;
+  final int masterTotal;
+  final int masterOwned;
+  final String missingSetValue;
+  final String missingValue;
+  final List<CardProgress> cards;
 }
 
 class WishlistEntry {

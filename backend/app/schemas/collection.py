@@ -27,6 +27,7 @@ from app.services.collection import (
     ValuedItem,
 )
 from app.services.movers import Mover, Movers
+from app.services.set_progress import SetCounts, SetProgress
 from app.services.valuation import ItemValue
 
 Money = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)]
@@ -336,14 +337,65 @@ class SetOverviewOut(BaseModel):
     positions: int
     value: Decimal
     owned_cards: int
+    cards_total: int | None = Field(default=None, description="Karten des Sets im Katalog")
+    master_total: int | None = Field(default=None, description="Plätze inkl. Reverse Holo")
+    master_owned: int | None = None
 
     @classmethod
-    def build(cls, overview: SetOverview) -> SetOverviewOut:
+    def build(cls, overview: SetOverview, counts: SetCounts | None = None) -> SetOverviewOut:
         return cls(
             card_set=SetOut.model_validate(overview.card_set),
             positions=overview.positions,
             value=overview.value,
             owned_cards=overview.owned_cards,
+            cards_total=counts.cards_total if counts else None,
+            master_total=counts.master_total if counts else None,
+            master_owned=counts.master_owned if counts else None,
+        )
+
+
+class CardProgressOut(BaseModel):
+    card: CardOut
+    owned_normal: int
+    owned_reverse: int
+    reverse: bool = Field(description="Gibt es die Karte als Reverse Holo?")
+    on_wishlist: bool
+    nm_value: Decimal | None
+    reverse_value: Decimal | None
+
+
+class SetProgressOut(BaseModel):
+    card_set: SetOut
+    cards_total: int
+    cards_owned: int
+    master_total: int
+    master_owned: int
+    missing_set_value: Decimal = Field(description="Fehlende Karten (eine Fassung), NM-Preise")
+    missing_value: Decimal = Field(description="Fehlende Master-Plätze, NM-Preise")
+    cards: list[CardProgressOut]
+
+    @classmethod
+    def build(cls, progress: SetProgress) -> SetProgressOut:
+        return cls(
+            card_set=SetOut.model_validate(progress.card_set),
+            cards_total=progress.cards_total,
+            cards_owned=progress.cards_owned,
+            master_total=progress.master_total,
+            master_owned=progress.master_owned,
+            missing_set_value=progress.missing_set_value,
+            missing_value=progress.missing_value,
+            cards=[
+                CardProgressOut(
+                    card=CardOut.model_validate(c.card),
+                    owned_normal=c.owned_normal,
+                    owned_reverse=c.owned_reverse,
+                    reverse=c.reverse,
+                    on_wishlist=c.on_wishlist,
+                    nm_value=c.nm_value,
+                    reverse_value=c.reverse_value,
+                )
+                for c in progress.cards
+            ],
         )
 
 
@@ -383,6 +435,10 @@ class CollectionHistoryOut(BaseModel):
 class WishlistAdd(BaseModel):
     card_id: uuid.UUID | None = None
     product_id: uuid.UUID | None = None
+
+
+class WishlistBulkAdd(BaseModel):
+    card_ids: Annotated[list[uuid.UUID], Field(min_length=1, max_length=500)]
 
 
 class WishlistEntryOut(BaseModel):

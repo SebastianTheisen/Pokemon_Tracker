@@ -11,6 +11,7 @@ void main() {
   selectionTests();
   filterTests();
   alertTests();
+  setTests();
   variantTests();
   psaTests();
 
@@ -709,5 +710,54 @@ void alertTests() {
     await tester.pumpAndSettle();
     expect(find.textContaining('noch nicht eingerichtet'), findsOneWidget);
     expect(find.byKey(const Key('push-enable')), findsNothing);
+  });
+}
+
+void setTests() {
+  Future<void> openSet(WidgetTester tester) async {
+    await tester.tap(find.text('Sammlung').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Sets'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2 / 4 Karten · 50 % · Master 3 / 7'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('set-s1')));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('Set-Seite: Set und Master, Fehlt-Filter, Master zählt Reverse', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await openSet(tester);
+
+    expect(api.calls, contains('setProgress:s1'));
+    expect(find.text('2 / 4 · 50 %'), findsOneWidget);
+    expect(find.text('3 / 7 · 43 %'), findsOneWidget);
+    expect(find.textContaining('Fehlende Karten ≈ 5,00'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('show-missing')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('set-card-k3')), findsOneWidget);
+    expect(find.byKey(const Key('set-card-k4')), findsOneWidget);
+    expect(find.byKey(const Key('set-card-k2')), findsNothing); // Set: Karte 2 vorhanden
+
+    await tester.tap(find.byKey(const Key('master-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('set-card-k2')), findsOneWidget); // Reverse fehlt
+    expect(find.byKey(const Key('set-card-k1')), findsNothing); // beides vorhanden
+    expect(find.textContaining('Fehlende Karten ≈ 7,50'), findsOneWidget);
+  });
+
+  testWidgets('Set-Seite: fehlende (noch nicht gemerkte) auf die Merkliste', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await openSet(tester);
+
+    await tester.tap(find.byKey(const Key('wish-missing')));
+    await tester.pumpAndSettle();
+    expect(find.text('1 Karten auf die Merkliste?'), findsOneWidget); // k3 ist schon gemerkt
+    await tester.tap(find.byKey(const Key('wish-missing-confirm')));
+    await tester.pumpAndSettle();
+    expect(api.lastWishedIds, ['k4']);
+    expect(find.text('1 Karten auf die Merkliste gesetzt.'), findsOneWidget);
   });
 }

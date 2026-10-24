@@ -29,12 +29,15 @@ from app.schemas.collection import (
     MoversOut,
     ProductOut,
     SetOverviewOut,
+    SetProgressOut,
     SummaryOut,
     WishlistAdd,
+    WishlistBulkAdd,
     WishlistEntryOut,
 )
 from app.services.collection import CollectionService, ItemFilter, ItemInput, SortKey
 from app.services.errors import InvalidInputError
+from app.services.set_progress import SetProgressService
 from app.services.valuation import ItemKind
 
 router = APIRouter(tags=["collection"])
@@ -182,9 +185,27 @@ async def folder_summaries(collection: Collection) -> list[FolderSummaryOut]:
     return [FolderSummaryOut.build(f) for f in await collection.folder_summaries()]
 
 
+def get_set_progress(
+    session: SessionDep, user: CurrentUser, prices: PriceServiceDep
+) -> SetProgressService:
+    return SetProgressService(session, user, prices)
+
+
+SetProgressDep = Annotated[SetProgressService, Depends(get_set_progress)]
+
+
 @router.get("/collection/sets")
-async def sets_overview(collection: Collection) -> list[SetOverviewOut]:
-    return [SetOverviewOut.build(o) for o in await collection.sets_overview()]
+async def sets_overview(collection: Collection, progress: SetProgressDep) -> list[SetOverviewOut]:
+    """Sets der Sammlung mit Fortschritt (Set und Master-Set inkl. Reverse Holo)."""
+    overview = await collection.sets_overview()
+    counts = await progress.counts([o.card_set.id for o in overview])
+    return [SetOverviewOut.build(o, counts.get(o.card_set.id)) for o in overview]
+
+
+@router.get("/collection/sets/{set_id}")
+async def set_progress(set_id: uuid.UUID, progress: SetProgressDep) -> SetProgressOut:
+    """Alle Karten eines Sets mit Besitz je Fassung, Merkliste und NM-Preis."""
+    return SetProgressOut.build(await progress.progress(set_id))
 
 
 @router.get("/collection/history")
@@ -245,6 +266,12 @@ async def wishlist(collection: Collection) -> list[WishlistEntryOut]:
 async def add_to_wishlist(body: WishlistAdd, collection: Collection) -> dict[str, uuid.UUID]:
     entry = await collection.add_to_wishlist(card_id=body.card_id, product_id=body.product_id)
     return {"id": entry.id}
+
+
+@router.post("/wishlist/bulk")
+async def add_many_to_wishlist(body: WishlistBulkAdd, progress: SetProgressDep) -> ItemsBulkResult:
+    """Mehrere Karten auf die Merkliste (z. B. alle fehlenden eines Sets); zählt nur neue."""
+    return ItemsBulkResult(count=await progress.add_to_wishlist(body.card_ids))
 
 
 @router.delete("/wishlist/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)

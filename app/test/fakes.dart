@@ -507,6 +507,79 @@ class FakeApi extends Api {
 
   Map<String, Object?>? lastItemChanges;
 
+  // ------------------------------------------------------------------ Sets
+
+  static Json setJson() => {
+    'id': 's1',
+    'external_id': 'swsh7',
+    'language': 'de',
+    'name': 'Drachenwandel',
+    'series_name': 'Schwert & Schild',
+    'release_date': '2021-08-27',
+    'card_count_official': 203,
+    'card_count_total': 237,
+    'logo_url': null,
+    'symbol_url': null,
+  };
+
+  static Json progressCard(
+    String id,
+    String number, {
+    int normal = 0,
+    int reverse = 0,
+    bool hasReverse = true,
+    bool wished = false,
+  }) => {
+    'card': cardJson(id: id, number: number, name: 'Karte $number'),
+    'owned_normal': normal,
+    'owned_reverse': reverse,
+    'reverse': hasReverse,
+    'on_wishlist': wished,
+    'nm_value': '2.50',
+    'reverse_value': null,
+  };
+
+  List<String>? lastWishedIds;
+
+  @override
+  Future<List<SetOverview>> collectionSets() async => [
+    SetOverview.fromJson({
+      'card_set': setJson(),
+      'positions': 3,
+      'value': '1810.90',
+      'owned_cards': 2,
+      'cards_total': 4,
+      'master_total': 7,
+      'master_owned': 3,
+    }),
+  ];
+
+  @override
+  Future<SetProgress> setProgress(String setId) async {
+    calls.add('setProgress:$setId');
+    return SetProgress.fromJson({
+      'card_set': setJson(),
+      'cards_total': 4,
+      'cards_owned': 2,
+      'master_total': 7,
+      'master_owned': 3,
+      'missing_set_value': '5.00',
+      'missing_value': '7.50',
+      'cards': [
+        progressCard('k1', '1', normal: 1, reverse: 1),
+        progressCard('k2', '2', normal: 2),
+        progressCard('k3', '3', wished: true),
+        progressCard('k4', '4', hasReverse: false),
+      ],
+    });
+  }
+
+  @override
+  Future<int> addManyToWishlist(List<String> cardIds) async {
+    lastWishedIds = cardIds;
+    return cardIds.length;
+  }
+
   // ---------------------------------------------------------- Preisalarme
 
   List<Json> alertsJson = [];

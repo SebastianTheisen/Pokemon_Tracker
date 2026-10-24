@@ -505,6 +505,16 @@ class Api {
   Future<List<SetOverview>> collectionSets() async =>
       parseList(await _getList('/collection/sets'), SetOverview.fromJson);
 
+  /// Alle Karten eines Sets mit Besitz je Fassung (Set- und Master-Fortschritt).
+  Future<SetProgress> setProgress(String setId) async =>
+      SetProgress.fromJson(await _get('/collection/sets/$setId'));
+
+  /// Mehrere Karten auf die Merkliste → Anzahl neu gemerkter.
+  Future<int> addManyToWishlist(List<String> cardIds) async =>
+      (((await _send('POST', '/wishlist/bulk', body: {'card_ids': cardIds}))! as Json)['count']
+              as num)
+          .toInt();
+
   Future<String> exportCsv() async => _call(() async {
     final response = await _dio.get<String>(
       '/collection/export.csv',

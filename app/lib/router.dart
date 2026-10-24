@@ -13,6 +13,7 @@ import 'features/card/card_detail_screen.dart';
 import 'features/cardmarket/cardmarket_import.dart';
 import 'features/cardmarket/ebay_import.dart';
 import 'features/collection/collection_screen.dart';
+import 'features/sets/sets_screens.dart';
 import 'features/collection/sealed_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/more/more_screen.dart';
@@ -110,6 +111,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/settings/bookmarklet', builder: (_, _) => const BookmarkletSetupScreen()),
       GoRoute(path: '/sets', builder: (_, _) => const SetOverviewScreen()),
+      GoRoute(
+        path: '/sets/:id',
+        builder: (_, state) => SetDetailScreen(setId: state.pathParameters['id']!),
+      ),
       GoRoute(path: '/alerts', builder: (_, _) => const AlertsScreen()),
       GoRoute(path: '/sealed/add', builder: (_, _) => const SealedAddScreen()),
       GoRoute(path: '/admin/users', builder: (_, _) => const AdminUsersScreen()),

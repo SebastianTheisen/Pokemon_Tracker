@@ -268,9 +268,18 @@ class _CardBodyState extends ConsumerState<_CardBody> {
                       if (card.originalName != null)
                         Text(card.originalName!, style: const TextStyle(fontSize: 16)),
                       const SizedBox(height: 4),
-                      Text(
-                        [card.cardSet.displayName, ?card.cardSet.originalName].join(' · '),
-                        style: const TextStyle(color: AppColors.textMuted),
+                      // Antippen → Set-Seite (Fortschritt, fehlende Karten)
+                      InkWell(
+                        key: const Key('card-set-link'),
+                        onTap: () => context.push('/sets/${card.cardSet.id}'),
+                        child: Text(
+                          '${[card.cardSet.displayName, ?card.cardSet.originalName].join(' · ')} ›',
+                          style: const TextStyle(
+                            color: AppColors.primary,
+                            decoration: TextDecoration.underline,
+                            decorationColor: AppColors.primary,
+                          ),
+                        ),
                       ),
                       Text(
                         'Nr. ${card.number}',

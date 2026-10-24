@@ -59,6 +59,9 @@ Danach startet Kartenkiste wie eine normale App, auch die Kamera funktioniert.
 * **Versiegeltes** (Booster, Displays, Top-Trainer-Boxen): unter **Sammlung → „Versiegelt“**,
   Suche auch auf Deutsch („Top-Trainer-Box Prismatische Entwicklungen“).
 * **Merkliste:** Herz-Symbol auf einer Karte.
+* **Sets vervollständigen:** Auf einer Karte den Set-Namen antippen (oder Sammlung → Sets).
+  Dort siehst du alle Karten des Sets, was fehlt und was es kostet. Schalter **„Master“**: dann
+  zählt auch jede Reverse-Holo-Fassung. „Fehlende auf die Merkliste“ merkt alle auf einmal.
 * **Preisalarme:** Auf einer Karte oben die Glocke antippen (bei Versiegeltem: in der Sammlung
   antippen → „Preisalarm“), „Fällt auf“ oder „Steigt auf“ und einen Zielpreis wählen. Damit die
   Nachricht aufs Handy kommt: **Mehr → Preisalarme → „Einschalten“** und Mitteilungen erlauben
