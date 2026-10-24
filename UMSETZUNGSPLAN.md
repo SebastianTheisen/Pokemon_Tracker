@@ -309,9 +309,10 @@ Ausgangslage (23.10.2026): Compose läuft, API nur auf `127.0.0.1:8000`, erreich
 - [x] Überwachung (Entscheidung: ntfy-Push): Dienst `monitor` (`app/monitor.py`) – API, Worker-Lebenszeichen, Preisrunde, Cardmarket-Import, Sicherung, Speicherplatz; Meldung bei Störung, Erinnerung nach 24 h, Entwarnung
 - [x] Abhängigkeiten: `pip-audit` → certifi-Lücke (PYSEC-2026-4320) behoben, sonst keine
 - [x] Sicherheits-Header (nosniff, kein Einbetten, kein Referrer, Kamera nur für die App, HSTS)
-- [ ] VPS: Sicherheits-Check `deploy/phase6_security.sh` (Ports, Firewall, Container-Nutzer, .env, ohne Anmeldung 401)
-- [ ] VPS: Lasttest `deploy/phase6_loadtest.sh` (Health 20 parallel, Suche 10 parallel, Sammlungswert 2.000 Karten)
-- [ ] Android: APK bauen (`deploy/phase5_app.sh --apk`) und auf einem Gerät abnehmen
+- [x] VPS 24.10. Sicherheits-Check: Kartenkiste nur über 127.0.0.1 + Tailscale erreichbar, Container ohne Root, .env 600, Header ✅, ohne Anmeldung 401. Weitere offene Ports gehören zu anderen Apps auf dem VPS (nicht angefasst)
+- [x] VPS 24.10. Lasttest: Sammlungswert 2.000 Karten 0,3 s ✅; Suche 10 parallel Median 1,4 s / max 3,8 s ❌ → Suche fasst alle Schreibweisen in einer Abfrage zusammen (statt bis zu 10)
+- [ ] VPS: Lasttest wiederholen (Ziel Suche Median < 0,5 s)
+- [x] Android-APK: vorerst nicht nötig (Entscheidung 24.10.; PWA reicht, APK-Build bleibt verfügbar)
 - [x] Anleitung für Freunde: [`docs/ANLEITUNG_FREUNDE.md`](docs/ANLEITUNG_FREUNDE.md)
 
 ### Änderungsprotokoll

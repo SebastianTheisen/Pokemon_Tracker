@@ -97,12 +97,13 @@ async def search_cards(
         return [SearchHit(card=card, score=1.0) for card in rows.unique()]
 
     # Deutsch/Englisch → auch asiatische Pokémon-Namen suchen („pikachu“ findet „ピカチュウ“).
+    # Alle Schreibweisen in einer Abfrage (früher je Schreibweise zwei – unter Last zu langsam).
+    terms = list(dict.fromkeys([parsed.name.casefold(), *foreign_search_terms(parsed.name)]))
     hits: dict[uuid.UUID, SearchHit] = {}
-    for term in [parsed.name.casefold(), *foreign_search_terms(parsed.name)]:
-        for hit in await _hits_for_term(session, term, filters, result_language_filter, limit):
-            known = hits.get(hit.card.id)
-            if known is None or known.score < hit.score:
-                hits[hit.card.id] = hit
+    for hit in await _hits_for_terms(session, terms, filters, result_language_filter, limit):
+        known = hits.get(hit.card.id)
+        if known is None or known.score < hit.score:
+            hits[hit.card.id] = hit
     ordered = list(hits.values())
     ordered.sort(
         key=lambda hit: (
@@ -187,19 +188,22 @@ async def _search_set_code(
     return []
 
 
-async def _hits_for_term(
+async def _hits_for_terms(
     session: AsyncSession,
-    term: str,
+    terms: Sequence[str],
     filters: list[ColumnElement[bool]],
     result_language_filter: list[ColumnElement[bool]],
     limit: int,
 ) -> list[SearchHit]:
-    score = _name_score(term)
+    """Treffer für mehrere Schreibweisen (Name + Übersetzungen); Score = beste Schreibweise."""
+    scores = [_name_score(term) for term in terms]
+    score = scores[0] if len(scores) == 1 else func.greatest(*scores)
+    name_matches = or_(*(_name_condition(term) for term in terms))
 
     # 1) Beste Ähnlichkeit je TCGdex-ID (über alle Sprachen).
     matched = (
         select(Card.external_id.label("external_id"), func.max(score).label("score"))
-        .where(_name_condition(term), Card.external_id.is_not(None), *filters)
+        .where(name_matches, Card.external_id.is_not(None), *filters)
         .group_by(Card.external_id)
         .order_by(func.max(score).desc())
         .limit(limit)
@@ -217,7 +221,7 @@ async def _hits_for_term(
         select(Card, score)
         .where(
             Card.external_id.is_(None),
-            _name_condition(term),
+            name_matches,
             *filters,
             *result_language_filter,
         )
