@@ -13,6 +13,7 @@ void main() {
   alertTests();
   setTests();
   friendTests();
+  ownedTests();
   variantTests();
   psaTests();
 
@@ -117,6 +118,7 @@ void main() {
     expect(api.calls, containsAllInOrder(['confirm:scan1:c1', 'addItem']));
     expect(api.lastItemBody, {
       'card_id': 'c1',
+      'folder_id': 'f1', // einziger Ordner
       'quantity': 1,
       'grading_company': 'PSA',
       'grade': '10',
@@ -835,5 +837,66 @@ void friendTests() {
     await tester.pumpAndSettle();
     expect(api.calls, contains('evaluate:give:i1:1'));
     expect(find.text('−30,00\u00a0€ für den anderen'), findsOneWidget);
+  });
+}
+
+void ownedTests() {
+  Json owned(String folderId, String folderName, int quantity, {String variant = 'normal'}) => {
+    'card_id': 'c1',
+    'folder_id': folderId,
+    'folder_name': folderName,
+    'variant': variant,
+    'grading_company': null,
+    'grade': null,
+    'quantity': quantity,
+  };
+
+  testWidgets('Suche und Kartenseite zeigen „schon in deiner Sammlung“ mit Ordnern', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true)
+      ..ownedJson = [owned('f1', 'Sammlung', 2), owned('f2', 'Binder', 1, variant: 'reverse')];
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('tab-Suche')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('search-field')), 'nachtara');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.text('✓ In deiner Sammlung: 3× · Sammlung, Binder'), findsOneWidget);
+
+    await tester.tap(find.text('Nachtara VMAX').first);
+    await tester.pumpAndSettle();
+    expect(find.text('✓ In deiner Sammlung: 3×'), findsOneWidget);
+    expect(find.text('Binder · Reverse Holo'), findsOneWidget);
+  });
+
+  testWidgets('Scan: Ordner wählen, Wahl gilt auch für das nächste Hinzufügen', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..foldersJson = [
+        {'id': 'f1', 'name': 'Sammlung', 'sort_order': 0, 'created_at': '2026-10-17T00:00:00Z'},
+        {'id': 'f2', 'name': 'Binder', 'sort_order': 1, 'created_at': '2026-10-17T00:00:00Z'},
+      ];
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('scan-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scan-camera')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ordner: Sammlung ▾'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('folder-picker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('folder-option-f2')).last);
+    await tester.pumpAndSettle();
+    expect(find.text('Ordner: Binder ▾'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('scan-add')));
+    await tester.pumpAndSettle();
+    expect(api.lastItemBody?['folder_id'], 'f2');
+
+    await tester.tap(find.byKey(const Key('scan-next')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scan-camera')));
+    await tester.pumpAndSettle();
+    expect(find.text('Ordner: Binder ▾'), findsOneWidget); // gemerkt
   });
 }

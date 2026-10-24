@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
+from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, PriceServiceDep, SessionDep
 from app.core.config import CatalogLanguage
@@ -120,6 +121,25 @@ async def list_items(
     )
     items, total = await collection.list_items(item_filter, sort=sort, limit=limit, offset=offset)
     return ItemPage(items=[ItemOut.build(i) for i in items], total=total)
+
+
+class OwnedOut(BaseModel):
+    card_id: uuid.UUID
+    folder_id: uuid.UUID
+    folder_name: str
+    variant: str
+    grading_company: str | None
+    grade: str | None
+    quantity: int
+
+
+@router.get("/collection/owned")
+async def owned_cards(
+    collection: Collection,
+    card_id: Annotated[list[uuid.UUID], Query(max_length=100)],
+) -> list[OwnedOut]:
+    """Bestand je Karte, Ordner und Fassung – „schon in deiner Sammlung“ in Suche und Karte."""
+    return [OwnedOut(**entry.__dict__) for entry in await collection.owned_cards(card_id)]
 
 
 @router.post("/collection/items", status_code=status.HTTP_201_CREATED)

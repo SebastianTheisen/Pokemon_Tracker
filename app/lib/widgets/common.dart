@@ -159,11 +159,14 @@ class Tag extends StatelessWidget {
 
 /// Kartenzeile für Listen (Suche, Merkliste, Scan-Alternativen).
 class CardTile extends StatelessWidget {
-  const CardTile({required this.card, this.trailing, this.onTap, super.key});
+  const CardTile({required this.card, this.trailing, this.onTap, this.below, super.key});
 
   final CardInfo card;
   final Widget? trailing;
   final VoidCallback? onTap;
+
+  /// Zusatzzeile unter Set und Nummer (z. B. „✓ 2× in deiner Sammlung“).
+  final Widget? below;
 
   @override
   Widget build(BuildContext context) => ListTile(
@@ -176,11 +179,18 @@ class CardTile extends StatelessWidget {
         Tag(languageTag(card.language)),
       ],
     ),
-    subtitle: Text(
-      [?card.originalName, card.subtitle].join(' · '),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: const TextStyle(color: AppColors.textMuted),
+    subtitle: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          [?card.originalName, card.subtitle].join(' · '),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: AppColors.textMuted),
+        ),
+        ?below,
+      ],
     ),
     trailing: trailing,
   );

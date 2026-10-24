@@ -80,7 +80,9 @@ class Api {
     _dio.options
       ..baseUrl = '$baseUrl/api/v1'
       ..connectTimeout = const Duration(seconds: 15)
-      ..receiveTimeout = const Duration(seconds: 60);
+      ..receiveTimeout = const Duration(seconds: 60)
+      // Listen als wiederholte Parameter (card_id=a&card_id=b), wie FastAPI sie erwartet.
+      ..listFormat = ListFormat.multi;
     _dio.interceptors.add(
       InterceptorsWrapper(onRequest: _attachToken, onError: _refreshOnUnauthorized),
     );
@@ -532,6 +534,14 @@ class Api {
       );
 
   Future<void> deleteItem(String id) => _send('DELETE', '/collection/items/$id');
+
+  /// Bestand dieser Karten je Ordner und Fassung (höchstens 100 Karten je Abfrage).
+  Future<List<OwnedEntry>> owned(List<String> cardIds) async => cardIds.isEmpty
+      ? const []
+      : parseList(
+          await _getList('/collection/owned', query: {'card_id': cardIds.take(100).toList()}),
+          OwnedEntry.fromJson,
+        );
 
   /// Mehrfachauswahl: `move` / `copy` (mit [folderId]) oder `delete`. Gibt die Anzahl zurück.
   Future<int> bulkItems(List<String> ids, String action, {String? folderId}) async {

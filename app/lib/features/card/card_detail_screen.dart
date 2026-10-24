@@ -1,6 +1,7 @@
 // Karten-Detail: Bild, Zustandspreise (mit Beleg oder als Schätzung markiert),
 // Quellen mit Datum und Link, Preisverlauf, eBay, Sammlung/Merkliste.
 import '../alerts/alerts_screen.dart';
+import '../collection/owned.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -317,6 +318,10 @@ class _CardBodyState extends ConsumerState<_CardBody> {
                 ),
               ],
             ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: OwnedPanel(cardId: card.id),
           ),
           CardmarketEditionTile(
             cardId: card.id,

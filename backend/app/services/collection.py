@@ -149,6 +149,19 @@ class CollectionSummary:
 
 
 @dataclass(frozen=True)
+class OwnedEntry:
+    """Bestand einer Karte je Ordner und Fassung (Rohkarte bzw. Slab)."""
+
+    card_id: uuid.UUID
+    folder_id: uuid.UUID
+    folder_name: str
+    variant: str
+    grading_company: str | None
+    grade: str | None
+    quantity: int
+
+
+@dataclass(frozen=True)
 class FolderSummary:
     folder: Folder
     summary: CollectionSummary
@@ -599,6 +612,50 @@ class CollectionService:
         key, reverse = sorters[sort]
         valued.sort(key=key, reverse=reverse)
         return valued[offset : offset + limit], len(valued)
+
+    async def owned_cards(self, card_ids: Sequence[uuid.UUID]) -> list[OwnedEntry]:
+        """Wie oft und in welchem Ordner liegen diese Karten (für Suche und Kartenseite)?"""
+        if not card_ids:
+            return []
+        rows = await self._session.execute(
+            select(
+                CollectionItem.card_id,
+                Folder.id,
+                Folder.name,
+                CollectionItem.variant,
+                CollectionItem.grading_company,
+                CollectionItem.grade,
+                func.sum(CollectionItem.quantity),
+            )
+            .join(Folder, Folder.id == CollectionItem.folder_id)
+            .where(
+                CollectionItem.user_id == self._owner.id,
+                CollectionItem.card_id.in_(list(dict.fromkeys(card_ids))),
+            )
+            .group_by(
+                CollectionItem.card_id,
+                Folder.id,
+                Folder.name,
+                Folder.sort_order,
+                CollectionItem.variant,
+                CollectionItem.grading_company,
+                CollectionItem.grade,
+            )
+            .order_by(CollectionItem.card_id, Folder.sort_order, Folder.name)
+        )
+        return [
+            OwnedEntry(
+                card_id=card_id,
+                folder_id=folder_id,
+                folder_name=folder_name,
+                variant=variant,
+                grading_company=company.value if company else None,
+                grade=grade,
+                quantity=int(quantity),
+            )
+            for card_id, folder_id, folder_name, variant, company, grade, quantity in rows
+            if card_id is not None  # durch den Filter garantiert; für den Typprüfer
+        ]
 
     async def price_movers(self, *, days: int = 7, limit: int = 5) -> Movers:
         """Gewinner und Verlierer der eigenen Rohkarten (Cardmarket-Trend) im Zeitraum."""

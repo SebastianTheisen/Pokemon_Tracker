@@ -346,7 +346,12 @@ void sealedTests() {
     await tester.pumpAndSettle();
 
     expect(api.calls, containsAllInOrder(['productFromCardmarket:700001:de', 'addItem']));
-    expect(api.lastItemBody, {'product_id': 'p1', 'quantity': 2, 'purchase_price': '54.90'});
+    expect(api.lastItemBody, {
+      'product_id': 'p1',
+      'folder_id': 'f1',
+      'quantity': 2,
+      'purchase_price': '54.90',
+    });
     expect(find.textContaining('Hinzugefügt: 2× Prismatic'), findsOneWidget);
   });
 

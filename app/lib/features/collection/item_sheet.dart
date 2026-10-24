@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
+import 'owned.dart';
 
 final foldersProvider = FutureProvider.autoDispose<List<Folder>>(
   (ref) => ref.watch(apiProvider).folders(),
@@ -103,7 +104,13 @@ class _ItemFormState extends ConsumerState<ItemForm> {
   String get _gradeValue => _blackLabel && _grade == '10' ? '10 BL' : _grade;
 
   Map<String, Object?> _body() => {
-    'folder_id': ?_folderId,
+    // Neue Position: zuletzt gewählter Ordner (app-weit), sonst der erste.
+    'folder_id':
+        ?(_folderId ??
+        effectiveFolderId(
+          ref.read(folderChoiceProvider),
+          ref.read(foldersProvider).value ?? const <Folder>[],
+        )),
     if (!_isSealed) 'variant': _variant,
     if (!_isSealed && !_graded) 'condition': _condition,
     'quantity': _quantity,
@@ -233,6 +240,18 @@ class _ItemFormState extends ConsumerState<ItemForm> {
                 ),
               ],
             ),
+            // Ordner sichtbar statt unter „Weitere Angaben“ (nur bei mehreren Ordnern).
+            if (folders.length > 1)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: FolderPicker(
+                    value: _folderId,
+                    onChanged: (id) => setState(() => _folderId = id),
+                  ),
+                ),
+              ),
             Theme(
               data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
               child: ExpansionTile(
@@ -343,20 +362,6 @@ class _ItemFormState extends ConsumerState<ItemForm> {
           ),
         ),
       const SizedBox(height: 12),
-      if (folders.length > 1)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: DropdownButtonFormField<String>(
-            isExpanded: true,
-            initialValue: _folderId ?? folders.first.id,
-            decoration: const InputDecoration(labelText: 'Ordner'),
-            items: [
-              for (final folder in folders)
-                DropdownMenuItem(value: folder.id, child: Text(folder.name)),
-            ],
-            onChanged: (value) => setState(() => _folderId = value),
-          ),
-        ),
       TextField(
         controller: _note,
         maxLength: 500,

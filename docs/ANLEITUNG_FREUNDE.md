@@ -59,6 +59,9 @@ Danach startet Kartenkiste wie eine normale App, auch die Kamera funktioniert.
 * **Versiegeltes** (Booster, Displays, Top-Trainer-Boxen): unter **Sammlung → „Versiegelt“**,
   Suche auch auf Deutsch („Top-Trainer-Box Prismatische Entwicklungen“).
 * **Merkliste:** Herz-Symbol auf einer Karte.
+* **Schon da?** In der Suche, auf der Kartenseite und nach dem Scan steht grün, wie oft du die
+  Karte schon hast und in welchem Ordner. Den **Ordner fürs Hinzufügen** wählst du über
+  „Ordner: … ▾“ – die App merkt sich die Wahl, bis du sie schließt.
 * **Mit Freunden teilen (freiwillig):** Sammlung → Ordner-Symbol → Personen-Symbol bei einem
   Ordner. Dann sehen die anderen unter **Mehr → Freunde** diese Karten mit Zustand und Wert –
   **nie** Kaufpreise, Notizen oder Gewinn. Nochmal antippen = wieder privat.

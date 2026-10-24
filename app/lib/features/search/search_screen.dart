@@ -11,6 +11,7 @@ import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
 import '../collection/item_sheet.dart';
+import '../collection/owned.dart';
 import '../dashboard/dashboard_screen.dart';
 
 typedef SearchQuery = ({String text, String? language});
@@ -113,17 +114,32 @@ class _CardSearchState extends ConsumerState<CardSearch> {
                             label: const Text('Fehlende Karte anlegen'),
                           ),
                         )
-                      : ListView.separated(
-                          itemCount: hits.length,
-                          separatorBuilder: (_, _) => const Divider(indent: 72),
-                          itemBuilder: (context, index) {
-                            final card = hits[index].card;
-                            return CardTile(
-                              card: card,
-                              onTap: () => widget.onSelect != null
-                                  ? widget.onSelect!(card)
-                                  : context.push('/card/${card.id}'),
-                              trailing: widget.onSelect == null ? QuickAddButton(card: card) : null,
+                      : Consumer(
+                          builder: (context, ref, _) {
+                            final owned =
+                                ref
+                                    .watch(ownedProvider(ownedKey(hits.map((h) => h.card.id))))
+                                    .value ??
+                                const <String, List<OwnedEntry>>{};
+                            return ListView.separated(
+                              itemCount: hits.length,
+                              separatorBuilder: (_, _) => const Divider(indent: 72),
+                              itemBuilder: (context, index) {
+                                final card = hits[index].card;
+                                return CardTile(
+                                  below: switch (owned[card.id]) {
+                                    final entries? => OwnedLine(entries: entries),
+                                    null => null,
+                                  },
+                                  card: card,
+                                  onTap: () => widget.onSelect != null
+                                      ? widget.onSelect!(card)
+                                      : context.push('/card/${card.id}'),
+                                  trailing: widget.onSelect == null
+                                      ? QuickAddButton(card: card)
+                                      : null,
+                                );
+                              },
                             );
                           },
                         ),
@@ -263,6 +279,11 @@ class QuickAddButton extends ConsumerWidget {
 
   Future<void> _add(BuildContext context, WidgetRef ref, {String variant = 'normal'}) async {
     final api = ref.read(apiProvider);
+    final folders = ref.read(foldersProvider).value ?? const <Folder>[];
+    final folderId = effectiveFolderId(ref.read(folderChoiceProvider), folders);
+    final folderName = folders.length > 1
+        ? folders.firstWhere((folder) => folder.id == folderId).name
+        : null;
     CollectionItem? item;
     final ok = await runAction(context, () async {
       item = await api.addItem({
@@ -270,6 +291,7 @@ class QuickAddButton extends ConsumerWidget {
         'quantity': 1,
         'condition': 'NM',
         if (variant != 'normal') 'variant': variant,
+        'folder_id': ?folderId,
       });
     });
     if (!ok || !context.mounted) return;
@@ -280,7 +302,8 @@ class QuickAddButton extends ConsumerWidget {
       ..showSnackBar(
         SnackBar(
           content: Text(
-            '${card.displayName}${variant == 'reverse' ? ' (Reverse Holo)' : ''} hinzugefügt',
+            '${card.displayName}${variant == 'reverse' ? ' (Reverse Holo)' : ''} hinzugefügt'
+            '${folderName == null ? '' : ' → $folderName'}',
           ),
           action: SnackBarAction(
             label: 'Rückgängig',

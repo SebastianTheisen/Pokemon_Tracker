@@ -15,6 +15,7 @@ import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
 import '../collection/item_sheet.dart';
+import '../collection/owned.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../card/card_detail_screen.dart';
 import '../cardmarket/cardmarket_edition.dart';
@@ -130,11 +131,16 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
     final grading = widget.result.grading;
     setState(() => _busy = true);
     final api = ref.read(apiProvider);
+    final folderId = effectiveFolderId(
+      ref.read(folderChoiceProvider),
+      ref.read(foldersProvider).value ?? const <Folder>[],
+    );
     CollectionItem? item;
     final ok = await runAction(context, () async {
       await api.confirmScan(widget.result.scanId, card.id);
       item = await api.addItem({
         'card_id': card.id,
+        'folder_id': ?folderId,
         'quantity': 1,
         if (grading == null) 'condition': 'NM',
         if (grading != null)
@@ -248,6 +254,16 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
             textAlign: TextAlign.center,
             style: const TextStyle(color: AppColors.textMuted),
           ),
+          // Schon vorhanden? (vor dem Hinzufügen – danach zählt die neue Position mit)
+          Center(
+            child: switch (ref.watch(ownedProvider(selected.id)).value?[selected.id]) {
+              final entries? => Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: OwnedLine(key: const Key('scan-owned'), entries: entries),
+              ),
+              null => const SizedBox.shrink(),
+            },
+          ),
           if (widget.result.grading case final grading?)
             Padding(
               padding: const EdgeInsets.only(top: 6),
@@ -289,6 +305,8 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
             CardmarketEditionTile(cardId: selected.id, padding: const EdgeInsets.only(top: 12)),
           const SizedBox(height: 20),
           if (added == null) ...[
+            const Center(child: FolderPicker()),
+            const SizedBox(height: 8),
             FilledButton.icon(
               key: const Key('scan-add'),
               onPressed: _busy ? null : _quickAdd,

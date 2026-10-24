@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
 import '../../widgets/value_chart.dart';
+import '../collection/owned.dart';
 
 final dashboardProvider = FutureProvider.autoDispose<CollectionSummary>(
   (ref) => ref.watch(apiProvider).dashboard(),
@@ -43,6 +44,7 @@ void invalidateCollection(WidgetRef ref) => ref
   ..invalidate(folderSummariesProvider)
   ..invalidate(collectionHistoryProvider)
   ..invalidate(showcaseProvider)
+  ..invalidate(ownedProvider)
   ..invalidate(moversProvider);
 
 /// Farbe für Gewinn (grün), Verlust (rot) oder neutral.

@@ -1923,3 +1923,39 @@ class SavedTrade {
   /// Differenz damals (bekomme minus gebe).
   double get differenceThen => (double.tryParse(getValue) ?? 0) - (double.tryParse(giveValue) ?? 0);
 }
+
+/// Bestand einer Karte je Ordner und Fassung („schon in deiner Sammlung“).
+class OwnedEntry {
+  const OwnedEntry({
+    required this.cardId,
+    required this.folderId,
+    required this.folderName,
+    required this.variant,
+    required this.quantity,
+    this.gradingCompany,
+    this.grade,
+  });
+
+  factory OwnedEntry.fromJson(Json json) => OwnedEntry(
+    cardId: json.str('card_id'),
+    folderId: json.str('folder_id'),
+    folderName: json.str('folder_name'),
+    variant: json.str('variant'),
+    gradingCompany: json.strOrNull('grading_company'),
+    grade: json.strOrNull('grade'),
+    quantity: json.integer('quantity'),
+  );
+
+  final String cardId;
+  final String folderId;
+  final String folderName;
+  final String variant;
+  final String? gradingCompany;
+  final String? grade;
+  final int quantity;
+
+  /// „Reverse Holo“, „PSA 10“ – `null` bei normaler Rohkarte.
+  String? get version => gradingCompany != null
+      ? '$gradingCompany ${grade ?? ''}'.trim()
+      : (variant == 'reverse' ? 'Reverse Holo' : null);
+}

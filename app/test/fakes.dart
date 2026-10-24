@@ -419,14 +419,19 @@ class FakeApi extends Api {
     'observed_since': now.toIso8601String(),
   });
 
+  List<Json> foldersJson = [
+    {'id': 'f1', 'name': 'Sammlung', 'sort_order': 0, 'created_at': '2026-10-17T00:00:00Z'},
+  ];
+
   @override
-  Future<List<Folder>> folders() async => [
-    Folder.fromJson({
-      'id': 'f1',
-      'name': 'Sammlung',
-      'sort_order': 0,
-      'created_at': '2026-10-17T00:00:00Z',
-    }),
+  Future<List<Folder>> folders() async => foldersJson.map(Folder.fromJson).toList();
+
+  List<Json> ownedJson = [];
+
+  @override
+  Future<List<OwnedEntry>> owned(List<String> cardIds) async => [
+    for (final json in ownedJson)
+      if (cardIds.contains(json['card_id'])) OwnedEntry.fromJson(json),
   ];
 
   @override

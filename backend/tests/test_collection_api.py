@@ -736,3 +736,37 @@ async def test_csv_export_neutralizes_formulas(
 
     assert row[header.index("Name")] == '\'=HYPERLINK("http://x","klick")'
     assert row[header.index("Notiz")] == "'+49 Notiz"
+
+
+async def test_owned_cards_by_folder_and_version(
+    client: AsyncClient, register_user: RegisterUser, cards: tuple[Card, Card]
+) -> None:
+    """„Schon in deiner Sammlung“: Anzahl je Ordner und Fassung, nur eigene Positionen."""
+    alice = await register_user("alice@example.com")
+    bob = await register_user("bob@example.com")
+    binder = (
+        await client.post(f"{API}/folders", json={"name": "Binder"}, headers=alice.headers)
+    ).json()
+    card_a, card_b = cards
+    await _add(client, alice, card_id=str(card_a.id), quantity=2)
+    await _add(client, alice, card_id=str(card_a.id))  # gleicher Ordner und Fassung → 3
+    await _add(client, alice, card_id=str(card_a.id), variant="reverse", folder_id=binder["id"])
+    await _add(client, alice, card_id=str(card_a.id), grading_company="PSA", grade="10")
+    await _add(client, bob, card_id=str(card_b.id))
+
+    owned = (
+        await client.get(
+            f"{API}/collection/owned",
+            params=[("card_id", str(card_a.id)), ("card_id", str(card_b.id))],
+            headers=alice.headers,
+        )
+    ).json()
+    assert {
+        (o["folder_name"], o["variant"], o["grading_company"], o["grade"], o["quantity"])
+        for o in owned
+    } == {
+        ("Binder", "reverse", None, None, 1),
+        ("Sammlung", "normal", "PSA", "10", 1),
+        ("Sammlung", "normal", None, None, 3),
+    }
+    assert {o["card_id"] for o in owned} == {str(card_a.id)}  # Bobs Karte zählt nicht

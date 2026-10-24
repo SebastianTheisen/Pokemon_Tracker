@@ -18,6 +18,8 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
+import 'item_sheet.dart';
+import 'owned.dart';
 import '../card/card_detail_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import 'collection_screen.dart';
@@ -104,15 +106,18 @@ class _SealedAddScreenState extends ConsumerState<SealedAddScreen> {
       final product = await api.productFromCardmarket(offer.cardmarketProductId, choice.language);
       await api.addItem({
         'product_id': product.id,
+        'folder_id': ?effectiveFolderId(
+          ref.read(folderChoiceProvider),
+          ref.read(foldersProvider).value ?? const <Folder>[],
+        ),
         'quantity': choice.quantity,
         'purchase_price': ?choice.purchasePrice,
         'purchase_date': ?choice.purchaseDate,
       });
     });
     if (!ok || !mounted) return;
-    ref
-      ..invalidate(itemsProvider)
-      ..invalidate(dashboardProvider);
+    ref.invalidate(itemsProvider);
+    invalidateCollection(ref);
     showMessage(context, 'Hinzugefügt: ${choice.quantity}× ${offer.name}');
   }
 
@@ -543,6 +548,8 @@ class _AddSheetState extends State<_AddSheet> {
               ],
             ),
             const SizedBox(height: 16),
+            const Align(alignment: Alignment.centerLeft, child: FolderPicker()),
+            const SizedBox(height: 8),
             FilledButton.icon(
               key: const Key('sealed-add'),
               onPressed: _submit,
