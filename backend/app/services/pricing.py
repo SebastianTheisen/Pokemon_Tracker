@@ -35,6 +35,7 @@ from app.models import (
     Card,
     CardPriceLink,
     CollectionItem,
+    PriceAlert,
     PriceCheck,
     PricePoint,
     User,
@@ -683,10 +684,12 @@ async def tracked_card_ids(
 ) -> list[uuid.UUID]:
     """Karten für die tägliche Aktualisierung: Karten aus Sammlungen (auch Slabs – deren
     Notenpreise kommen von PriceCharting, das seine eigene Gültigkeit hat), Karten auf
-    Merklisten und in den letzten ``price_tracking_view_days`` Tagen angesehene Karten."""
+    Merklisten, Karten mit aktivem Preisalarm und in den letzten
+    ``price_tracking_view_days`` Tagen angesehene Karten."""
     since = now - timedelta(days=settings.price_tracking_view_days)
     viewed = select(PriceCheck.card_id).where(PriceCheck.last_viewed_at >= since)
     collected = select(CollectionItem.card_id).where(CollectionItem.card_id.is_not(None))
     wished = select(WishlistItem.card_id).where(WishlistItem.card_id.is_not(None))
-    result = await session.scalars(union(viewed, collected, wished))
+    alerted = select(PriceAlert.card_id).where(PriceAlert.card_id.is_not(None), PriceAlert.active)
+    result = await session.scalars(union(viewed, collected, wished, alerted))
     return sorted(card_id for card_id in result.all() if card_id is not None)

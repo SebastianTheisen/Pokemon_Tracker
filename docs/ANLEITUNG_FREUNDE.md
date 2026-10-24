@@ -59,6 +59,10 @@ Danach startet Kartenkiste wie eine normale App, auch die Kamera funktioniert.
 * **Versiegeltes** (Booster, Displays, Top-Trainer-Boxen): unter **Sammlung → „Versiegelt“**,
   Suche auch auf Deutsch („Top-Trainer-Box Prismatische Entwicklungen“).
 * **Merkliste:** Herz-Symbol auf einer Karte.
+* **Preisalarme:** Auf einer Karte oben die Glocke antippen (bei Versiegeltem: in der Sammlung
+  antippen → „Preisalarm“), „Fällt auf“ oder „Steigt auf“ und einen Zielpreis wählen. Damit die
+  Nachricht aufs Handy kommt: **Mehr → Preisalarme → „Einschalten“** und Mitteilungen erlauben
+  (iPhone: nur in der App vom Home-Bildschirm). Geprüft wird täglich gegen 12:30 Uhr.
 * **Gewinn/Verlust:** Trag den Kaufpreis ein (direkt nach dem Scan oder über „Bearbeiten“). Dann
   zeigt die App, was du bezahlt hast und wie viel du heute im Plus oder Minus bist – gesamt, je
   Ordner und je Karte. Sortieren nach „Höchster Gewinn“ / „Größter Verlust“ geht auch.
@@ -81,4 +85,5 @@ Probleme? Screenshot an mich, mit einem Satz, was du erwartet hast.
    einmal sichtbar und gilt einmal.
 3. **Android-App bauen** (nach Änderungen an der App):
    `bash deploy/phase5_app.sh --apk` → Download unter `…/kartenkiste.apk`.
-4. **Passwort vergessen:** Mehr → Nutzer → ⋮ bei der Person → **„Passwort-Reset-Code“** und weitergeben.
+4. **Mitteilungen (Preisalarme) einrichten:** einmalig `bash deploy/phase7_push.sh` auf dem VPS.
+5. **Passwort vergessen:** Mehr → Nutzer → ⋮ bei der Person → **„Passwort-Reset-Code“** und weitergeben.

@@ -45,6 +45,7 @@ from app.providers.pricing import PriceProvider
 from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
 from app.scanner.storage import ReferenceStore
+from app.services.alerts import check_price_alerts
 from app.services.card_details import sync_card_details
 from app.services.cardmarket_catalog import last_successful_import, run_catalog_import
 from app.services.collection import CollectionService, users_with_items
@@ -63,6 +64,7 @@ class RefreshSummary:
     quotes_stored: int = 0
     failed_cards: int = 0
     snapshots: int = 0
+    alerts_triggered: int = 0
 
 
 def next_run_after(now: datetime, at: str, timezone: str) -> datetime:
@@ -115,6 +117,10 @@ async def refresh_tracked_prices(
             await CollectionService(session, owner, prices).take_snapshot()
             summary.snapshots += 1
         await session.commit()
+
+    # Mit den frischen Preisen: Preisalarme prüfen und Ausgelöste per Push melden.
+    alerts = await check_price_alerts(session_factory, settings, providers, health)
+    summary.alerts_triggered = alerts.triggered
 
     log.info(
         "pricing.refresh_done",

@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     admin,
+    alerts,
     auth,
     catalog,
     collection,
@@ -24,3 +25,4 @@ api_router.include_router(pricing.router)
 api_router.include_router(collection.router)
 api_router.include_router(contributions.router)
 api_router.include_router(scan.router)
+api_router.include_router(alerts.router)

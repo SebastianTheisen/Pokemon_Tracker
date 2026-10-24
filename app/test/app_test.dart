@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kartenkiste/core/push/push_bridge.dart';
 import 'package:kartenkiste/models/json.dart';
 
 import 'fakes.dart';
@@ -9,6 +10,7 @@ void main() {
   profitTests();
   selectionTests();
   filterTests();
+  alertTests();
   variantTests();
   psaTests();
 
@@ -609,5 +611,103 @@ void filterTests() {
     await tester.pumpAndSettle();
     expect(api.calls, contains('wishlist:c1'));
     expect(find.text('Auf der Merkliste'), findsOneWidget);
+  });
+}
+
+void alertTests() {
+  Future<void> openCard(WidgetTester tester) async {
+    final topCard = find.text('Nachtara VMAX').first;
+    await tester.ensureVisible(topCard);
+    await tester.pumpAndSettle();
+    await tester.tap(topCard);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('Preisalarm auf der Kartenseite: Vorschlag −10 %, steigt auf, Zustand', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await openCard(tester);
+
+    await tester.tap(find.byKey(const Key('card-alert')));
+    await tester.pumpAndSettle();
+    expect(find.text('Aktuell: 1.805,90\u00a0€'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '1625,31'), findsOneWidget); // 90 % als Vorschlag
+
+    await tester.tap(find.text('Steigt auf'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(TextField, '1986,49'), findsOneWidget); // 110 %
+    await tester.enterText(find.byKey(const Key('alert-target')), '2.000');
+    await tester.tap(find.byKey(const Key('alert-save')));
+    await tester.pumpAndSettle();
+
+    expect(api.lastAlertBody, {
+      'card_id': 'c1',
+      'product_id': null,
+      'direction': 'above',
+      'target': '2000', // „2.000“ = zweitausend
+      'variant': 'normal',
+      'condition': 'NM',
+    });
+    expect(find.text('Preisalarm angelegt. Mitteilungen sind noch aus.'), findsOneWidget);
+    expect(find.text('Einschalten'), findsOneWidget); // noch kein Gerät angemeldet
+  });
+
+  testWidgets('Preisalarme: Mitteilungen einschalten, Probe, Liste', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..alertsJson = [
+        alertJson(),
+        alertJson(id: 'a2', active: false, triggeredAt: '2026-10-24T12:30:00Z'),
+      ];
+    final push = FakePushBridge();
+    await pumpApp(tester, api, push: push);
+    await tester.tap(find.text('Mehr').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('more-alerts')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Aus. Einschalten'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('push-enable')));
+    await tester.pumpAndSettle();
+    expect(push.calls, ['subscribe:BKey']);
+    expect(api.calls, contains('pushSubscribe:https://web.push.apple.com/abc'));
+    expect(find.textContaining('An – Preisalarme'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('push-test')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('pushTest'));
+    expect(find.text('Probe gesendet – kommt gleich an.'), findsOneWidget);
+
+    expect(find.textContaining('▼ bis 1.500,00\u00a0€'), findsNWidgets(2));
+    expect(find.textContaining('Ausgelöst 24.10.2026'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('alert-menu-a2')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Wieder scharf'));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('updateAlert:a2:null:null:true'));
+  });
+
+  testWidgets('iPhone im Browser: Hinweis „Zum Home-Bildschirm“ statt Einschalten', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api, push: FakePushBridge(state: PushStatus.install));
+    await tester.tap(find.text('Mehr').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('more-alerts')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Zum Home-Bildschirm'), findsOneWidget);
+    expect(find.byKey(const Key('push-enable')), findsNothing);
+  });
+
+  testWidgets('ohne Server-Schlüssel: Hinweis, kein Einschalten', (tester) async {
+    final api = FakeApi(loggedIn: true)..pushPublicKey = null;
+    await pumpApp(tester, api);
+    await tester.tap(find.text('Mehr').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('more-alerts')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('noch nicht eingerichtet'), findsOneWidget);
+    expect(find.byKey(const Key('push-enable')), findsNothing);
   });
 }

@@ -235,6 +235,15 @@ class Settings(BaseSettings):
         default=None,
         description="Geheimes ntfy-Thema (wie ein Passwort); ohne Thema nur Log-Ausgabe.",
     )
+    # --- Web-Push (Preisalarme aufs Handy, PWA) -------------------------------
+    push_vapid_private_key: SecretStr | None = Field(
+        default=None,
+        description="VAPID-Schlüssel (base64url, roh) – erzeugt von deploy/phase7_push.sh.",
+    )
+    push_subject: str = Field(
+        default="mailto:admin@example.com",
+        description="Kontakt für die Push-Dienste (https-Adresse der App oder mailto:).",
+    )
     monitor_api_url: str = Field(default="http://api:8000/api/v1/health")
     monitor_backup_dir: Path = Field(default=Path("/backups"))
     monitor_interval_minutes: int = Field(default=10, ge=1, le=120)

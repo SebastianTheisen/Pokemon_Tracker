@@ -49,6 +49,13 @@ class MoreScreen extends ConsumerWidget {
             onTap: () => context.push('/settings'),
           ),
           ListTile(
+            key: const Key('more-alerts'),
+            leading: const Icon(Icons.notifications_outlined),
+            title: const Text('Preisalarme'),
+            subtitle: const Text('Zielpreise und Mitteilungen aufs Handy'),
+            onTap: () => context.push('/alerts'),
+          ),
+          ListTile(
             leading: const Icon(Icons.layers_outlined),
             title: const Text('Sets in meiner Sammlung'),
             onTap: () => context.push('/sets'),

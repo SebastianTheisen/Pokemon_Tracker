@@ -516,6 +516,64 @@ class Api {
   Future<List<WishlistEntry>> wishlist() async =>
       parseList(await _getList('/wishlist'), WishlistEntry.fromJson);
 
+  // ---------------------------------------------------- Preisalarme und Push
+
+  Future<List<PriceAlert>> alerts() async =>
+      parseList(await _getList('/alerts'), PriceAlert.fromJson);
+
+  /// Neuer Alarm: [direction] `above`/`below`, [target] im Server-Format („150.00“).
+  Future<PriceAlert> createAlert({
+    String? cardId,
+    String? productId,
+    required String direction,
+    required String target,
+    String variant = 'normal',
+    String condition = 'NM',
+  }) async => PriceAlert.fromJson(
+    (await _send(
+          'POST',
+          '/alerts',
+          body: {
+            'card_id': ?cardId,
+            'product_id': ?productId,
+            'direction': direction,
+            'target': target,
+            'variant': variant,
+            'condition': condition,
+          },
+        ))!
+        as Json,
+  );
+
+  /// Ändern; `active: true` stellt einen ausgelösten Alarm wieder scharf.
+  Future<PriceAlert> updateAlert(
+    String id, {
+    String? target,
+    String? direction,
+    bool? active,
+  }) async => PriceAlert.fromJson(
+    (await _send(
+          'PATCH',
+          '/alerts/$id',
+          body: {'target': ?target, 'direction': ?direction, 'active': ?active},
+        ))!
+        as Json,
+  );
+
+  Future<void> deleteAlert(String id) => _send('DELETE', '/alerts/$id');
+
+  Future<PushConfig> pushConfig() async => PushConfig.fromJson(await _get('/push/config'));
+
+  Future<void> pushSubscribe(Map<String, Object?> subscription) =>
+      _send('POST', '/push/subscriptions', body: subscription);
+
+  Future<void> pushUnsubscribe(String endpoint) =>
+      _send('DELETE', '/push/subscriptions', query: {'endpoint': endpoint});
+
+  /// Probe-Nachricht an alle eigenen Geräte → Anzahl erfolgreicher Zustellungen.
+  Future<int> pushTest() async =>
+      (((await _send('POST', '/push/test'))! as Json)['sent'] as num).toInt();
+
   Future<void> addToWishlist({String? cardId, String? productId}) =>
       _send('POST', '/wishlist', body: {'card_id': ?cardId, 'product_id': ?productId});
 

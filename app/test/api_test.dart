@@ -127,6 +127,10 @@ void main() {
     expect(signedMoney('51'), '+51,00\u00a0€');
     expect(normalizeAmount('1.234,50\u00a0€'), '1234.50');
     expect(normalizeAmount('12.50'), '12.50');
+    expect(normalizeAmount('2.000'), '2000'); // Tausenderpunkt, nicht 2 €
+    expect(normalizeAmount('1.234.567'), '1234567');
+    expect(normalizeAmount('2.5'), '2.5');
+    expect(normalizeAmount('12.345,6'), '12345.6');
     expect(normalizeAmount(' '), isNull);
     expect(percent(0.856), '86 %');
     expect(languageTag('zh-tw'), 'ZH-TW');

@@ -1,4 +1,6 @@
 // Sammlung: Wert und Aufteilung, Ordner, Filter, Sortierung, Positionen bearbeiten.
+import '../alerts/alerts_screen.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -531,6 +533,13 @@ Future<void> showItemActions(
             title: const Text('Bearbeiten'),
             onTap: () => Navigator.of(context).pop('edit'),
           ),
+          if (item.kind != 'graded')
+            ListTile(
+              key: const Key('item-alert'),
+              leading: const Icon(Icons.add_alert_outlined),
+              title: const Text('Preisalarm'),
+              onTap: () => Navigator.of(context).pop('alert'),
+            ),
           ListTile(
             leading: const Icon(Icons.delete_outline, color: AppColors.loss),
             title: const Text('Entfernen'),
@@ -551,6 +560,14 @@ Future<void> showItemActions(
   if (!context.mounted) return;
   if (action == 'select') {
     onSelect?.call();
+  } else if (action == 'alert') {
+    await showAlertSheet(
+      context,
+      ref,
+      card: item.card,
+      product: item.product,
+      currentValue: item.value.unitValue,
+    );
   } else if (action == 'open') {
     await context.push('/card/${item.card!.id}');
   } else if (action == 'edit') {

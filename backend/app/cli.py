@@ -50,8 +50,10 @@ from app.models import (
     GradingCompany,
     ImageImportRun,
     OfficialCard,
+    PriceAlert,
     Product,
     ProductKind,
+    PushSubscription,
     Role,
     User,
 )
@@ -61,7 +63,9 @@ from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
 from app.scanner.ocr import RapidOcrReader
 from app.scanner.runtime import ScannerRuntime
+from app.services import push
 from app.services.admin import AdminService
+from app.services.alerts import check_price_alerts
 from app.services.card_details import sync_card_details
 from app.services.cardmarket_catalog import catalog_status as cardmarket_status
 from app.services.cardmarket_catalog import render_status as render_cardmarket_status
@@ -430,6 +434,53 @@ async def _refresh_prices(
     )
 
 
+async def _push_key(
+    _factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
+) -> None:
+    """Neuen VAPID-Schlüssel ausgeben (nur, wenn noch keiner gesetzt ist – sonst Abbruch)."""
+    if settings.push_vapid_private_key is not None and not args.force:
+        raise SystemExit("PT_PUSH_VAPID_PRIVATE_KEY ist schon gesetzt (neu nur mit --force).")
+    print(push.generate_private_key())
+
+
+async def _push_status(
+    factory: async_sessionmaker[AsyncSession], settings: Settings, _args: argparse.Namespace
+) -> None:
+    key = push.public_key(settings)
+    async with factory() as session:
+        devices = await session.scalar(select(func.count()).select_from(PushSubscription))
+        active = await session.scalar(
+            select(func.count()).select_from(PriceAlert).where(PriceAlert.active)
+        )
+        fired = await session.scalar(
+            select(func.count()).select_from(PriceAlert).where(PriceAlert.triggered_at.is_not(None))
+        )
+    print(f"Push eingerichtet: {'ja' if key else 'NEIN (PT_PUSH_VAPID_PRIVATE_KEY fehlt)'}")
+    print(f"Kontakt (sub):     {settings.push_subject.split('://')[0]}://…")
+    print(f"Geräte angemeldet: {devices}")
+    print(f"Preisalarme:       {active} aktiv, {fired} ausgelöst")
+
+
+async def _check_alerts(
+    factory: async_sessionmaker[AsyncSession], settings: Settings, _args: argparse.Namespace
+) -> None:
+    """Preisalarme jetzt prüfen (mit den gespeicherten Preisen) und Ausgelöste senden."""
+    health = SourceHealth(
+        threshold=settings.price_breaker_threshold,
+        pause=timedelta(minutes=settings.price_breaker_pause_minutes),
+    )
+    async with TcgdexClient(
+        base_url=settings.tcgdex_base_url, user_agent=settings.http_user_agent
+    ) as client:
+        summary = await check_price_alerts(
+            factory, settings, build_price_providers(settings, client), health
+        )
+    print(
+        f"Nutzer mit Alarmen: {summary.users} · ausgelöst: {summary.triggered} · "
+        f"Push gesendet: {summary.pushed}"
+    )
+
+
 async def _prices(
     factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
 ) -> None:
@@ -765,6 +816,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     details.add_argument("--limit", type=int, help="höchstens so viele Karten (zum Testen)")
     details.set_defaults(handler=_sync_card_details)
+
+    push_key = commands.add_parser("push-key", help="VAPID-Schlüssel für Web-Push erzeugen")
+    push_key.add_argument("--force", action="store_true", help="auch wenn schon einer gesetzt ist")
+    push_key.set_defaults(handler=_push_key)
+    commands.add_parser("push-status", help="Web-Push und Preisalarme: Stand").set_defaults(
+        handler=_push_status
+    )
+    commands.add_parser(
+        "check-alerts", help="Preisalarme jetzt prüfen und Ausgelöste per Push senden"
+    ).set_defaults(handler=_check_alerts)
 
     prices = commands.add_parser(
         "refresh-prices", help="Preise aller vorgemerkten Karten jetzt aktualisieren"

@@ -1,4 +1,6 @@
 // Navigation (go_router). Ohne Sitzung führt jeder Weg zur Anmeldung.
+import 'features/alerts/alerts_screen.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -108,6 +110,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/settings/bookmarklet', builder: (_, _) => const BookmarkletSetupScreen()),
       GoRoute(path: '/sets', builder: (_, _) => const SetOverviewScreen()),
+      GoRoute(path: '/alerts', builder: (_, _) => const AlertsScreen()),
       GoRoute(path: '/sealed/add', builder: (_, _) => const SealedAddScreen()),
       GoRoute(path: '/admin/users', builder: (_, _) => const AdminUsersScreen()),
       GoRoute(path: '/admin/invites', builder: (_, _) => const AdminInvitesScreen()),

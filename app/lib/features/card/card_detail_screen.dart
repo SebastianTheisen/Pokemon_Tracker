@@ -1,5 +1,7 @@
 // Karten-Detail: Bild, Zustandspreise (mit Beleg oder als Schätzung markiert),
 // Quellen mit Datum und Link, Preisverlauf, eBay, Sammlung/Merkliste.
+import '../alerts/alerts_screen.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -155,7 +157,23 @@ class CardDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final card = ref.watch(cardProvider(cardId));
     return Scaffold(
-      appBar: AppBar(title: Text(card.value?.displayName ?? 'Karte')),
+      appBar: AppBar(
+        title: Text(card.value?.displayName ?? 'Karte'),
+        actions: [
+          if (card.value case final info?)
+            IconButton(
+              key: const Key('card-alert'),
+              tooltip: 'Preisalarm',
+              onPressed: () => showAlertSheet(
+                context,
+                ref,
+                card: info,
+                prices: ref.read(pricesProvider(info.id)).value,
+              ),
+              icon: const Icon(Icons.add_alert_outlined),
+            ),
+        ],
+      ),
       body: AsyncBody(
         value: card,
         onRetry: () => ref.invalidate(cardProvider(cardId)),

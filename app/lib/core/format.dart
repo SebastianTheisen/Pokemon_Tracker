@@ -10,10 +10,17 @@ final _dateTime = DateFormat('dd.MM.yyyy, HH:mm', 'de_DE');
 double? parseAmount(String? value) => value == null ? null : double.tryParse(value);
 
 /// Eingabe eines Betrags in die API-Form: „1.234,50“ → "1234.50", leer → null.
+///
+/// Punkte ohne Komma sind Tausenderpunkte, wenn danach genau drei Ziffern folgen
+/// („2.000“ → "2000", „1.234.567“ → "1234567"); sonst Dezimalpunkt („12.50“ → "12.50").
 String? normalizeAmount(String input) {
   var text = input.replaceAll(RegExp(r'[\s€]'), '');
   if (text.isEmpty) return null;
-  if (text.contains(',')) text = text.replaceAll('.', '').replaceAll(',', '.');
+  if (text.contains(',')) {
+    text = text.replaceAll('.', '').replaceAll(',', '.');
+  } else if (RegExp(r'^\d{1,3}(\.\d{3})+$').hasMatch(text)) {
+    text = text.replaceAll('.', '');
+  }
   return text;
 }
 

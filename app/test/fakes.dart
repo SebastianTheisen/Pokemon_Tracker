@@ -8,6 +8,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:kartenkiste/app.dart';
 import 'package:kartenkiste/core/api.dart';
 import 'package:kartenkiste/core/providers.dart';
+import 'package:kartenkiste/core/push/push_bridge.dart';
 import 'package:kartenkiste/core/token_store.dart';
 import 'package:kartenkiste/features/scan/scan_screens.dart';
 import 'package:kartenkiste/models/models.dart';
@@ -506,6 +507,74 @@ class FakeApi extends Api {
 
   Map<String, Object?>? lastItemChanges;
 
+  // ---------------------------------------------------------- Preisalarme
+
+  List<Json> alertsJson = [];
+  String? pushPublicKey = 'BKey';
+  int pushDevices = 0;
+  Map<String, Object?>? lastAlertBody;
+
+  @override
+  Future<List<PriceAlert>> alerts() async => alertsJson.map(PriceAlert.fromJson).toList();
+
+  @override
+  Future<PriceAlert> createAlert({
+    String? cardId,
+    String? productId,
+    required String direction,
+    required String target,
+    String variant = 'normal',
+    String condition = 'NM',
+  }) async {
+    lastAlertBody = {
+      'card_id': cardId,
+      'product_id': productId,
+      'direction': direction,
+      'target': target,
+      'variant': variant,
+      'condition': condition,
+    };
+    final json = alertJson(direction: direction, target: target);
+    alertsJson = [...alertsJson, json];
+    return PriceAlert.fromJson(json);
+  }
+
+  @override
+  Future<PriceAlert> updateAlert(
+    String id, {
+    String? target,
+    String? direction,
+    bool? active,
+  }) async {
+    calls.add('updateAlert:$id:$target:$direction:$active');
+    return PriceAlert.fromJson(alertJson(id: id, active: active ?? true));
+  }
+
+  @override
+  Future<void> deleteAlert(String id) async => calls.add('deleteAlert:$id');
+
+  @override
+  Future<PushConfig> pushConfig() async =>
+      PushConfig(publicKey: pushPublicKey, devices: pushDevices);
+
+  @override
+  Future<void> pushSubscribe(Map<String, Object?> subscription) async {
+    calls.add('pushSubscribe:${subscription['endpoint']}');
+    pushDevices += 1;
+  }
+
+  @override
+  Future<void> pushUnsubscribe(String endpoint) async {
+    calls.add('pushUnsubscribe:$endpoint');
+    pushDevices -= 1;
+  }
+
+  @override
+  Future<int> pushTest() async {
+    calls.add('pushTest');
+    return pushDevices;
+  }
+
   @override
   Future<void> deleteItem(String id) async => calls.add('deleteItem:$id');
 
@@ -593,7 +662,67 @@ class FakeImageSource implements ScanImageSource {
 }
 
 /// Startet die ganze App mit Attrappen auf einem Handy-großen Bildschirm.
-Future<void> pumpApp(WidgetTester tester, FakeApi api, {FakeImageSource? images}) async {
+/// Schein-Gerät für Benachrichtigungen (statt Browser).
+class FakePushBridge implements PushBridge {
+  FakePushBridge({this.state = PushStatus.notAsked});
+
+  PushStatus state;
+  String? subscribedEndpoint;
+  final calls = <String>[];
+
+  @override
+  Future<PushStatus> status() async => state;
+
+  @override
+  Future<String?> endpoint() async => subscribedEndpoint;
+
+  @override
+  Future<Map<String, Object?>> subscribe(String publicKey) async {
+    calls.add('subscribe:$publicKey');
+    state = PushStatus.granted;
+    subscribedEndpoint = 'https://web.push.apple.com/abc';
+    return {
+      'endpoint': subscribedEndpoint,
+      'keys': {'p256dh': 'BPub', 'auth': 'secret'},
+    };
+  }
+
+  @override
+  Future<String?> unsubscribe() async {
+    calls.add('unsubscribe');
+    final endpoint = subscribedEndpoint;
+    subscribedEndpoint = null;
+    return endpoint;
+  }
+}
+
+Json alertJson({
+  String id = 'a1',
+  String direction = 'below',
+  String target = '1500.00',
+  bool active = true,
+  String? triggeredAt,
+}) => {
+  'id': id,
+  'card': cardJson(),
+  'product': null,
+  'variant': 'normal',
+  'condition': 'NM',
+  'direction': direction,
+  'target': target,
+  'active': active,
+  'current_value': '1805.90',
+  'created_at': '2026-10-24T10:00:00Z',
+  'triggered_at': triggeredAt,
+  'triggered_value': triggeredAt == null ? null : '1490.00',
+};
+
+Future<void> pumpApp(
+  WidgetTester tester,
+  FakeApi api, {
+  FakeImageSource? images,
+  PushBridge? push,
+}) async {
   await initializeDateFormatting('de_DE');
   tester.view.physicalSize = const Size(1170, 2532);
   tester.view.devicePixelRatio = 3;
@@ -604,6 +733,7 @@ Future<void> pumpApp(WidgetTester tester, FakeApi api, {FakeImageSource? images}
       overrides: [
         apiProvider.overrideWithValue(api),
         imageSourceProvider.overrideWithValue(images ?? FakeImageSource()),
+        pushBridgeProvider.overrideWithValue(push ?? FakePushBridge()),
       ],
       child: const KartenkisteApp(),
     ),

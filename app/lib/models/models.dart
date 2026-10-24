@@ -1570,3 +1570,73 @@ class PriceChartingDetails {
   final Map<String, int> salesVolume;
   final List<MarketSale> recentSales;
 }
+
+/// Preisalarm: Zielpreis für eine Karte (Variante + Zustand) oder ein versiegeltes Produkt.
+class PriceAlert {
+  const PriceAlert({
+    required this.id,
+    required this.variant,
+    required this.condition,
+    required this.direction,
+    required this.target,
+    required this.active,
+    required this.createdAt,
+    this.card,
+    this.product,
+    this.currentValue,
+    this.triggeredAt,
+    this.triggeredValue,
+  });
+
+  factory PriceAlert.fromJson(Json json) => PriceAlert(
+    id: json.str('id'),
+    card: json.objOrNull('card') == null ? null : CardInfo.fromJson(json.obj('card')),
+    product: json.objOrNull('product') == null ? null : Product.fromJson(json.obj('product')),
+    variant: json.str('variant'),
+    condition: json.str('condition'),
+    direction: json.str('direction'),
+    target: json.str('target'),
+    active: json.flag('active'),
+    currentValue: json.strOrNull('current_value'),
+    createdAt: json.time('created_at'),
+    triggeredAt: json.timeOrNull('triggered_at'),
+    triggeredValue: json.strOrNull('triggered_value'),
+  );
+
+  final String id;
+  final CardInfo? card;
+  final Product? product;
+  final String variant;
+  final String condition;
+
+  /// `above` (steigt auf/über) oder `below` (fällt auf/unter).
+  final String direction;
+  final String target;
+  final bool active;
+  final String? currentValue;
+  final DateTime createdAt;
+  final DateTime? triggeredAt;
+  final String? triggeredValue;
+
+  bool get above => direction == 'above';
+
+  String get title => card?.displayName ?? product?.name ?? 'Unbekannt';
+
+  /// „Reverse Holo · LP“ – nur Abweichungen vom Standard (normal, NM).
+  String? get detail {
+    if (card == null) return null;
+    final parts = [if (variant == 'reverse') 'Reverse Holo', if (condition != 'NM') condition];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+}
+
+/// Benachrichtigungen auf dem Server: Schlüssel (null = nicht eingerichtet) und Geräte.
+class PushConfig {
+  const PushConfig({required this.devices, this.publicKey});
+
+  factory PushConfig.fromJson(Json json) =>
+      PushConfig(publicKey: json.strOrNull('public_key'), devices: json.integer('devices'));
+
+  final String? publicKey;
+  final int devices;
+}
