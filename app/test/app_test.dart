@@ -14,6 +14,7 @@ void main() {
   setTests();
   friendTests();
   ownedTests();
+  cardPageTests();
   variantTests();
   psaTests();
 
@@ -898,5 +899,70 @@ void ownedTests() {
     await tester.tap(find.byKey(const Key('scan-camera')));
     await tester.pumpAndSettle();
     expect(find.text('Ordner: Binder ▾'), findsOneWidget); // gemerkt
+  });
+}
+
+void cardPageTests() {
+  Future<void> openCard(WidgetTester tester) async {
+    final topCard = find.text('Nachtara VMAX').first;
+    await tester.ensureVisible(topCard);
+    await tester.pumpAndSettle();
+    await tester.tap(topCard);
+    await tester.pumpAndSettle();
+  }
+
+  Json offer(String source, String variant, Map<String, String> metrics) => {
+    'source': source,
+    'variant': variant,
+    'condition': null,
+    'currency': 'EUR',
+    'kind': 'verified',
+    'updated_at': '2026-10-24T10:00:00Z',
+    'url': null,
+    'metrics': metrics,
+  };
+
+  testWidgets('Noten vergleichen: Roh, PriceCharting-Noten, eBay-Median, Faktor; als Slab', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true);
+    api.pricesJson['offers'] = [
+      ...api.pricesJson['offers'] as List,
+      offer('pricecharting', 'graded', {'grade_9': '3611.80', 'psa_10': '9029.50'}),
+      offer('ebay_sold', 'graded:PSA 10', {'median': '8500.00', 'count': '4'}),
+    ];
+    await pumpApp(tester, api);
+    await openCard(tester);
+
+    final section = find.byKey(const Key('grade-comparison'));
+    await tester.scrollUntilVisible(section, 300, scrollable: find.byType(Scrollable).first);
+    expect(find.text('Noten vergleichen'), findsOneWidget);
+    expect(find.text('Roh (Near Mint)'), findsOneWidget);
+    expect(find.text('PSA 9'), findsOneWidget);
+    expect(find.text('×2,0'), findsOneWidget); // 3611,80 / 1805,90
+    expect(find.text('8.500,00\u00a0€'), findsOneWidget); // eBay schlägt PriceCharting
+    expect(find.text('eBay (4 Verkäufe)'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('grade-PSA 10')));
+    // aus dem Bereich der unteren Knopfleiste (Merkliste/Sammlung) heraus scrollen
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -250));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('grade-PSA 10')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('item-save')), findsOneWidget); // Formular mit Slab offen
+  });
+
+  testWidgets('Preisverlauf: Zeitraum wählen, Veränderung im Zeitraum', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await openCard(tester);
+    final chips = find.byKey(const Key('range-1J'));
+    await tester.scrollUntilVisible(chips, 300, scrollable: find.byType(Scrollable).first);
+    expect(api.calls, contains('history:90'));
+    expect(find.textContaining('+15,90\u00a0€ (+0,9 %) in 3 Monaten'), findsOneWidget);
+    await tester.tap(chips);
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('history:365'));
+    expect(find.textContaining('im letzten Jahr'), findsOneWidget);
   });
 }

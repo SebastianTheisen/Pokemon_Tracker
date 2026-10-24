@@ -14,6 +14,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
+import '../../widgets/range_chips.dart';
 import '../../widgets/value_chart.dart';
 import '../cardmarket/cardmarket_edition.dart';
 import '../collection/item_sheet.dart';
@@ -33,8 +34,9 @@ final pricechartingProvider = FutureProvider.autoDispose.family<PriceChartingDet
 );
 
 final priceHistoryProvider = FutureProvider.autoDispose
-    .family<PriceHistory, ({String cardId, String variant})>(
-      (ref, key) => ref.watch(apiProvider).priceHistory(key.cardId, variant: key.variant),
+    .family<PriceHistory, ({String cardId, String variant, int days})>(
+      (ref, key) =>
+          ref.watch(apiProvider).priceHistory(key.cardId, variant: key.variant, days: key.days),
     );
 
 const metricLabels = {
@@ -332,6 +334,7 @@ class _CardBodyState extends ConsumerState<_CardBody> {
             onRetry: () => ref.invalidate(pricesProvider(card.id)),
             builder: _priceSection,
           ),
+          if (prices.value case final data?) _GradeComparison(card: card, prices: data),
           const SectionTitle('Preisverlauf (Cardmarket-Trend)'),
           _History(cardId: card.id, variant: _variant),
           _UsMarket(cardId: card.id),
@@ -584,33 +587,43 @@ class _OfferTile extends StatelessWidget {
   );
 }
 
-class _History extends ConsumerWidget {
+class _History extends ConsumerStatefulWidget {
   const _History({required this.cardId, required this.variant});
 
   final String cardId;
   final String variant;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final history = ref.watch(priceHistoryProvider((cardId: cardId, variant: variant)));
-    return history.when(
-      loading: () => const SizedBox(height: 160),
-      error: (error, _) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Text('$error', style: const TextStyle(color: AppColors.textMuted)),
-      ),
-      data: (data) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ValueChart(
-              currency: data.currency ?? 'EUR',
-              points: [
-                for (final point in data.points)
-                  ChartPoint(point.date, parseAmount(point.value) ?? 0),
-              ],
-            ),
+  ConsumerState<_History> createState() => _HistoryState();
+}
+
+class _HistoryState extends ConsumerState<_History> {
+  ChartRange _range = ChartRange.quarter;
+
+  @override
+  Widget build(BuildContext context) {
+    final history = ref.watch(
+      priceHistoryProvider((cardId: widget.cardId, variant: widget.variant, days: _range.days)),
+    );
+    final data = history.value;
+    final points = [
+      for (final point in data?.points ?? const <PricePoint>[])
+        ChartPoint(point.date, parseAmount(point.value) ?? 0),
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RangeChips(value: _range, onChanged: (range) => setState(() => _range = range)),
+          const SizedBox(height: 4),
+          RangeChange(points: points, range: _range, currency: data?.currency ?? 'EUR'),
+          if (history.hasError)
+            Text('${history.error}', style: const TextStyle(color: AppColors.textMuted))
+          else if (data == null)
+            const SizedBox(height: 160)
+          else ...[
+            ValueChart(currency: data.currency ?? 'EUR', points: points),
             if (data.lowest != null)
               Text(
                 'Tiefster Preis: ${money(data.lowest)} · Höchster Preis: ${money(data.highest)}'
@@ -618,7 +631,7 @@ class _History extends ConsumerWidget {
                 style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -704,4 +717,165 @@ class _UsMarket extends ConsumerWidget {
 
   static String _thousands(int value) =>
       value.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
+}
+
+/// Ein Eintrag im Notenvergleich.
+typedef _GradeRow = ({String label, double value, String source, Grading? grading});
+
+/// Collectr „Compare Grades“: Roh gegen Slabs je Note und Firma, mit Faktor gegenüber Roh.
+///
+/// Quellen: Roh = Near-Mint-Preis (Cardmarket); Noten = PriceCharting (US-Verkäufe in €) und
+/// gespeicherte eBay-Verkäufe (Median, gleiche Firma und Note). Gibt es beides, zählt eBay.
+class _GradeComparison extends StatelessWidget {
+  const _GradeComparison({required this.card, required this.prices});
+
+  final CardInfo card;
+  final CardPrices prices;
+
+  /// PriceCharting-Kennzahl → Slab (generische Noten werden als PSA gewertet – der Markt dort).
+  static Grading? _gradingFor(String metric) {
+    final generic = RegExp(r'^grade_(\d+)(_5)?$').firstMatch(metric);
+    if (generic != null) {
+      return Grading(
+        company: 'PSA',
+        grade: '${generic.group(1)}${generic.group(2) != null ? '.5' : ''}',
+      );
+    }
+    final company = RegExp(r'^([a-z]+)_10(_black)?').firstMatch(metric);
+    if (company == null) return null;
+    final name = company.group(1)!.toUpperCase();
+    return Grading(company: name, grade: company.group(2) != null ? '10 BL' : '10');
+  }
+
+  List<_GradeRow> _rows() {
+    final rows = <String, _GradeRow>{};
+    for (final offer in prices.offers) {
+      if (offer.source == 'pricecharting' && offer.variant == 'graded') {
+        for (final MapEntry(:key, :value) in offer.metrics.entries) {
+          final amount = double.tryParse(value);
+          if (amount == null || amount <= 0) continue;
+          final label = key == 'psa_10' ? 'PSA 10' : metricLabel(key).replaceFirst('Note', 'PSA');
+          rows[label] = (
+            label: label,
+            value: amount,
+            source: 'PriceCharting',
+            grading: _gradingFor(key),
+          );
+        }
+      }
+    }
+    for (final offer in prices.offers) {
+      if (offer.source == 'ebay_sold' && offer.variant.startsWith('graded:')) {
+        final median = double.tryParse(offer.metrics['median'] ?? '');
+        if (median == null) continue;
+        final label = offer.variant.substring('graded:'.length);
+        final parts = label.split(' ');
+        rows[label] = (
+          label: label,
+          value: median,
+          source: 'eBay (${offer.metrics['count'] ?? '?'} Verkäufe)',
+          grading: Grading(company: parts.first, grade: parts.skip(1).join(' ')),
+        );
+      }
+    }
+    return rows.values.toList()..sort((a, b) => a.value.compareTo(b.value));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = _rows();
+    if (rows.isEmpty) return const SizedBox.shrink();
+    final raw = prices.conditions
+        .where((c) => c.variant == 'normal' && c.condition == 'NM')
+        .map((c) => double.tryParse(c.value))
+        .firstOrNull;
+    final best = rows.last.value;
+    return Column(
+      key: const Key('grade-comparison'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionTitle('Noten vergleichen'),
+        if (raw != null)
+          _GradeTile(label: 'Roh (Near Mint)', value: raw, source: 'Cardmarket', share: raw / best),
+        for (final row in rows)
+          _GradeTile(
+            label: row.label,
+            value: row.value,
+            source: row.source,
+            share: row.value / best,
+            factor: raw == null || raw == 0 ? null : row.value / raw,
+            onAdd: row.grading == null
+                ? null
+                : () => showItemSheet(context, card: card, grading: row.grading),
+          ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: Text(
+            'Slab-Preise: US-Verkäufe (PriceCharting, in € umgerechnet) bzw. deine gespeicherten '
+            'eBay-Verkäufe. „×“ = Vielfaches des Rohpreises. Antippen: als Slab hinzufügen.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GradeTile extends StatelessWidget {
+  const _GradeTile({
+    required this.label,
+    required this.value,
+    required this.source,
+    required this.share,
+    this.factor,
+    this.onAdd,
+  });
+
+  final String label;
+  final double value;
+  final String source;
+
+  /// Anteil am höchsten Preis (Balkenlänge).
+  final double share;
+  final double? factor;
+  final VoidCallback? onAdd;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    key: Key('grade-$label'),
+    onTap: onAdd,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              if (factor != null)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Text(
+                    '×${factor!.toStringAsFixed(1).replaceAll('.', ',')}',
+                    style: const TextStyle(color: AppColors.accent, fontSize: 12),
+                  ),
+                ),
+              Text(
+                money(value.toStringAsFixed(2)),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(value: share.clamp(0, 1), minHeight: 5),
+          ),
+          Text(source, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+        ],
+      ),
+    ),
+  );
 }

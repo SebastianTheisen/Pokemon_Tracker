@@ -11,6 +11,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
+import '../../widgets/range_chips.dart';
 import '../../widgets/value_chart.dart';
 import '../dashboard/dashboard_screen.dart';
 import 'item_filter.dart';
@@ -33,9 +34,11 @@ final itemsProvider = FutureProvider.autoDispose.family<ItemPage, ItemFilter>(
 );
 
 /// Wertkurve der ganzen Sammlung (`null`) oder eines Ordners.
-final folderHistoryProvider = FutureProvider.autoDispose.family<CollectionHistory, String?>(
-  (ref, folderId) => ref.watch(apiProvider).collectionHistory(folderId: folderId),
-);
+final folderHistoryProvider = FutureProvider.autoDispose
+    .family<CollectionHistory, ({String? folderId, int days})>(
+      (ref, key) =>
+          ref.watch(apiProvider).collectionHistory(folderId: key.folderId, days: key.days),
+    );
 
 final collectionSetsProvider = FutureProvider.autoDispose<List<SetOverview>>(
   (ref) => ref.watch(apiProvider).collectionSets(),
@@ -758,23 +761,44 @@ Future<String?> _pickFolder(BuildContext context, List<Folder> folders, {require
     );
 
 /// Wertkurve der Sammlung bzw. des gewählten Ordners – erst ab zwei Tageswerten.
-class _FolderCurve extends ConsumerWidget {
+class _FolderCurve extends ConsumerStatefulWidget {
   const _FolderCurve({required this.folderId});
 
   final String? folderId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final points = ref.watch(folderHistoryProvider(folderId)).value?.points ?? const [];
-    if (points.length < 2) return const SizedBox.shrink();
+  ConsumerState<_FolderCurve> createState() => _FolderCurveState();
+}
+
+class _FolderCurveState extends ConsumerState<_FolderCurve> {
+  ChartRange _range = ChartRange.quarter;
+
+  @override
+  Widget build(BuildContext context) {
+    final history = ref.watch(
+      folderHistoryProvider((folderId: widget.folderId, days: _range.days)),
+    );
+    final points = [
+      for (final point in history.value?.points ?? const <ValuePoint>[])
+        ChartPoint(point.date, parseAmount(point.totalValue) ?? 0),
+    ];
+    // Erst ab zwei Tageswerten – im kürzesten Zeitraum trotzdem die Auswahl zeigen.
+    if (points.length < 2 && _range == ChartRange.quarter) return const SizedBox.shrink();
     return Padding(
       key: const Key('folder-curve'),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: ValueChart(
-        height: 90,
-        emptyHint: false,
-        points: [
-          for (final point in points) ChartPoint(point.date, parseAmount(point.totalValue) ?? 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ValueChart(height: 90, emptyHint: false, points: points),
+          Row(
+            children: [
+              Expanded(
+                child: RangeChange(points: points, range: _range),
+              ),
+            ],
+          ),
+          RangeChips(value: _range, onChanged: (range) => setState(() => _range = range)),
         ],
       ),
     );

@@ -405,19 +405,22 @@ class FakeApi extends Api {
     String variant = 'normal',
     String metric = 'trend',
     int days = 365,
-  }) async => PriceHistory.fromJson({
-    'source': source,
-    'variant': variant,
-    'metric': metric,
-    'currency': 'EUR',
-    'points': [
-      {'date': '2026-10-16', 'value': '1790.00'},
-      {'date': '2026-10-17', 'value': '1805.90'},
-    ],
-    'lowest': '1790.00',
-    'highest': '1805.90',
-    'observed_since': now.toIso8601String(),
-  });
+  }) async {
+    calls.add('history:$days');
+    return PriceHistory.fromJson({
+      'source': source,
+      'variant': variant,
+      'metric': metric,
+      'currency': 'EUR',
+      'points': [
+        {'date': '2026-10-16', 'value': '1790.00'},
+        {'date': '2026-10-17', 'value': '1805.90'},
+      ],
+      'lowest': '1790.00',
+      'highest': '1805.90',
+      'observed_since': now.toIso8601String(),
+    });
+  }
 
   List<Json> foldersJson = [
     {'id': 'f1', 'name': 'Sammlung', 'sort_order': 0, 'created_at': '2026-10-17T00:00:00Z'},
