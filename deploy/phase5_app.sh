@@ -47,8 +47,11 @@ if ! BUILDKIT_PROGRESS=plain docker compose --profile build build app-builder > 
   tail -40 "${build_log}"
   fail "Build-Container fehlgeschlagen (Protokoll: ${build_log})."
 fi
-flutter_version="$(docker compose --profile build run --rm -T app-builder flutter --version 2>/dev/null | head -1)"
-echo "${flutter_version}"
+# Erst ganz lesen, dann die erste Zeile nehmen: „| head -1“ beendet die Pipe vorzeitig
+# (SIGPIPE) – mit pipefail bricht set -e das Skript dann ohne Meldung ab.
+flutter_version="$(docker compose --profile build run --rm -T app-builder flutter --version \
+  2>&1 || true)"
+echo "${flutter_version%%$'\n'*}"
 
 app_log="${OUT_DIR}/app_flutter_build.log"
 # Stand des Ordners app/ (Git-Baum): unverändert → Web-App nicht neu bauen.
