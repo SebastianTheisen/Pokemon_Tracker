@@ -19,7 +19,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from sqlalchemy import ColumnElement, Select, func, literal, or_, select
+from sqlalchemy import ColumnElement, Select, Subquery, func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Card, CardSet
@@ -188,6 +188,21 @@ async def _search_set_code(
     return []
 
 
+def _matches(terms: Sequence[str], *where: ColumnElement[bool]) -> Subquery:
+    """(Karten-ID, externe ID, Score) je Schreibweise – als ``UNION ALL`` statt einer
+    OR-Bedingung: so nutzt jede Schreibweise den Trigramm-Index (mit OR liest Postgres alle
+    Karten, Lasttest Phase 6)."""
+    branches = [
+        select(
+            Card.id.label("card_id"),
+            Card.external_id.label("external_id"),
+            _name_score(term).label("score"),
+        ).where(_name_condition(term), *where)
+        for term in terms
+    ]
+    return (branches[0] if len(branches) == 1 else union_all(*branches)).subquery()
+
+
 async def _hits_for_terms(
     session: AsyncSession,
     terms: Sequence[str],
@@ -196,16 +211,13 @@ async def _hits_for_terms(
     limit: int,
 ) -> list[SearchHit]:
     """Treffer für mehrere Schreibweisen (Name + Übersetzungen); Score = beste Schreibweise."""
-    scores = [_name_score(term) for term in terms]
-    score = scores[0] if len(scores) == 1 else func.greatest(*scores)
-    name_matches = or_(*(_name_condition(term) for term in terms))
-
     # 1) Beste Ähnlichkeit je TCGdex-ID (über alle Sprachen).
+    found = _matches(terms, Card.external_id.is_not(None), *filters)
+    best = func.max(found.c.score)
     matched = (
-        select(Card.external_id.label("external_id"), func.max(score).label("score"))
-        .where(name_matches, Card.external_id.is_not(None), *filters)
-        .group_by(Card.external_id)
-        .order_by(func.max(score).desc())
+        select(found.c.external_id.label("external_id"), best.label("score"))
+        .group_by(found.c.external_id)
+        .order_by(best.desc())
         .limit(limit)
         .subquery()
     )
@@ -217,15 +229,15 @@ async def _hits_for_terms(
     hits = [SearchHit(card=card, score=float(hit_score)) for card, hit_score in linked.unique()]
 
     # 2) Selbst angelegte Karten (ohne TCGdex-ID) direkt über ihren Namen.
-    own = await session.execute(
-        select(Card, score)
-        .where(
-            Card.external_id.is_(None),
-            name_matches,
-            *filters,
-            *result_language_filter,
-        )
+    own_found = _matches(terms, Card.external_id.is_(None), *filters, *result_language_filter)
+    own_best = (
+        select(own_found.c.card_id, func.max(own_found.c.score).label("score"))
+        .group_by(own_found.c.card_id)
         .limit(limit)
+        .subquery()
+    )
+    own = await session.execute(
+        select(Card, own_best.c.score).join(own_best, Card.id == own_best.c.card_id)
     )
     hits += [SearchHit(card=card, score=float(hit_score)) for card, hit_score in own.unique()]
     return hits

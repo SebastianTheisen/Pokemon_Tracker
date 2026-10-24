@@ -311,6 +311,7 @@ Ausgangslage (23.10.2026): Compose läuft, API nur auf `127.0.0.1:8000`, erreich
 - [x] Sicherheits-Header (nosniff, kein Einbetten, kein Referrer, Kamera nur für die App, HSTS)
 - [x] VPS 24.10. Sicherheits-Check: Kartenkiste nur über 127.0.0.1 + Tailscale erreichbar, Container ohne Root, .env 600, Header ✅, ohne Anmeldung 401. Weitere offene Ports gehören zu anderen Apps auf dem VPS (nicht angefasst)
 - [x] VPS 24.10. Lasttest: Sammlungswert 2.000 Karten 0,3 s ✅; Suche 10 parallel Median 1,4 s / max 3,8 s ❌ → Suche fasst alle Schreibweisen in einer Abfrage zusammen (statt bis zu 10)
+- [x] Ursache (Abfrageplan auf dem VPS + Profil lokal mit 85.000 Karten): ~1.900 reguläre Ausdrücke je Suche für die Übersetzungen (~0,3 s CPU) und OR über alle Schreibweisen → Postgres liest alle Karten. Behoben: Teilstring-Vorfilter, `UNION ALL` je Schreibweise (Index) – lokal 500 ms → 30 ms
 - [ ] VPS: Lasttest wiederholen (Ziel Suche Median < 0,5 s)
 - [x] Android-APK: vorerst nicht nötig (Entscheidung 24.10.; PWA reicht, APK-Build bleibt verfügbar)
 - [x] Anleitung für Freunde: [`docs/ANLEITUNG_FREUNDE.md`](docs/ANLEITUNG_FREUNDE.md)

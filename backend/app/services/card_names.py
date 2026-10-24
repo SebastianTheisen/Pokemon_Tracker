@@ -143,26 +143,39 @@ def translate_card_name(name: str, language: str, target: str = TARGET_LANGUAGE)
     return _SUFFIX.sub(r" \1", text)
 
 
+@cache
+def _western_names() -> tuple[tuple[str, re.Pattern[str], tuple[str, ...]], ...]:
+    """(deutscher/englischer Name, Wort-Muster, asiatische Namen) – einmal aufgebaut."""
+    entries = []
+    for names in _species().values():
+        locals_ = tuple(
+            names[language] for language in ("ja", "ko", "zh-tw", "zh-cn") if names.get(language)
+        )
+        for western in {names.get("de", ""), names.get("en", "")}:
+            key = western.casefold()
+            if len(key) >= 3 and locals_:  # noqa: PLR2004 – „Mew“ ja, Abkürzungen nein
+                entries.append((key, re.compile(rf"(?<![\w]){re.escape(key)}(?![\w])"), locals_))
+    return tuple(entries)
+
+
 def foreign_search_terms(term: str) -> list[str]:
     """Suchbegriff auf Deutsch/Englisch → dieselbe Suche mit asiatischen Pokémon-Namen.
 
     ``"pikachu ex"`` → ``["ピカチュウex", "피카츄ex", "皮卡丘ex"]`` – so findet die Suche auch
     Karten, deren Namen man nicht lesen kann.
+
+    Schnell genug für jede Suche: erst ein einfacher Teilstring-Test, das Wort-Muster nur bei
+    Kandidaten (früher ~1.900 reguläre Ausdrücke je Suche, ~0,3 s).
     """
     lowered = term.casefold()
     terms: list[str] = []
-    for names in _species().values():
-        for western in {names.get("de", ""), names.get("en", "")}:
-            key = western.casefold()
-            if len(key) < 3 or not re.search(rf"(?<![\w]){re.escape(key)}(?![\w])", lowered):  # noqa: PLR2004
-                continue
-            for language in ("ja", "ko", "zh-tw", "zh-cn"):
-                local = names.get(language)
-                if local:
-                    replaced = re.sub(re.escape(key), local, lowered)
-                    compact = replaced.replace(" ", "")
-                    if compact not in terms:
-                        terms.append(compact)
+    for key, pattern, locals_ in _western_names():
+        if key not in lowered or not pattern.search(lowered):
+            continue
+        for local in locals_:
+            compact = lowered.replace(key, local).replace(" ", "")
+            if compact not in terms:
+                terms.append(compact)
     return terms
 
 
