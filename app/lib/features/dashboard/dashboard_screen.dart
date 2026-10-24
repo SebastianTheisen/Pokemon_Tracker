@@ -26,12 +26,42 @@ final showcaseProvider = FutureProvider.autoDispose.family<List<CollectionItem>,
 /// Gewinner und Verlierer der letzten 7 Tage (eigene Rohkarten, Cardmarket-Trend).
 final moversProvider = FutureProvider.autoDispose<Movers>((ref) => ref.watch(apiProvider).movers());
 
+/// Kennzahlen eines Ordners (`null` = ganze Sammlung) – für den Kopf der Sammlung.
+final folderSummaryProvider = FutureProvider.autoDispose.family<CollectionSummary, String?>(
+  (ref, folderId) => ref.watch(apiProvider).dashboard(folderId: folderId),
+);
+
+/// Alle Ordner als Portfolios (Wert, Kaufpreise, Gewinn).
+final folderSummariesProvider = FutureProvider.autoDispose<List<FolderSummary>>(
+  (ref) => ref.watch(apiProvider).folderSummaries(),
+);
+
 /// Nach Änderungen an der Sammlung alle abhängigen Anzeigen neu laden.
 void invalidateCollection(WidgetRef ref) => ref
   ..invalidate(dashboardProvider)
+  ..invalidate(folderSummaryProvider)
+  ..invalidate(folderSummariesProvider)
   ..invalidate(collectionHistoryProvider)
   ..invalidate(showcaseProvider)
   ..invalidate(moversProvider);
+
+/// Farbe für Gewinn (grün), Verlust (rot) oder neutral.
+Color profitColor(String? amount, {Color neutral = AppColors.textMuted}) {
+  final value = parseAmount(amount) ?? 0;
+  return value > 0
+      ? AppColors.gain
+      : value < 0
+      ? AppColors.loss
+      : neutral;
+}
+
+/// „+50,00 € (+20,0 %)“ – Gewinn gegenüber dem Kaufpreis.
+String profitText(String profit, String? profitPercent) {
+  final pct = parseAmount(profitPercent);
+  return pct == null
+      ? signedMoney(profit)
+      : '${signedMoney(profit)} (${signedPercent(pct, isPercent: true)})';
+}
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -77,6 +107,8 @@ class DashboardScreen extends ConsumerWidget {
               if (summary.value case final data? when data.items == 0)
                 const _EmptyHint()
               else ...[
+                if (summary.value case final data? when data.hasProfit)
+                  _ProfitSection(summary: data),
                 const _MoversSection(),
                 const _Showcase(title: 'Wertvollste Karten', sort: 'value_desc'),
                 const _Showcase(title: 'Zuletzt hinzugefügt', sort: 'added_desc'),
@@ -148,6 +180,16 @@ class _ValueHero extends ConsumerWidget {
                 ),
               ],
             ),
+            if (summary.hasProfit)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'Investiert ${money(summary.invested)} · Gewinn '
+                  '${profitText(summary.profit, summary.profitPercent)}',
+                  key: const Key('hero-profit'),
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 13),
+                ),
+              ),
             ValueChart(
               height: 70,
               onDark: true,
@@ -308,6 +350,8 @@ class ItemThumb extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(money(item.value.totalValue), style: const TextStyle(fontWeight: FontWeight.w700)),
+            if (item.value.profit case final profit?)
+              Text(signedMoney(profit), style: TextStyle(color: profitColor(profit), fontSize: 12)),
             Text(
               item.title,
               maxLines: 1,
@@ -316,6 +360,76 @@ class ItemThumb extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// „Seit dem Kauf“: bester und schlechtester Kauf (nur Positionen mit Kaufpreis).
+class _ProfitSection extends StatelessWidget {
+  const _ProfitSection({required this.summary});
+
+  final CollectionSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = [?summary.bestProfit, ?summary.worstProfit];
+    return Column(
+      key: const Key('profit-section'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 20, bottom: 4),
+          child: Text(
+            'Seit dem Kauf',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
+        ),
+        Text(
+          '${summary.profitPositions} Positionen mit Kaufpreis: '
+          '${money(summary.profitCost)} bezahlt, heute '
+          '${profitText(summary.profit, summary.profitPercent)}',
+          style: const TextStyle(color: AppColors.textMuted),
+        ),
+        for (final item in entries) _ProfitTile(item: item),
+      ],
+    );
+  }
+}
+
+class _ProfitTile extends StatelessWidget {
+  const _ProfitTile({required this.item});
+
+  final CollectionItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = item.value;
+    final color = profitColor(value.profit);
+    final pct = value.profitPercent;
+    final card = item.card;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      onTap: card == null ? null : () => context.push('/card/${card.id}'),
+      leading: CardImage(url: item.image, width: 32, contain: card == null),
+      title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(
+        [
+          '${money(value.cost)} → ${money(value.totalValue)}',
+          if (item.quantity > 1) '${item.quantity}×',
+        ].join(' · '),
+      ),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            signedMoney(value.profit),
+            style: TextStyle(color: color, fontWeight: FontWeight.w700),
+          ),
+          if (pct != null) Text(signedPercent(pct), style: TextStyle(color: color, fontSize: 12)),
+        ],
       ),
     );
   }

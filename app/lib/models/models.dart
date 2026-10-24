@@ -726,6 +726,8 @@ class ItemValue {
     this.source,
     this.basis,
     this.change,
+    this.cost,
+    this.profit,
   });
 
   factory ItemValue.fromJson(Json json) => ItemValue(
@@ -735,6 +737,8 @@ class ItemValue {
     source: json.strOrNull('source'),
     basis: json.strOrNull('basis'),
     change: json.strOrNull('change'),
+    cost: json.strOrNull('cost'),
+    profit: json.strOrNull('profit'),
   );
 
   final String kind; // manual | external | estimated | none
@@ -743,6 +747,20 @@ class ItemValue {
   final String? source;
   final String? basis;
   final String? change;
+
+  /// Kaufpreis × Menge (falls angegeben).
+  final String? cost;
+
+  /// Wert minus Kaufpreis (gesamt) – nur mit Kaufpreis und Wert.
+  final String? profit;
+
+  /// Gewinn in Prozent des Kaufpreises.
+  double? get profitPercent {
+    final costValue = cost == null ? null : double.tryParse(cost!);
+    final profitValue = profit == null ? null : double.tryParse(profit!);
+    if (costValue == null || profitValue == null || costValue == 0) return null;
+    return profitValue / costValue;
+  }
 
   String get kindLabel => switch (kind) {
     'manual' => 'Eigenpreis',
@@ -860,6 +878,13 @@ class CollectionSummary {
     this.topItem,
     this.biggestGain,
     this.biggestLoss,
+    this.invested = '0.00',
+    this.profit = '0.00',
+    this.profitCost = '0.00',
+    this.profitPercent,
+    this.profitPositions = 0,
+    this.bestProfit,
+    this.worstProfit,
   });
 
   factory CollectionSummary.fromJson(Json json) {
@@ -880,6 +905,13 @@ class CollectionSummary {
       topItem: item('top_item'),
       biggestGain: item('biggest_gain'),
       biggestLoss: item('biggest_loss'),
+      invested: json.strOrNull('invested') ?? '0.00',
+      profit: json.strOrNull('profit') ?? '0.00',
+      profitCost: json.strOrNull('profit_cost') ?? '0.00',
+      profitPercent: json.strOrNull('profit_percent'),
+      profitPositions: json.intOrNull('profit_positions') ?? 0,
+      bestProfit: item('best_profit'),
+      worstProfit: item('worst_profit'),
     );
   }
 
@@ -897,6 +929,55 @@ class CollectionSummary {
   final CollectionItem? topItem;
   final CollectionItem? biggestGain;
   final CollectionItem? biggestLoss;
+
+  /// Summe aller Kaufpreise.
+  final String invested;
+
+  /// Wert minus Kaufpreis der Positionen mit Kaufpreis und Wert.
+  final String profit;
+  final String profitCost;
+
+  /// Gewinn in % (eine Nachkommastelle, z. B. "20.0").
+  final String? profitPercent;
+  final int profitPositions;
+  final CollectionItem? bestProfit;
+  final CollectionItem? worstProfit;
+
+  bool get hasProfit => profitPositions > 0;
+}
+
+/// Ein Ordner als Portfolio: Wert, Kaufpreise, Gewinn.
+class FolderSummary {
+  const FolderSummary({
+    required this.folder,
+    required this.totalValue,
+    required this.positions,
+    required this.items,
+    required this.invested,
+    required this.profit,
+    required this.profitPositions,
+    this.profitPercent,
+  });
+
+  factory FolderSummary.fromJson(Json json) => FolderSummary(
+    folder: Folder.fromJson(json.obj('folder')),
+    totalValue: json.str('total_value'),
+    positions: json.integer('positions'),
+    items: json.integer('items'),
+    invested: json.str('invested'),
+    profit: json.str('profit'),
+    profitPositions: json.integer('profit_positions'),
+    profitPercent: json.strOrNull('profit_percent'),
+  );
+
+  final Folder folder;
+  final String totalValue;
+  final int positions;
+  final int items;
+  final String invested;
+  final String profit;
+  final int profitPositions;
+  final String? profitPercent;
 }
 
 class ValuePoint {

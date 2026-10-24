@@ -6,6 +6,7 @@ import 'fakes.dart';
 
 void main() {
   moversTests();
+  profitTests();
   variantTests();
   psaTests();
 
@@ -389,5 +390,86 @@ void psaTests() {
       findsOneWidget,
     );
     expect(find.byKey(const Key('scan-psa-warning')), findsOneWidget);
+  });
+}
+
+void profitTests() {
+  testWidgets('Startseite: investiert, Gewinn in € und %, bester und schlechtester Kauf', (
+    tester,
+  ) async {
+    Json bought(String id, String total, String cost, String profit) {
+      final json = itemJson(id: id, total: total);
+      (json['value'] as Json)
+        ..['cost'] = cost
+        ..['profit'] = profit;
+      return json..['purchase_price'] = cost;
+    }
+
+    final api = FakeApi(loggedIn: true)
+      ..summaryOverride = {
+        ...summaryJson(top: itemJson()),
+        'invested': '275.00',
+        'profit': '50.00',
+        'profit_cost': '250.00',
+        'profit_percent': '20.0',
+        'profit_positions': 2,
+        'best_profit': bought('i2', '200.00', '120.00', '80.00'),
+        'worst_profit': bought('i3', '100.00', '130.00', '-30.00'),
+      };
+    await pumpApp(tester, api);
+
+    expect(find.text('Investiert 275,00\u00a0€ · Gewinn +50,00\u00a0€ (+20,0 %)'), findsOneWidget);
+    final section = find.byKey(const Key('profit-section'));
+    await tester.scrollUntilVisible(section, 200, scrollable: find.byType(Scrollable).first);
+    expect(find.text('Seit dem Kauf'), findsOneWidget);
+    expect(find.text('+80,00\u00a0€'), findsWidgets);
+    expect(find.text('+66,7 %'), findsOneWidget);
+    expect(find.text('−30,00\u00a0€'), findsWidgets);
+    expect(find.text('−23,1 %'), findsOneWidget);
+  });
+
+  testWidgets('ohne Kaufpreise keine Gewinnzeile', (tester) async {
+    await pumpApp(tester, FakeApi(loggedIn: true));
+    expect(find.byKey(const Key('hero-profit')), findsNothing);
+    expect(find.byKey(const Key('profit-section')), findsNothing);
+  });
+
+  testWidgets('Scan: nach dem Hinzufügen Kaufpreis eintragen → Gewinn', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('scan-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scan-camera')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scan-add')));
+    await tester.pumpAndSettle();
+
+    final field = find.byKey(const Key('scan-purchase'));
+    await tester.ensureVisible(field);
+    await tester.enterText(field, '1.500,00');
+    await tester.tap(find.byKey(const Key('scan-purchase-save')));
+    await tester.pumpAndSettle();
+
+    expect(api.calls, contains('updateItem:i1'));
+    expect(api.lastItemChanges, {'purchase_price': '1500.00'});
+    expect(find.text('Seit dem Kauf: +305,90\u00a0€'), findsOneWidget);
+  });
+
+  testWidgets('Scan: ungültiger Kaufpreis wird nicht gespeichert', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('scan-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scan-camera')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scan-add')));
+    await tester.pumpAndSettle();
+
+    final field = find.byKey(const Key('scan-purchase'));
+    await tester.ensureVisible(field);
+    await tester.enterText(field, 'viel');
+    await tester.tap(find.byKey(const Key('scan-purchase-save')));
+    await tester.pumpAndSettle();
+    expect(api.calls.where((c) => c.startsWith('updateItem')), isEmpty);
   });
 }

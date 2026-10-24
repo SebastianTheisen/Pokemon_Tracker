@@ -39,6 +39,16 @@ String dateTime(DateTime? value) => value == null ? '–' : _dateTime.format(val
 
 String percent(double value) => '${(value * 100).round()} %';
 
+/// Veränderung in Prozent mit Vorzeichen und einer Nachkommastelle: „+20,0 %“.
+/// [value] als Anteil (0.2) bzw. mit [isPercent] schon in Prozent („20.0“ vom Server).
+String signedPercent(double value, {bool isPercent = false}) {
+  final pct = isPercent ? value : value * 100;
+  final text = pct.abs().toStringAsFixed(1).replaceAll('.', ',');
+  if (pct > 0) return '+$text %';
+  if (pct < 0) return '−$text %';
+  return '$text %';
+}
+
 const languageLabels = {
   'de': 'Deutsch',
   'en': 'Englisch',

@@ -422,8 +422,13 @@ class Api {
 
   // ---------------------------------------------------------------- Sammlung
 
-  Future<CollectionSummary> dashboard() async =>
-      CollectionSummary.fromJson(await _get('/dashboard'));
+  /// Kennzahlen der ganzen Sammlung oder nur eines Ordners.
+  Future<CollectionSummary> dashboard({String? folderId}) async =>
+      CollectionSummary.fromJson(await _get('/dashboard', query: {'folder_id': folderId}));
+
+  /// Alle Ordner als Portfolios (Wert, Kaufpreise, Gewinn).
+  Future<List<FolderSummary>> folderSummaries() async =>
+      parseList(await _getList('/collection/folders'), FolderSummary.fromJson);
 
   /// Größte Gewinner und Verlierer der eigenen Rohkarten im Zeitraum (Cardmarket-Trend).
   Future<Movers> movers({int days = 7}) async =>

@@ -43,7 +43,9 @@ from app.services.valuation import CENT, ItemKind, ItemValue, item_kind, unit_va
 DEFAULT_FOLDER_NAME = "Sammlung"
 NOT_NULLABLE = ("folder_id", "variant", "condition", "quantity", "grade")
 VARIANTS = ("normal", "reverse")
-SortKey = Literal["added_desc", "added_asc", "value_desc", "name", "set_number"]
+SortKey = Literal[
+    "added_desc", "added_asc", "value_desc", "profit_desc", "profit_asc", "name", "set_number"
+]
 ZERO = Decimal("0.00")
 
 
@@ -117,6 +119,21 @@ class CollectionSummary:
     top_item: ValuedItem | None = None
     biggest_gain: ValuedItem | None = None
     biggest_loss: ValuedItem | None = None
+    invested: Decimal = ZERO
+    """Summe aller Kaufpreise (Kaufpreis je Stück × Menge)."""
+    profit_cost: Decimal = ZERO
+    """Kaufpreise der Positionen, die auch einen Wert haben (Basis für Gewinn in %)."""
+    profit: Decimal = ZERO
+    """Wert minus Kaufpreis – nur Positionen mit Kaufpreis und Wert."""
+    profit_positions: int = 0
+    best_profit: ValuedItem | None = None
+    worst_profit: ValuedItem | None = None
+
+
+@dataclass(frozen=True)
+class FolderSummary:
+    folder: Folder
+    summary: CollectionSummary
 
 
 @dataclass(frozen=True)
@@ -462,6 +479,12 @@ class CollectionService:
             "added_desc": (lambda v: v.item.created_at, True),
             "added_asc": (lambda v: v.item.created_at, False),
             "value_desc": (lambda v: v.value.total_value or Decimal(-1), True),
+            # Ohne Kaufpreis ans Ende – in beiden Richtungen.
+            "profit_desc": (lambda v: (v.value.profit is not None, v.value.profit or ZERO), True),
+            "profit_asc": (
+                lambda v: (v.value.profit is None, v.value.profit or ZERO),
+                False,
+            ),
             "name": (name_of, False),
             "set_number": (
                 lambda v: (
@@ -481,54 +504,19 @@ class CollectionService:
             self._session, self._owner.id, now=self._now(), days=days, limit=limit
         )
 
-    async def summary(self) -> CollectionSummary:
-        """Kennzahlen für Übersicht und Dashboard."""
-        summary = CollectionSummary()
-        valued = await self.valued_items()
-        set_ids: set[uuid.UUID] = set()
-        for entry in valued:
-            item, value = entry.item, entry.value
-            totals = summary.by_kind[entry.kind]
-            totals.positions += 1
-            totals.items += item.quantity
-            summary.positions += 1
-            summary.items += item.quantity
-            if item.card is not None:
-                summary.cards += item.quantity
-                set_ids.add(item.card.set_id)
-            if value.total_value is None:
-                summary.unvalued_positions += 1
-                continue
-            totals.value += value.total_value
-            summary.total_value += value.total_value
-            if value.kind == "estimated":
-                summary.estimated_value += value.total_value
-            if value.change is not None:
-                summary.change_since_added += value.change
-            if summary.top_item is None or (value.unit_value or ZERO) > (
-                summary.top_item.value.unit_value or ZERO
-            ):
-                summary.top_item = entry
-            if (
-                value.change is not None
-                and value.change > 0
-                and (
-                    summary.biggest_gain is None
-                    or value.change > (summary.biggest_gain.value.change or ZERO)
-                )
-            ):
-                summary.biggest_gain = entry
-            if (
-                value.change is not None
-                and value.change < 0
-                and (
-                    summary.biggest_loss is None
-                    or value.change < (summary.biggest_loss.value.change or ZERO)
-                )
-            ):
-                summary.biggest_loss = entry
-        summary.sets = len(set_ids)
-        return summary
+    async def summary(self, folder_id: uuid.UUID | None = None) -> CollectionSummary:
+        """Kennzahlen für Übersicht und Dashboard (optional nur eines Ordners)."""
+        if folder_id is not None:
+            await self._own_folder(folder_id)
+        return summarize(await self.valued_items(ItemFilter(folder_id=folder_id)))
+
+    async def folder_summaries(self) -> list[FolderSummary]:
+        """Jeder Ordner als eigenes Portfolio: Wert, Kaufpreise, Gewinn."""
+        folders = await self.list_folders()
+        grouped: dict[uuid.UUID, list[ValuedItem]] = {f.id: [] for f in folders}
+        for entry in await self.valued_items():
+            grouped.setdefault(entry.item.folder_id, []).append(entry)
+        return [FolderSummary(folder=f, summary=summarize(grouped[f.id])) for f in folders]
 
     async def sets_overview(self) -> list[SetOverview]:
         """Gruppierung nach Set mit Fortschritt („1 von 216 Karten“)."""
@@ -618,7 +606,7 @@ class CollectionService:
             [
                 "Ordner", "Art", "Name", "Set", "Nummer", "Sprache", "Variante", "Zustand",
                 "Grading", "Note", "Menge", "Kaufpreis (Stück)", "Kaufdatum", "Wert (Stück)",
-                "Wert (gesamt)", "Wertart", "Notiz", "Hinzugefügt",
+                "Wert (gesamt)", "Gewinn (gesamt)", "Wertart", "Notiz", "Hinzugefügt",
             ]
         )  # fmt: skip
         for entry in await self.valued_items():
@@ -714,6 +702,7 @@ def _export_row(entry: ValuedItem) -> list[object]:
         item.purchase_date.isoformat() if item.purchase_date else "",
         _decimal_de(value.unit_value),
         _decimal_de(value.total_value),
+        _decimal_de(value.profit),
         VALUE_KIND_LABELS[value.kind],
         item.note or "",
         item.created_at.date().isoformat(),
@@ -803,3 +792,56 @@ async def users_with_items(session: AsyncSession) -> Sequence[User]:
         )
     )
     return result.all()
+
+
+def _better(entry: ValuedItem, current: ValuedItem | None, metric: str, sign: int) -> bool:
+    """Ist ``entry`` beim Kennwert ``metric`` (change/profit) größer (sign=1) bzw. kleiner?"""
+    value = getattr(entry.value, metric)
+    if value is None or value * sign <= 0:
+        return False
+    return current is None or value * sign > (getattr(current.value, metric) or ZERO) * sign
+
+
+def summarize(valued: Sequence[ValuedItem]) -> CollectionSummary:
+    """Kennzahlen aus bewerteten Positionen (ganze Sammlung oder ein Ordner)."""
+    summary = CollectionSummary()
+    set_ids: set[uuid.UUID] = set()
+    for entry in valued:
+        item, value = entry.item, entry.value
+        totals = summary.by_kind[entry.kind]
+        totals.positions += 1
+        totals.items += item.quantity
+        summary.positions += 1
+        summary.items += item.quantity
+        if item.card is not None:
+            summary.cards += item.quantity
+            set_ids.add(item.card.set_id)
+        if value.cost is not None:
+            summary.invested += value.cost
+        if value.total_value is None:
+            summary.unvalued_positions += 1
+            continue
+        totals.value += value.total_value
+        summary.total_value += value.total_value
+        if value.kind == "estimated":
+            summary.estimated_value += value.total_value
+        if value.change is not None:
+            summary.change_since_added += value.change
+        if value.profit is not None and value.cost is not None:
+            summary.profit += value.profit
+            summary.profit_cost += value.cost
+            summary.profit_positions += 1
+        if summary.top_item is None or (value.unit_value or ZERO) > (
+            summary.top_item.value.unit_value or ZERO
+        ):
+            summary.top_item = entry
+        if _better(entry, summary.biggest_gain, "change", 1):
+            summary.biggest_gain = entry
+        if _better(entry, summary.biggest_loss, "change", -1):
+            summary.biggest_loss = entry
+        if _better(entry, summary.best_profit, "profit", 1):
+            summary.best_profit = entry
+        if _better(entry, summary.worst_profit, "profit", -1):
+            summary.worst_profit = entry
+    summary.sets = len(set_ids)
+    return summary

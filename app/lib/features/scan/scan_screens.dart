@@ -331,6 +331,15 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
                 TextButton(onPressed: _undo, child: const Text('Rückgängig')),
               ],
             ),
+            _PurchasePrice(
+              // neu aufbauen, wenn die Position im Formular geändert wurde
+              key: ValueKey('${added.id}-${added.purchasePrice}'),
+              item: added,
+              onSaved: (item) {
+                setState(() => _added = item);
+                invalidateCollection(ref);
+              },
+            ),
           ],
         ],
         if (_showAlternatives && added == null) ...[
@@ -358,6 +367,95 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Nach dem Hinzufügen: Kaufpreis gleich eintragen (optional) – Basis für Gewinn/Verlust.
+class _PurchasePrice extends ConsumerStatefulWidget {
+  const _PurchasePrice({required this.item, required this.onSaved, super.key});
+
+  final CollectionItem item;
+  final ValueChanged<CollectionItem> onSaved;
+
+  @override
+  ConsumerState<_PurchasePrice> createState() => _PurchasePriceState();
+}
+
+class _PurchasePriceState extends ConsumerState<_PurchasePrice> {
+  late final _controller = TextEditingController(
+    text: widget.item.purchasePrice?.replaceAll('.', ',') ?? '',
+  );
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final price = normalizeAmount(_controller.text);
+    if (price == null || double.tryParse(price) == null) {
+      showMessage(context, 'Kaufpreis bitte als Zahl eingeben, z. B. 12,50');
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() => _busy = true);
+    CollectionItem? updated;
+    final ok = await runAction(context, () async {
+      updated = await ref.read(apiProvider).updateItem(widget.item.id, {'purchase_price': price});
+    });
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok && updated != null) widget.onSaved(updated!);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profit = widget.item.value.profit;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  key: const Key('scan-purchase'),
+                  controller: _controller,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _save(),
+                  decoration: const InputDecoration(
+                    labelText: 'Bezahlt (optional, je Stück)',
+                    suffixText: '€',
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                key: const Key('scan-purchase-save'),
+                tooltip: 'Kaufpreis speichern',
+                onPressed: _busy ? null : _save,
+                icon: const Icon(Icons.check),
+              ),
+            ],
+          ),
+          if (profit != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'Seit dem Kauf: ${signedMoney(profit)}',
+                key: const Key('scan-profit'),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: profitColor(profit), fontWeight: FontWeight.w600),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

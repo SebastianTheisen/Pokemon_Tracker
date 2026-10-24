@@ -14,6 +14,7 @@ from app.schemas.collection import (
     CollectionHistoryOut,
     FolderCreate,
     FolderOut,
+    FolderSummaryOut,
     FolderUpdate,
     HistoryPointOut,
     ItemCreate,
@@ -134,14 +135,20 @@ async def movers(collection: Collection, days: Annotated[int, Query(ge=1, le=90)
 
 
 @router.get("/collection/summary")
-async def summary(collection: Collection) -> SummaryOut:
-    return SummaryOut.build(await collection.summary())
+async def summary(collection: Collection, folder_id: uuid.UUID | None = None) -> SummaryOut:
+    return SummaryOut.build(await collection.summary(folder_id))
 
 
 @router.get("/dashboard")
-async def dashboard(collection: Collection) -> SummaryOut:
-    """Kennzahlen für die Übersicht (Wert, Veränderung, Highlights)."""
-    return SummaryOut.build(await collection.summary())
+async def dashboard(collection: Collection, folder_id: uuid.UUID | None = None) -> SummaryOut:
+    """Kennzahlen für die Übersicht (Wert, Veränderung, Gewinn, Highlights) – optional je Ordner."""
+    return SummaryOut.build(await collection.summary(folder_id))
+
+
+@router.get("/collection/folders")
+async def folder_summaries(collection: Collection) -> list[FolderSummaryOut]:
+    """Alle Ordner als Portfolios mit Wert, Kaufpreisen und Gewinn."""
+    return [FolderSummaryOut.build(f) for f in await collection.folder_summaries()]
 
 
 @router.get("/collection/sets")

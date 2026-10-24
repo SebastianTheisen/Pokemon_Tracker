@@ -20,6 +20,7 @@ from app.schemas.catalog import CardOut, SetOut, SetSummary
 from app.services.collection import (
     CollectionSummary,
     EventMarker,
+    FolderSummary,
     HistoryEntry,
     KindTotals,
     SetOverview,
@@ -154,6 +155,10 @@ class ValueOut(BaseModel):
     source: str | None
     basis: str | None
     change: Decimal | None = Field(description="Veränderung seit dem Hinzufügen (gesamt).")
+    cost: Decimal | None = Field(default=None, description="Kaufpreis × Menge.")
+    profit: Decimal | None = Field(
+        default=None, description="Wert minus Kaufpreis (gesamt); nur mit Kaufpreis und Wert."
+    )
 
     @classmethod
     def build(cls, value: ItemValue) -> ValueOut:
@@ -223,6 +228,13 @@ class KindTotalsOut(BaseModel):
         return cls(**totals.__dict__)
 
 
+def profit_percent(summary: CollectionSummary) -> Decimal | None:
+    """Gewinn in % der Kaufpreise (nur Positionen mit Kaufpreis und Wert)."""
+    if not summary.profit_cost:
+        return None
+    return (summary.profit / summary.profit_cost * 100).quantize(Decimal("0.1"))
+
+
 class SummaryOut(BaseModel):
     total_value: Decimal
     estimated_value: Decimal = Field(description="Anteil des Gesamtwerts, der geschätzt ist.")
@@ -238,6 +250,13 @@ class SummaryOut(BaseModel):
     top_item: ItemOut | None
     biggest_gain: ItemOut | None
     biggest_loss: ItemOut | None
+    invested: Decimal = Field(description="Summe aller Kaufpreise.")
+    profit: Decimal = Field(description="Wert minus Kaufpreis der Positionen mit beidem.")
+    profit_cost: Decimal = Field(description="Kaufpreise dieser Positionen (Basis für %).")
+    profit_percent: Decimal | None = Field(description="Gewinn in % (eine Nachkommastelle).")
+    profit_positions: int
+    best_profit: ItemOut | None
+    worst_profit: ItemOut | None
 
     @classmethod
     def build(cls, summary: CollectionSummary) -> SummaryOut:
@@ -259,6 +278,42 @@ class SummaryOut(BaseModel):
             top_item=item(summary.top_item),
             biggest_gain=item(summary.biggest_gain),
             biggest_loss=item(summary.biggest_loss),
+            invested=summary.invested,
+            profit=summary.profit,
+            profit_cost=summary.profit_cost,
+            profit_percent=profit_percent(summary),
+            profit_positions=summary.profit_positions,
+            best_profit=item(summary.best_profit),
+            worst_profit=item(summary.worst_profit),
+        )
+
+
+class FolderSummaryOut(BaseModel):
+    """Ein Ordner als Portfolio."""
+
+    folder: FolderOut
+    total_value: Decimal
+    positions: int
+    items: int
+    invested: Decimal
+    profit: Decimal
+    profit_cost: Decimal
+    profit_percent: Decimal | None
+    profit_positions: int
+
+    @classmethod
+    def build(cls, entry: FolderSummary) -> FolderSummaryOut:
+        summary = entry.summary
+        return cls(
+            folder=FolderOut.model_validate(entry.folder),
+            total_value=summary.total_value,
+            positions=summary.positions,
+            items=summary.items,
+            invested=summary.invested,
+            profit=summary.profit,
+            profit_cost=summary.profit_cost,
+            profit_percent=profit_percent(summary),
+            profit_positions=summary.profit_positions,
         )
 
 

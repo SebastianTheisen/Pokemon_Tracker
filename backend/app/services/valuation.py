@@ -19,7 +19,7 @@ from __future__ import annotations
 import re
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Literal
 
@@ -55,6 +55,10 @@ class ItemValue:
     basis: str | None = None
     change: Decimal | None = None
     """Veränderung des Gesamtwerts seit dem Hinzufügen (Zukäufe zählen nicht mit)."""
+    cost: Decimal | None = None
+    """Kaufpreis gesamt (Kaufpreis je Stück × Menge), wenn angegeben."""
+    profit: Decimal | None = None
+    """Gewinn bzw. Verlust gegenüber dem Kaufpreis (gesamt), wenn Kaufpreis und Wert bekannt."""
 
     @property
     def has_value(self) -> bool:
@@ -121,8 +125,13 @@ def value_item(
         prices.get(item.card_id) if item.card_id else None,
         (sealed or {}).get(item.product_id) if item.product_id else None,
     )
+    cost = (
+        (item.purchase_price * item.quantity).quantize(CENT)
+        if item.purchase_price is not None
+        else None
+    )
     if single.unit_value is None:
-        return single
+        return replace(single, cost=cost)
     total = (single.unit_value * item.quantity).quantize(CENT)
     change = (
         ((single.unit_value - item.value_at_add) * item.quantity).quantize(CENT)
@@ -136,6 +145,8 @@ def value_item(
         source=single.source,
         basis=single.basis,
         change=change,
+        cost=cost,
+        profit=total - cost if cost is not None else None,
     )
 
 

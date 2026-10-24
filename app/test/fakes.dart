@@ -221,9 +221,33 @@ class FakeApi extends Api {
     loggedIn = false;
   }
 
+  Json? summaryOverride;
+
   @override
-  Future<CollectionSummary> dashboard() async =>
-      CollectionSummary.fromJson(summaryJson(top: itemJson()));
+  Future<CollectionSummary> dashboard({String? folderId}) async {
+    calls.add('dashboard:$folderId');
+    return CollectionSummary.fromJson(summaryOverride ?? summaryJson(top: itemJson()));
+  }
+
+  @override
+  Future<List<FolderSummary>> folderSummaries() async => [
+    FolderSummary.fromJson({
+      'folder': {
+        'id': 'f1',
+        'name': 'Sammlung',
+        'sort_order': 0,
+        'created_at': '2026-10-17T00:00:00Z',
+      },
+      'total_value': '4894.67',
+      'positions': 4,
+      'items': 5,
+      'invested': '200.00',
+      'profit': '55.00',
+      'profit_cost': '200.00',
+      'profit_percent': '27.5',
+      'profit_positions': 1,
+    }),
+  ];
 
   Json moversJson = {'days': 7, 'gainers': <Json>[], 'losers': <Json>[]};
 
@@ -468,6 +492,24 @@ class FakeApi extends Api {
     calls.add('addItem');
     lastItemBody = body;
     return CollectionItem.fromJson(itemJson());
+  }
+
+  Map<String, Object?>? lastItemChanges;
+
+  @override
+  Future<CollectionItem> updateItem(String id, Map<String, Object?> changes) async {
+    calls.add('updateItem:$id');
+    lastItemChanges = changes;
+    final price = changes['purchase_price'] as String?;
+    final json = itemJson()..['purchase_price'] = price;
+    if (price != null) {
+      final total = double.parse(itemJson()['value']['total_value'] as String);
+      final cost = double.parse(price);
+      (json['value'] as Json)
+        ..['cost'] = cost.toStringAsFixed(2)
+        ..['profit'] = (total - cost).toStringAsFixed(2);
+    }
+    return CollectionItem.fromJson(json);
   }
 
   @override

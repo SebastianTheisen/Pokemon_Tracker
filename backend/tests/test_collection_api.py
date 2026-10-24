@@ -150,6 +150,84 @@ async def test_buying_more_does_not_count_as_gain(
 # --------------------------------------------------------- Positionen & Ordner
 
 
+async def test_profit_against_purchase_price_per_item_folder_and_total(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    cards: tuple[Card, Card],
+    price_provider: FakeProvider,
+) -> None:
+    """Gewinn = Wert − Kaufpreis × Menge; nur Positionen mit Kaufpreis und Wert zählen."""
+    alice = await register_user("alice@example.com")
+    price_provider.quotes = [cardmarket("trend", "100")]  # NM 100 € je Karte
+    binder = (
+        await client.post(f"{API}/folders", json={"name": "Binder"}, headers=alice.headers)
+    ).json()
+    winner = await _add(
+        client, alice, card_id=str(cards[0].id), quantity=2, purchase_price="60"
+    )  # 200 − 120 = +80
+    loser = await _add(
+        client, alice, card_id=str(cards[1].id), purchase_price="130", folder_id=binder["id"]
+    )  # 100 − 130 = −30
+    await _add(client, alice, card_id=str(cards[1].id))  # ohne Kaufpreis
+    tin = await _product(client, alice, "tin", "Tin")
+    await _add(client, alice, product_id=tin, purchase_price="25")  # Kaufpreis, aber kein Wert
+
+    assert winner["value"]["cost"] == "120.00"
+    assert winner["value"]["profit"] == "80.00"
+    assert loser["value"]["profit"] == "-30.00"
+
+    summary = (await client.get(f"{API}/dashboard", headers=alice.headers)).json()
+    assert summary["invested"] == "275.00"  # 120 + 130 + 25
+    assert summary["profit_cost"] == "250.00"  # ohne Tin (kein Wert)
+    assert summary["profit"] == "50.00"
+    assert summary["profit_percent"] == "20.0"
+    assert summary["profit_positions"] == 2
+    assert summary["best_profit"]["id"] == winner["id"]
+    assert summary["worst_profit"]["id"] == loser["id"]
+
+    in_binder = (
+        await client.get(
+            f"{API}/dashboard", params={"folder_id": binder["id"]}, headers=alice.headers
+        )
+    ).json()
+    assert (in_binder["total_value"], in_binder["profit"]) == ("100.00", "-30.00")
+    assert in_binder["best_profit"] is None
+
+    folders = (await client.get(f"{API}/collection/folders", headers=alice.headers)).json()
+    assert [
+        (f["folder"]["name"], f["total_value"], f["invested"], f["profit"], f["profit_percent"])
+        for f in folders
+    ] == [
+        ("Sammlung", "300.00", "145.00", "80.00", "66.7"),
+        ("Binder", "100.00", "130.00", "-30.00", "-23.1"),
+    ]
+
+    by_profit = (
+        await client.get(
+            f"{API}/collection/items", params={"sort": "profit_desc"}, headers=alice.headers
+        )
+    ).json()
+    assert [i["value"]["profit"] for i in by_profit["items"]] == ["80.00", "-30.00", None, None]
+    worst_first = (
+        await client.get(
+            f"{API}/collection/items", params={"sort": "profit_asc"}, headers=alice.headers
+        )
+    ).json()
+    assert [i["value"]["profit"] for i in worst_first["items"]][:2] == ["-30.00", "80.00"]
+
+
+async def test_folder_summary_of_foreign_folder_is_not_found(
+    client: AsyncClient, register_user: RegisterUser
+) -> None:
+    alice = await register_user("alice@example.com")
+    bob = await register_user("bob@example.com")
+    folder_id = (await client.get(f"{API}/folders", headers=alice.headers)).json()[0]["id"]
+    response = await client.get(
+        f"{API}/dashboard", params={"folder_id": folder_id}, headers=bob.headers
+    )
+    assert response.status_code == 404
+
+
 async def test_item_crud_and_custom_price(
     client: AsyncClient,
     register_user: RegisterUser,
@@ -174,6 +252,7 @@ async def test_item_crud_and_custom_price(
     assert changed.json()["value"] == {
         "kind": "manual", "unit_value": "250.00", "total_value": "250.00",
         "source": "manual", "basis": None, "change": "150.00",
+        "cost": "80.00", "profit": "170.00",
     }  # fmt: skip
 
     cleared = await client.patch(
@@ -287,7 +366,7 @@ async def test_list_filter_sort_sets_and_export(
     assert export.headers["content-type"] == "text/csv; charset=utf-8"
     assert export.text.startswith("﻿Ordner;Art;Name;")
     assert (
-        "Sammlung;Karte;Nachtara VMAX;Drachenwandel;215;de;normal;NM;;;3;;;10,50;31,50;Schätzung;"
+        "Sammlung;Karte;Nachtara VMAX;Drachenwandel;215;de;normal;NM;;;3;;;10,50;31,50;;Schätzung;"
         in export.text
     )
     assert ";Versiegelt;Tin;" in export.text

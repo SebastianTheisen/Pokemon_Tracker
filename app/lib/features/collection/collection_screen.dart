@@ -25,6 +25,8 @@ final collectionSetsProvider = FutureProvider.autoDispose<List<SetOverview>>(
 
 const sortLabels = {
   'value_desc': 'Höchster Wert',
+  'profit_desc': 'Höchster Gewinn',
+  'profit_asc': 'Größter Verlust',
   'added_desc': 'Neueste zuerst',
   'added_asc': 'Älteste zuerst',
   'name': 'Name A–Z',
@@ -53,7 +55,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final summary = ref.watch(dashboardProvider);
+    final summary = ref.watch(folderSummaryProvider(_filter.folderId));
     final items = ref.watch(itemsProvider(_filter));
     final folders = ref.watch(foldersProvider).value ?? const <Folder>[];
     return Scaffold(
@@ -267,42 +269,53 @@ class _SummaryHeader extends StatelessWidget {
     final change = parseAmount(summary.changeSinceAdded) ?? 0;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Wert und Veränderung brechen um statt über den Rand zu laufen (schmale Handys).
-          Expanded(
-            child: Wrap(
-              spacing: 10,
-              crossAxisAlignment: WrapCrossAlignment.end,
-              children: [
-                Text(
-                  money(summary.totalValue),
-                  style: Theme.of(context).textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                if (change != 0)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      signedMoney(summary.changeSinceAdded),
-                      style: TextStyle(color: change > 0 ? AppColors.gain : AppColors.loss),
-                    ),
-                  ),
-              ],
+          _valueRow(context, change),
+          if (summary.hasProfit)
+            Text(
+              'Investiert ${money(summary.invested)} · Gewinn '
+              '${profitText(summary.profit, summary.profitPercent)}',
+              key: const Key('collection-profit'),
+              style: TextStyle(color: profitColor(summary.profit), fontSize: 13),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text(
-              '${summary.items} Karten',
-              style: const TextStyle(color: AppColors.textMuted),
-            ),
-          ),
         ],
       ),
     );
   }
+
+  Widget _valueRow(BuildContext context, double change) => Row(
+    crossAxisAlignment: CrossAxisAlignment.end,
+    children: [
+      // Wert und Veränderung brechen um statt über den Rand zu laufen (schmale Handys).
+      Expanded(
+        child: Wrap(
+          spacing: 10,
+          crossAxisAlignment: WrapCrossAlignment.end,
+          children: [
+            Text(
+              money(summary.totalValue),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            if (change != 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  signedMoney(summary.changeSinceAdded),
+                  style: TextStyle(color: change > 0 ? AppColors.gain : AppColors.loss),
+                ),
+              ),
+          ],
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Text('${summary.items} Karten', style: const TextStyle(color: AppColors.textMuted)),
+      ),
+    ],
+  );
 }
 
 class _ItemTile extends ConsumerWidget {
@@ -453,6 +466,10 @@ class _FolderManager extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final folders = ref.watch(foldersProvider);
+    final summaries = {
+      for (final entry in ref.watch(folderSummariesProvider).value ?? const <FolderSummary>[])
+        entry.folder.id: entry,
+    };
     final api = ref.read(apiProvider);
     Future<String?> askName(String title, [String initial = '']) =>
         showTextInput(context, title: title, initial: initial);
@@ -468,6 +485,22 @@ class _FolderManager extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.folder),
                 title: Text(folder.name),
+                subtitle: switch (summaries[folder.id]) {
+                  final entry? => Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(text: '${entry.items} Stück · ${money(entry.totalValue)}'),
+                        if (entry.profitPositions > 0)
+                          TextSpan(
+                            text: ' · ${profitText(entry.profit, entry.profitPercent)}',
+                            style: TextStyle(color: profitColor(entry.profit)),
+                          ),
+                      ],
+                    ),
+                    key: Key('folder-summary-${folder.id}'),
+                  ),
+                  null => null,
+                },
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

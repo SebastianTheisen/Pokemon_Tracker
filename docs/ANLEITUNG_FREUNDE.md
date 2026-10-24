@@ -55,6 +55,9 @@ Danach startet Kartenkiste wie eine normale App, auch die Kamera funktioniert.
 * **Versiegeltes** (Booster, Displays, Top-Trainer-Boxen): unter **Sammlung → „Versiegelt“**,
   Suche auch auf Deutsch („Top-Trainer-Box Prismatische Entwicklungen“).
 * **Merkliste:** Herz-Symbol auf einer Karte.
+* **Gewinn/Verlust:** Trag den Kaufpreis ein (direkt nach dem Scan oder über „Bearbeiten“). Dann
+  zeigt die App, was du bezahlt hast und wie viel du heute im Plus oder Minus bist – gesamt, je
+  Ordner und je Karte. Sortieren nach „Höchster Gewinn“ / „Größter Verlust“ geht auch.
 
 Deine Sammlung sieht nur du (und der Admin zur Hilfe). Gespeichert werden keine Fotos, nur
 die Merkmale zum Wiedererkennen.
