@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Header, Query, status
 from pydantic import BaseModel, Field
 
 from app.api.deps import CurrentUser, PriceServiceDep, SessionDep, SettingsDep
-from app.models import AlertDirection
+from app.models import AlertDirection, UserSettings
 from app.providers.pricing import Condition
 from app.schemas.catalog import CardOut
 from app.schemas.collection import ProductOut
@@ -98,6 +98,16 @@ class PushSubscriptionIn(BaseModel):
 class PushConfigOut(BaseModel):
     public_key: str | None = Field(description="VAPID-Schlüssel; null = Push nicht eingerichtet")
     devices: int = Field(description="Angemeldete Geräte dieses Nutzers")
+    weekly_summary: bool = Field(default=True, description="Sonntags „Deine Woche“")
+
+
+class PushPreferences(BaseModel):
+    weekly_summary: bool
+
+
+async def _weekly_summary(session: SessionDep, user: CurrentUser) -> bool:
+    settings = await session.get(UserSettings, user.id)
+    return settings.weekly_summary if settings is not None else True
 
 
 class PushTestOut(BaseModel):
@@ -138,7 +148,27 @@ async def push_config(
     session: SessionDep, user: CurrentUser, settings: SettingsDep
 ) -> PushConfigOut:
     return PushConfigOut(
-        public_key=push.public_key(settings), devices=await push.device_count(session, user)
+        public_key=push.public_key(settings),
+        devices=await push.device_count(session, user),
+        weekly_summary=await _weekly_summary(session, user),
+    )
+
+
+@router.patch("/push/preferences")
+async def push_preferences(
+    body: PushPreferences, session: SessionDep, user: CurrentUser, settings: SettingsDep
+) -> PushConfigOut:
+    """Wochenrückblick an/aus."""
+    stored = await session.get(UserSettings, user.id)
+    if stored is None:
+        stored = UserSettings(user_id=user.id, condition_factors={}, language_factors={})
+        session.add(stored)
+    stored.weekly_summary = body.weekly_summary
+    await session.flush()
+    return PushConfigOut(
+        public_key=push.public_key(settings),
+        devices=await push.device_count(session, user),
+        weekly_summary=stored.weekly_summary,
     )
 
 

@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,6 +28,10 @@ class UserSettings(TimestampMixin, Base):
     # z. B. deutsche Karten günstiger gehandelt werden. Nur Abweichungen von 1,00.
     language_factors: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     default_language: Mapped[str | None] = mapped_column(String(8))
+    weekly_summary: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=true(), nullable=False
+    )
+    """Sonntags eine Mitteilung „Deine Woche“ (nur mit eingeschalteten Mitteilungen)."""
     # Karte, für die der Nutzer zuletzt „Preis holen“ geöffnet hat: Das Lesezeichen kennt
     # die Karte nicht mehr, wenn man auf Cardmarket/eBay weiterklickt (Sprungmarke weg).
     price_target_card_id: Mapped[uuid.UUID | None] = mapped_column(

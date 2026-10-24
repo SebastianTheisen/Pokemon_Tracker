@@ -1728,13 +1728,19 @@ class PriceAlert {
 
 /// Benachrichtigungen auf dem Server: Schlüssel (null = nicht eingerichtet) und Geräte.
 class PushConfig {
-  const PushConfig({required this.devices, this.publicKey});
+  const PushConfig({required this.devices, this.publicKey, this.weeklySummary = true});
 
-  factory PushConfig.fromJson(Json json) =>
-      PushConfig(publicKey: json.strOrNull('public_key'), devices: json.integer('devices'));
+  factory PushConfig.fromJson(Json json) => PushConfig(
+    publicKey: json.strOrNull('public_key'),
+    devices: json.integer('devices'),
+    weeklySummary: json['weekly_summary'] != false,
+  );
 
   final String? publicKey;
   final int devices;
+
+  /// Sonntags „Deine Woche“ als Mitteilung.
+  final bool weeklySummary;
 }
 
 /// Freund mit freigegebenen Ordnern.

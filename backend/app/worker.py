@@ -54,6 +54,7 @@ from app.services.price_health import SourceHealth
 from app.services.pricing import PriceService, tracked_card_ids
 from app.services.scan import prune_reference_files, purge_scan_logs
 from app.services.sealed_images import refresh_sealed_images
+from app.services.weekly import is_summary_day, send_weekly_summaries
 
 log = structlog.get_logger(__name__)
 
@@ -320,6 +321,11 @@ async def run_forever(settings: Settings) -> None:
                         await refresh_tracked_prices(session_factory, settings, providers, health)
                     except Exception:
                         log.exception("worker.refresh_failed")  # nächste Runde versucht es erneut
+                    if is_summary_day(datetime.now(UTC), settings.timezone):
+                        try:
+                            await send_weekly_summaries(session_factory, settings)
+                        except Exception:
+                            log.exception("worker.weekly_failed")
                     try:
                         await scanner_housekeeping(session_factory, settings)
                     except Exception:

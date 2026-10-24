@@ -1,15 +1,16 @@
-// Mehr: Profil, Einstellungen (Zustandsfaktoren, Standardsprache), Sitzungen,
-// Passwort, Admin-Bereich, Abmelden.
+// Mehr: Profil und Gruppen – Sammlung, Freunde, Hilfe, Konto, Admin.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/config.dart';
+import '../../core/download/download.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
+import '../alerts/alerts_screen.dart';
 import '../reports/reports.dart';
 import '../auth/auth_screens.dart';
 
@@ -27,109 +28,171 @@ class MoreScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(sessionProvider).value;
+    final isAdmin = user?.isAdmin ?? false;
+    final alerts = ref.watch(alertsProvider).value ?? const <PriceAlert>[];
+    final activeAlerts = alerts.where((a) => a.active).length;
+    final firedAlerts = alerts.where((a) => !a.active && a.triggeredAt != null).length;
+    final openReports = isAdmin
+        ? (ref.watch(adminReportsProvider).value ?? const <MissingReport>[])
+              .where((r) => !r.done)
+              .length
+        : 0;
     return Scaffold(
       appBar: AppBar(title: const Text('Mehr')),
       body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
-          if (user != null)
-            ListTile(
-              leading: CircleAvatar(
-                backgroundColor: AppColors.accent,
-                child: Text(user.displayName.isEmpty ? '?' : user.displayName[0].toUpperCase()),
+          if (user != null) _ProfileCard(user: user, onEdit: () => _editName(context, ref, user)),
+          _Group(
+            title: 'Sammlung',
+            children: [
+              _Entry(
+                key: const Key('more-sets'),
+                icon: Icons.layers_outlined,
+                title: 'Sets & Fortschritt',
+                subtitle: 'Was fehlt dir? Auch als Master-Set mit Reverse Holo',
+                onTap: () => context.push('/sets'),
               ),
-              title: Text(user.displayName),
-              subtitle: Text(user.email),
-              trailing: user.isAdmin ? const Tag('Admin', color: AppColors.accent) : null,
-              onTap: () => _editName(context, ref, user),
+              _Entry(
+                key: const Key('more-alerts'),
+                icon: Icons.notifications_outlined,
+                title: 'Preisalarme',
+                subtitle: activeAlerts == 0 && firedAlerts == 0
+                    ? 'Mitteilung, wenn eine Karte deinen Zielpreis erreicht'
+                    : [
+                        if (activeAlerts > 0) '$activeAlerts aktiv',
+                        if (firedAlerts > 0) '$firedAlerts ausgelöst',
+                      ].join(' · '),
+                badge: firedAlerts,
+                onTap: () => context.push('/alerts'),
+              ),
+              _Entry(
+                key: const Key('more-export'),
+                icon: Icons.download_outlined,
+                title: 'Sammlung exportieren',
+                subtitle: 'Als CSV-Datei, z. B. für Excel',
+                onTap: () => _export(context, ref),
+              ),
+            ],
+          ),
+          _Group(
+            title: 'Freunde',
+            children: [
+              _Entry(
+                key: const Key('more-friends'),
+                icon: Icons.people_outline,
+                title: 'Freunde',
+                subtitle: 'Sammlungen ansehen, die Freunde freigegeben haben',
+                onTap: () => context.push('/friends'),
+              ),
+              _Entry(
+                key: const Key('more-trade'),
+                icon: Icons.swap_horiz,
+                title: 'Tausch-Rechner',
+                subtitle: 'Ist ein Tausch fair? Wert von Geben und Bekommen',
+                onTap: () => context.push('/trade'),
+              ),
+            ],
+          ),
+          _Group(
+            title: 'Hilfe',
+            children: [
+              _Entry(
+                key: const Key('more-help'),
+                icon: Icons.help_outline,
+                title: 'So funktioniert’s',
+                subtitle: 'Kurzanleitung zu allen Funktionen',
+                onTap: () => context.push('/help'),
+              ),
+              _Entry(
+                key: const Key('more-report'),
+                icon: Icons.flag_outlined,
+                title: 'Etwas fehlt oder ist falsch?',
+                subtitle: 'Karte, Produkt oder Daten an den Admin melden',
+                onTap: () => showReportDialog(context, ref),
+              ),
+            ],
+          ),
+          _Group(
+            title: 'Konto',
+            children: [
+              _Entry(
+                icon: Icons.tune,
+                title: 'Preis-Einstellungen',
+                subtitle: 'Zustandsfaktoren, Sprachfaktoren, Standardsprache',
+                onTap: () => context.push('/settings'),
+              ),
+              _Entry(
+                icon: Icons.lock_outline,
+                title: 'Passwort ändern',
+                onTap: () => _changePassword(context, ref),
+              ),
+              _Entry(
+                icon: Icons.devices,
+                title: 'Angemeldete Geräte',
+                subtitle: 'Wo du angemeldet bist – einzeln abmelden',
+                onTap: () => context.push('/sessions'),
+              ),
+              _Entry(
+                icon: Icons.logout,
+                color: AppColors.loss,
+                title: 'Abmelden',
+                onTap: () => ref.read(sessionProvider.notifier).logout(),
+              ),
+            ],
+          ),
+          if (isAdmin)
+            _Group(
+              title: 'Admin',
+              children: [
+                _Entry(
+                  key: const Key('more-admin-reports'),
+                  icon: Icons.inbox_outlined,
+                  title: 'Meldungen',
+                  subtitle: openReports == 0 ? 'Keine offenen Meldungen' : '$openReports offen',
+                  badge: openReports,
+                  onTap: () => context.push('/admin/reports'),
+                ),
+                _Entry(
+                  icon: Icons.manage_accounts_outlined,
+                  title: 'Nutzer',
+                  subtitle: 'Rollen, sperren, Passwort-Reset-Code',
+                  onTap: () => context.push('/admin/users'),
+                ),
+                _Entry(
+                  icon: Icons.mail_outline,
+                  title: 'Einladungen',
+                  subtitle: 'Einladungscode für neue Freunde',
+                  onTap: () => context.push('/admin/invites'),
+                ),
+              ],
             ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.tune),
-            title: const Text('Einstellungen'),
-            subtitle: const Text('Zustandsfaktoren, Standardsprache'),
-            onTap: () => context.push('/settings'),
-          ),
-          ListTile(
-            key: const Key('more-friends'),
-            leading: const Icon(Icons.people_outline),
-            title: const Text('Freunde'),
-            subtitle: const Text('Freigegebene Sammlungen ansehen'),
-            onTap: () => context.push('/friends'),
-          ),
-          ListTile(
-            key: const Key('more-trade'),
-            leading: const Icon(Icons.swap_horiz),
-            title: const Text('Tausch-Rechner'),
-            subtitle: const Text('Wert von Geben und Bekommen vergleichen'),
-            onTap: () => context.push('/trade'),
-          ),
-          ListTile(
-            key: const Key('more-report'),
-            leading: const Icon(Icons.flag_outlined),
-            title: const Text('Etwas fehlt oder ist falsch?'),
-            subtitle: const Text('Karte, Produkt oder Daten an den Admin melden'),
-            onTap: () => showReportDialog(context, ref),
-          ),
-          ListTile(
-            key: const Key('more-alerts'),
-            leading: const Icon(Icons.notifications_outlined),
-            title: const Text('Preisalarme'),
-            subtitle: const Text('Zielpreise und Mitteilungen aufs Handy'),
-            onTap: () => context.push('/alerts'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.layers_outlined),
-            title: const Text('Sets in meiner Sammlung'),
-            onTap: () => context.push('/sets'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.lock_outline),
-            title: const Text('Passwort ändern'),
-            onTap: () => _changePassword(context, ref),
-          ),
-          ListTile(
-            leading: const Icon(Icons.devices),
-            title: const Text('Angemeldete Geräte'),
-            onTap: () => context.push('/sessions'),
-          ),
-          if (user?.isAdmin ?? false) ...[
-            const SectionTitle('Admin'),
-            ListTile(
-              leading: const Icon(Icons.people_outline),
-              title: const Text('Nutzer'),
-              onTap: () => context.push('/admin/users'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.mail_outline),
-              title: const Text('Einladungen'),
-              onTap: () => context.push('/admin/invites'),
-            ),
-            ListTile(
-              key: const Key('more-admin-reports'),
-              leading: const Icon(Icons.inbox_outlined),
-              title: const Text('Meldungen'),
-              subtitle: const Text('Was Freunde vermissen oder als falsch melden'),
-              onTap: () => context.push('/admin/reports'),
-            ),
-          ],
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.logout, color: AppColors.loss),
-            title: const Text('Abmelden'),
-            onTap: () => ref.read(sessionProvider.notifier).logout(),
-          ),
           const Padding(
-            padding: EdgeInsets.all(16),
+            padding: EdgeInsets.fromLTRB(4, 16, 4, 0),
             child: Text(
               '$appName · privat, nur für Freunde.\n'
               'Hinweis: Admins können Sammlungen lesend einsehen; jeder Zugriff wird protokolliert.\n'
               'Kartenbilder und -namen gehören den Rechteinhabern (The Pokémon Company). '
-              'Preise: TCGdex (Cardmarket, TCGplayer).',
+              'Preise: Cardmarket, PriceCharting, TCGdex.',
               style: TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _export(BuildContext context, WidgetRef ref) async {
+    String? csv;
+    final ok = await runAction(context, () async => csv = await ref.read(apiProvider).exportCsv());
+    if (!ok || !context.mounted) return;
+    final stamp = DateTime.now().toIso8601String().substring(0, 10);
+    final saved = saveTextFile('kartenkiste-$stamp.csv', csv!, mime: 'text/csv;charset=utf-8');
+    showMessage(
+      context,
+      saved
+          ? 'Export erstellt (kartenkiste-$stamp.csv).'
+          : 'Export ist nur in der Web-App möglich.',
     );
   }
 
@@ -417,4 +480,125 @@ class SessionsScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _ProfileCard extends StatelessWidget {
+  const _ProfileCard({required this.user, required this.onEdit});
+
+  final User user;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      leading: CircleAvatar(
+        radius: 24,
+        backgroundColor: AppColors.accent,
+        child: Text(
+          user.displayName.isEmpty ? '?' : user.displayName[0].toUpperCase(),
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+      ),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              user.displayName,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+            ),
+          ),
+          if (user.isAdmin) ...[
+            const SizedBox(width: 8),
+            const Tag('Admin', color: AppColors.accent),
+          ],
+        ],
+      ),
+      subtitle: Text(user.email),
+      trailing: IconButton(
+        tooltip: 'Anzeigenamen ändern',
+        onPressed: onEdit,
+        icon: const Icon(Icons.edit_outlined),
+      ),
+    ),
+  );
+}
+
+/// Gruppe mit Überschrift – Einträge in einer Karte, durch Linien getrennt.
+class _Group extends StatelessWidget {
+  const _Group({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(4, 20, 4, 6),
+        child: Text(
+          title.toUpperCase(),
+          style: const TextStyle(
+            color: AppColors.textMuted,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+          ),
+        ),
+      ),
+      Card(
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) const Divider(height: 1, indent: 56),
+              children[i],
+            ],
+          ],
+        ),
+      ),
+    ],
+  );
+}
+
+class _Entry extends StatelessWidget {
+  const _Entry({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.subtitle,
+    this.badge = 0,
+    this.color,
+    super.key,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final VoidCallback onTap;
+
+  /// Zahl im roten Punkt (z. B. ausgelöste Alarme); 0 = keiner.
+  final int badge;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    onTap: onTap,
+    leading: Badge(
+      isLabelVisible: badge > 0,
+      label: Text('$badge'),
+      child: Icon(icon, color: color ?? AppColors.primary),
+    ),
+    title: Text(
+      title,
+      style: TextStyle(color: color, fontWeight: FontWeight.w600),
+    ),
+    subtitle: subtitle == null
+        ? null
+        : Text(subtitle!, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+    trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
+  );
 }

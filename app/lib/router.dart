@@ -14,6 +14,7 @@ import 'features/cardmarket/cardmarket_import.dart';
 import 'features/cardmarket/ebay_import.dart';
 import 'features/collection/collection_screen.dart';
 import 'features/friends/friends_screens.dart';
+import 'features/more/help_screen.dart';
 import 'features/reports/reports.dart';
 import 'features/sets/sets_screens.dart';
 import 'features/trade/trade_screen.dart';
@@ -129,6 +130,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) => ShowcaseScreen(userId: state.pathParameters['id']!),
       ),
       GoRoute(path: '/trade', builder: (_, _) => const TradeScreen()),
+      GoRoute(path: '/help', builder: (_, _) => const HelpScreen()),
       GoRoute(path: '/sealed/add', builder: (_, _) => const SealedAddScreen()),
       GoRoute(path: '/admin/users', builder: (_, _) => const AdminUsersScreen()),
       GoRoute(path: '/admin/invites', builder: (_, _) => const AdminInvitesScreen()),

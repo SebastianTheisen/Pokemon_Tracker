@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
 import '../../widgets/value_chart.dart';
+import '../alerts/alerts_screen.dart';
 import '../collection/owned.dart';
 
 final dashboardProvider = FutureProvider.autoDispose<CollectionSummary>(
@@ -106,6 +107,9 @@ class DashboardScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
               _ScanCallToAction(onTap: () => context.push('/scan')),
+              const SizedBox(height: 12),
+              const _QuickActions(),
+              const _TodayCard(),
               if (summary.value case final data? when data.items == 0)
                 const _EmptyHint()
               else ...[
@@ -257,6 +261,133 @@ class _ScanCallToAction extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// Schnellzugriffe unter dem Scan-Knopf (wie Collectr): die häufigsten Wege mit einem Tipp.
+class _QuickActions extends StatelessWidget {
+  const _QuickActions();
+
+  static const _actions = [
+    (key: 'quick-search', icon: Icons.search, label: 'Suchen', path: '/search'),
+    (
+      key: 'quick-sealed',
+      icon: Icons.inventory_2_outlined,
+      label: 'Versiegelt',
+      path: '/sealed/add',
+    ),
+    (key: 'quick-sets', icon: Icons.layers_outlined, label: 'Sets', path: '/sets'),
+    (key: 'quick-trade', icon: Icons.swap_horiz, label: 'Tausch', path: '/trade'),
+  ];
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      for (final (index, action) in _actions.indexed) ...[
+        if (index > 0) const SizedBox(width: 8),
+        Expanded(
+          child: Material(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            child: InkWell(
+              key: Key(action.key),
+              borderRadius: BorderRadius.circular(16),
+              // Suchen ist ein Reiter (go), der Rest liegt darüber (push, mit Zurück).
+              onTap: () =>
+                  action.path == '/search' ? context.go(action.path) : context.push(action.path),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Column(
+                  children: [
+                    Icon(action.icon, color: AppColors.primary),
+                    const SizedBox(height: 4),
+                    Text(
+                      action.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    ],
+  );
+}
+
+/// „Heute“: Veränderung seit dem letzten Tageswert und frisch ausgelöste Preisalarme.
+/// Erscheint nur, wenn es etwas zu sagen gibt.
+class _TodayCard extends ConsumerWidget {
+  const _TodayCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final points = ref.watch(collectionHistoryProvider).value?.points ?? const <ValuePoint>[];
+    final alerts = ref.watch(alertsProvider).value ?? const <PriceAlert>[];
+    final since = DateTime.now().subtract(const Duration(days: 3));
+    final fired = [
+      for (final alert in alerts)
+        if (!alert.active && (alert.triggeredAt?.isAfter(since) ?? false)) alert,
+    ];
+    final change = points.length < 2
+        ? null
+        : (parseAmount(points.last.totalValue) ?? 0) -
+              (parseAmount(points[points.length - 2].totalValue) ?? 0);
+    if ((change == null || change.abs() < 0.01) && fired.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Card(
+        key: const Key('today-card'),
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Heute', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              if (change != null && change.abs() >= 0.01)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        const TextSpan(text: 'Seit gestern '),
+                        TextSpan(
+                          text: signedMoney(change.toStringAsFixed(2)),
+                          style: TextStyle(
+                            color: change > 0 ? AppColors.gain : AppColors.loss,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    key: const Key('today-change'),
+                  ),
+                ),
+              for (final alert in fired.take(3))
+                ListTile(
+                  key: Key('today-alert-${alert.id}'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  onTap: () => context.push('/alerts'),
+                  leading: const Icon(Icons.notifications_active, color: AppColors.warning),
+                  title: Text(alert.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(
+                    'Preisalarm: ${money(alert.triggeredValue)} – '
+                    '${alert.above ? 'über' : 'unter'} deinem Ziel ${money(alert.target)}',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _EmptyHint extends StatelessWidget {

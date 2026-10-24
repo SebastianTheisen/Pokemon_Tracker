@@ -257,7 +257,15 @@ class FakeApi extends Api {
 
   @override
   Future<CollectionHistory> collectionHistory({int days = 90, String? folderId}) async =>
-      CollectionHistory.fromJson({'points': <Json>[], 'markers': <Json>[]});
+      CollectionHistory.fromJson({'points': historyPoints, 'markers': <Json>[]});
+
+  List<Json> historyPoints = [];
+
+  @override
+  Future<String> exportCsv() async {
+    calls.add('export');
+    return 'Ordner;Art;Name\n';
+  }
 
   @override
   Future<List<SearchHit>> search(String query, {String? language, int limit = 30}) async {
@@ -799,9 +807,18 @@ class FakeApi extends Api {
   @override
   Future<void> deleteAlert(String id) async => calls.add('deleteAlert:$id');
 
+  bool weeklySummary = true;
+
   @override
   Future<PushConfig> pushConfig() async =>
-      PushConfig(publicKey: pushPublicKey, devices: pushDevices);
+      PushConfig(publicKey: pushPublicKey, devices: pushDevices, weeklySummary: weeklySummary);
+
+  @override
+  Future<PushConfig> setWeeklySummary({required bool enabled}) async {
+    calls.add('weekly:$enabled');
+    weeklySummary = enabled;
+    return pushConfig();
+  }
 
   @override
   Future<void> pushSubscribe(Map<String, Object?> subscription) async {

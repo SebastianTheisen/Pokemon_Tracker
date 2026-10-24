@@ -635,6 +635,11 @@ class Api {
   Future<void> pushUnsubscribe(String endpoint) =>
       _send('DELETE', '/push/subscriptions', query: {'endpoint': endpoint});
 
+  /// Wochenrückblick (sonntags „Deine Woche“) an/aus.
+  Future<PushConfig> setWeeklySummary({required bool enabled}) async => PushConfig.fromJson(
+    (await _send('PATCH', '/push/preferences', body: {'weekly_summary': enabled}))! as Json,
+  );
+
   /// Probe-Nachricht an alle eigenen Geräte → Anzahl erfolgreicher Zustellungen.
   Future<int> pushTest() async =>
       (((await _send('POST', '/push/test'))! as Json)['sent'] as num).toInt();

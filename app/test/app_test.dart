@@ -16,6 +16,7 @@ void main() {
   ownedTests();
   cardPageTests();
   reportTests();
+  usabilityTests();
   variantTests();
   psaTests();
 
@@ -1029,5 +1030,84 @@ void reportTests() {
     await tester.tap(find.byKey(const Key('report-r1')));
     await tester.pumpAndSettle();
     expect(api.calls, contains('reportDone:r1:true'));
+  });
+}
+
+void usabilityTests() {
+  Json point(String day, String value, {bool live = false}) => {
+    'date': day,
+    'total_value': value,
+    'estimated_value': '0.00',
+    'is_live': live,
+  };
+
+  testWidgets('Startseite „Heute“: seit gestern und frisch ausgelöster Preisalarm', (tester) async {
+    final today = DateTime.now().toIso8601String();
+    final api = FakeApi(loggedIn: true)
+      ..historyPoints = [point('2026-10-23', '4850.00'), point('2026-10-24', '4894.67', live: true)]
+      ..alertsJson = [alertJson(active: false, triggeredAt: today)];
+    await pumpApp(tester, api);
+    expect(find.text('Heute'), findsOneWidget);
+    expect(find.textContaining('+44,67'), findsOneWidget);
+    expect(find.textContaining('Preisalarm: 1.490,00'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('today-alert-a1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Preisalarme'), findsWidgets);
+  });
+
+  testWidgets('Startseite ohne Neuigkeiten: keine „Heute“-Kachel; Schnellzugriff Sets', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    expect(find.byKey(const Key('today-card')), findsNothing);
+    await tester.tap(find.byKey(const Key('quick-sets')));
+    await tester.pumpAndSettle();
+    expect(find.text('Sets'), findsWidgets);
+    expect(find.textContaining('2 / 4 Karten'), findsOneWidget);
+  });
+
+  testWidgets('Mehr: Gruppen, Zähler ausgelöster Alarme, Hilfe, Export', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..alertsJson = [
+        alertJson(),
+        alertJson(id: 'a2', active: false, triggeredAt: '2026-10-24T12:30:00Z'),
+      ];
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('tab-Mehr')));
+    await tester.pumpAndSettle();
+    for (final group in ['SAMMLUNG', 'FREUNDE']) {
+      expect(find.text(group), findsOneWidget);
+    }
+    expect(find.text('1 aktiv · 1 ausgelöst'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('more-export')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('export'));
+    expect(find.text('Export ist nur in der Web-App möglich.'), findsOneWidget); // Testumgebung
+
+    await tester.scrollUntilVisible(find.text('KONTO'), 100);
+    await tester.ensureVisible(find.byKey(const Key('more-help')));
+    await tester.pumpAndSettle();
+    expect(find.text('HILFE'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('more-help')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Preisalarme'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Glocke'), findsOneWidget);
+  });
+
+  testWidgets('Preisalarme: Wochenrückblick abschalten', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    final push = FakePushBridge(state: PushStatus.granted)
+      ..subscribedEndpoint = 'https://web.push.apple.com/abc';
+    await pumpApp(tester, api, push: push);
+    await tester.tap(find.byKey(const Key('tab-Mehr')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('more-alerts')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('push-weekly')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('weekly:false'));
   });
 }

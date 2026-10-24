@@ -88,6 +88,9 @@ Danach startet Kartenkiste wie eine normale App, auch die Kamera funktioniert.
 Deine Sammlung sieht nur du (und der Admin zur Hilfe). Gespeichert werden keine Fotos, nur
 die Merkmale zum Wiedererkennen.
 
+Alles Weitere steht in der App unter **Mehr → So funktioniert’s**. Sonntags kommt (mit
+eingeschalteten Mitteilungen) ein kurzer **Wochenrückblick** – abschaltbar unter Preisalarme.
+
 Probleme? Screenshot an mich, mit einem Satz, was du erwartet hast.
 
 ---

@@ -241,6 +241,23 @@ class _PushCardState extends ConsumerState<_PushCard> {
                     ],
                   ],
                 ),
+                if (data.subscribed)
+                  SwitchListTile(
+                    key: const Key('push-weekly'),
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Wochenrückblick'),
+                    subtitle: const Text('Sonntags: Wert deiner Sammlung und Top-Gewinner'),
+                    value: data.config.weeklySummary,
+                    onChanged: _busy
+                        ? null
+                        : (enabled) => _run(() async {
+                            await runAction(
+                              context,
+                              () => ref.read(apiProvider).setWeeklySummary(enabled: enabled),
+                            );
+                            ref.invalidate(pushStateProvider);
+                          }),
+                  ),
                 if (data.config.devices > 0)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
