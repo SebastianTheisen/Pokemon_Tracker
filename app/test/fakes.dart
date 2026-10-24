@@ -288,8 +288,12 @@ class FakeApi extends Api {
   String? cardIllustrator;
 
   @override
-  Future<CardInfo> card(String id) async =>
-      CardInfo.fromJson(cardJson(id: id, variants: cardVariants, illustrator: cardIllustrator));
+  Future<CardInfo> card(String id) async {
+    calls.add('card:$id');
+    return CardInfo.fromJson(
+      cardJson(id: id, variants: cardVariants, illustrator: cardIllustrator),
+    );
+  }
 
   @override
   Future<CardPrices> prices(String cardId) async => CardPrices.fromJson(pricesJson);
@@ -736,14 +740,19 @@ class FakeApi extends Api {
       'master_owned': 3,
       'missing_set_value': '5.00',
       'missing_value': '7.50',
-      'cards': [
-        progressCard('k1', '1', normal: 1, reverse: 1),
-        progressCard('k2', '2', normal: 2),
-        progressCard('k3', '3', wished: true),
-        progressCard('k4', '4', hasReverse: false),
-      ],
+      'cards':
+          setCardsOverride ??
+          [
+            progressCard('k1', '1', normal: 1, reverse: 1),
+            progressCard('k2', '2', normal: 2),
+            progressCard('k3', '3', wished: true),
+            progressCard('k4', '4', hasReverse: false),
+          ],
     });
   }
+
+  /// Karten der Set-Seite (Standard: k1…k4).
+  List<Json>? setCardsOverride;
 
   @override
   Future<SetAnalytics> setAnalytics(String setId) async {

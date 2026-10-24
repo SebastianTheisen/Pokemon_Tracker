@@ -1381,4 +1381,39 @@ void usabilityTests() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('item-save')), findsOneWidget); // Bearbeiten-Formular offen
   });
+
+  testWidgets('Kartenseite: Vollbild mit Zoom/Holo, Blättern im Set per Pfeil und Wischen', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true)
+      ..setCardsOverride = [
+        FakeApi.progressCard('k1', '1'),
+        FakeApi.progressCard('c1', '215'),
+        FakeApi.progressCard('k3', '216'),
+      ];
+    await pumpApp(tester, api);
+    final topCard = find.text('Nachtara VMAX').first;
+    await tester.ensureVisible(topCard);
+    await tester.pumpAndSettle();
+    await tester.tap(topCard);
+    await tester.pumpAndSettle();
+    expect(find.text('2/3'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('card-image')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('viewer-card')), findsOneWidget);
+    expect(find.byKey(const Key('viewer-tilt')), findsOneWidget);
+    await tester.drag(find.byKey(const Key('viewer-card')), const Offset(80, 0)); // Glanz folgt
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton).last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('card-next')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('card:k3'));
+
+    await tester.fling(find.byType(ListView).first, const Offset(400, 0), 1500); // zurück
+    await tester.pumpAndSettle();
+    expect(api.calls.where((c) => c == 'card:c1').length, greaterThanOrEqualTo(1));
+  });
 }

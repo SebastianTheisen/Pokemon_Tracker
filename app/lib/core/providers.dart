@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
 import 'api.dart';
 import 'config.dart';
+import 'device/device.dart';
 import 'push/push_bridge.dart';
 import 'token_store.dart';
 
@@ -11,6 +12,9 @@ final tokenStoreProvider = Provider<TokenStore>((ref) => SecureTokenStore());
 
 /// Benachrichtigungen dieses Geräts (Web-Push); in Tests ersetzbar.
 final pushBridgeProvider = Provider<PushBridge>((ref) => createPushBridge());
+
+/// Neigung, Teilen, Installieren (Web); in Tests ersetzbar.
+final deviceProvider = Provider<DeviceBridge>((ref) => createDeviceBridge());
 
 final apiProvider = Provider<Api>(
   (ref) => Api(baseUrl: apiBaseUrl(), tokens: ref.watch(tokenStoreProvider)),
