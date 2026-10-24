@@ -560,6 +560,10 @@ class Api {
   Future<SetProgress> setProgress(String setId) async =>
       SetProgress.fromJson(await _get('/collection/sets/$setId'));
 
+  /// Set-Analyse aus dem Cardmarket-Preisführer (Wert, Veränderung, Stabilität, Bewegungen).
+  Future<SetAnalytics> setAnalytics(String setId) async =>
+      SetAnalytics.fromJson(await _get('/collection/sets/$setId/analytics'));
+
   /// Mehrere Karten auf die Merkliste → Anzahl neu gemerkter.
   Future<int> addManyToWishlist(List<String> cardIds) async =>
       (((await _send('POST', '/wishlist/bulk', body: {'card_ids': cardIds}))! as Json)['count']
@@ -634,6 +638,28 @@ class Api {
   /// Probe-Nachricht an alle eigenen Geräte → Anzahl erfolgreicher Zustellungen.
   Future<int> pushTest() async =>
       (((await _send('POST', '/push/test'))! as Json)['sent'] as num).toInt();
+
+  // ------------------------------------------------------------- Meldungen
+
+  Future<MissingReport> createReport({
+    required String kind,
+    required String text,
+    String? context,
+  }) async => MissingReport.fromJson(
+    (await _send('POST', '/reports', body: {'kind': kind, 'text': text, 'context': ?context}))!
+        as Json,
+  );
+
+  Future<List<MissingReport>> myReports() async =>
+      parseList(await _getList('/reports/mine'), MissingReport.fromJson);
+
+  Future<List<MissingReport>> adminReports() async =>
+      parseList(await _getList('/admin/reports'), MissingReport.fromJson);
+
+  Future<MissingReport> setReportDone(String id, {required bool done}) async =>
+      MissingReport.fromJson(
+        (await _send('PATCH', '/admin/reports/$id', body: {'done': done}))! as Json,
+      );
 
   Future<void> addToWishlist({String? cardId, String? productId}) =>
       _send('POST', '/wishlist', body: {'card_id': ?cardId, 'product_id': ?productId});

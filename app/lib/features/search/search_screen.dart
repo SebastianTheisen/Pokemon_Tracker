@@ -12,6 +12,7 @@ import '../../models/models.dart';
 import '../../widgets/common.dart';
 import '../collection/item_sheet.dart';
 import '../collection/owned.dart';
+import '../reports/reports.dart';
 import '../dashboard/dashboard_screen.dart';
 
 typedef SearchQuery = ({String text, String? language});
@@ -108,10 +109,27 @@ class _CardSearchState extends ConsumerState<CardSearch> {
                       ? EmptyView(
                           icon: Icons.search_off,
                           message: 'Keine Treffer.',
-                          action: OutlinedButton.icon(
-                            onPressed: () => _createCard(context),
-                            icon: const Icon(Icons.add),
-                            label: const Text('Fehlende Karte anlegen'),
+                          action: Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 8,
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: () => _createCard(context),
+                                icon: const Icon(Icons.add),
+                                label: const Text('Fehlende Karte anlegen'),
+                              ),
+                              TextButton.icon(
+                                key: const Key('search-report'),
+                                onPressed: () => showReportDialog(
+                                  context,
+                                  ref,
+                                  text: _query.text.trim(),
+                                  reportContext: 'Suche: ${_query.text.trim()}',
+                                ),
+                                icon: const Icon(Icons.flag_outlined),
+                                label: const Text('Dem Admin melden'),
+                              ),
+                            ],
                           ),
                         )
                       : Consumer(

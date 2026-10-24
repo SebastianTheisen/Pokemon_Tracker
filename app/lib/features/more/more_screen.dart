@@ -10,6 +10,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
+import '../reports/reports.dart';
 import '../auth/auth_screens.dart';
 
 final userSettingsProvider = FutureProvider.autoDispose<UserSettings>(
@@ -63,6 +64,13 @@ class MoreScreen extends ConsumerWidget {
             onTap: () => context.push('/trade'),
           ),
           ListTile(
+            key: const Key('more-report'),
+            leading: const Icon(Icons.flag_outlined),
+            title: const Text('Etwas fehlt oder ist falsch?'),
+            subtitle: const Text('Karte, Produkt oder Daten an den Admin melden'),
+            onTap: () => showReportDialog(context, ref),
+          ),
+          ListTile(
             key: const Key('more-alerts'),
             leading: const Icon(Icons.notifications_outlined),
             title: const Text('Preisalarme'),
@@ -95,6 +103,13 @@ class MoreScreen extends ConsumerWidget {
               leading: const Icon(Icons.mail_outline),
               title: const Text('Einladungen'),
               onTap: () => context.push('/admin/invites'),
+            ),
+            ListTile(
+              key: const Key('more-admin-reports'),
+              leading: const Icon(Icons.inbox_outlined),
+              title: const Text('Meldungen'),
+              subtitle: const Text('Was Freunde vermissen oder als falsch melden'),
+              onTap: () => context.push('/admin/reports'),
             ),
           ],
           const Divider(),

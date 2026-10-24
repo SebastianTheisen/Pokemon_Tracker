@@ -59,6 +59,10 @@ Danach startet Kartenkiste wie eine normale App, auch die Kamera funktioniert.
 * **Versiegeltes** (Booster, Displays, Top-Trainer-Boxen): unter **Sammlung → „Versiegelt“**,
   Suche auch auf Deutsch („Top-Trainer-Box Prismatische Entwicklungen“).
 * **Merkliste:** Herz-Symbol auf einer Karte.
+* **Etwas fehlt oder ist falsch?** In der Suche („Dem Admin melden“), bei Versiegeltem, auf der
+  Kartenseite oder unter Mehr melden – ich bekomme sofort eine Mitteilung.
+* **Set-Analyse:** Auf der Set-Seite oben das Diagramm-Symbol – Setwert, Entwicklung, größte
+  Gewinner/Verlierer und die wertvollsten Karten des Sets.
 * **Schon da?** In der Suche, auf der Kartenseite und nach dem Scan steht grün, wie oft du die
   Karte schon hast und in welchem Ordner. Den **Ordner fürs Hinzufügen** wählst du über
   „Ordner: … ▾“ – die App merkt sich die Wahl, bis du sie schließt.
@@ -98,4 +102,5 @@ Probleme? Screenshot an mich, mit einem Satz, was du erwartet hast.
 3. **Android-App bauen** (nach Änderungen an der App):
    `bash deploy/phase5_app.sh --apk` → Download unter `…/kartenkiste.apk`.
 4. **Mitteilungen (Preisalarme) einrichten:** einmalig `bash deploy/phase7_push.sh` auf dem VPS.
-5. **Passwort vergessen:** Mehr → Nutzer → ⋮ bei der Person → **„Passwort-Reset-Code“** und weitergeben.
+5. **Meldungen:** Mehr → Meldungen (Mitteilung kommt per Push, wenn eingeschaltet).
+6. **Passwort vergessen:** Mehr → Nutzer → ⋮ bei der Person → **„Passwort-Reset-Code“** und weitergeben.

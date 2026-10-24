@@ -14,6 +14,7 @@ import 'features/cardmarket/cardmarket_import.dart';
 import 'features/cardmarket/ebay_import.dart';
 import 'features/collection/collection_screen.dart';
 import 'features/friends/friends_screens.dart';
+import 'features/reports/reports.dart';
 import 'features/sets/sets_screens.dart';
 import 'features/trade/trade_screen.dart';
 import 'features/collection/sealed_screen.dart';
@@ -117,6 +118,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/sets/:id',
         builder: (_, state) => SetDetailScreen(setId: state.pathParameters['id']!),
       ),
+      GoRoute(
+        path: '/sets/:id/analytics',
+        builder: (_, state) => SetAnalyticsScreen(setId: state.pathParameters['id']!),
+      ),
       GoRoute(path: '/alerts', builder: (_, _) => const AlertsScreen()),
       GoRoute(path: '/friends', builder: (_, _) => const FriendsScreen()),
       GoRoute(
@@ -127,6 +132,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/sealed/add', builder: (_, _) => const SealedAddScreen()),
       GoRoute(path: '/admin/users', builder: (_, _) => const AdminUsersScreen()),
       GoRoute(path: '/admin/invites', builder: (_, _) => const AdminInvitesScreen()),
+      GoRoute(path: '/admin/reports', builder: (_, _) => const AdminReportsScreen()),
       GoRoute(
         path: '/admin/users/:id',
         builder: (_, state) => AdminUserCollectionScreen(

@@ -515,6 +515,42 @@ class FakeApi extends Api {
 
   Map<String, Object?>? lastItemChanges;
 
+  // -------------------------------------------------------------- Meldungen
+
+  Map<String, Object?>? lastReport;
+
+  static Json reportJson({bool done = false}) => {
+    'id': 'r1',
+    'kind': 'sealed',
+    'text': 'ETB fehlt',
+    'context': 'etb',
+    'created_at': '2026-10-24T17:00:00Z',
+    'done_at': done ? '2026-10-24T18:00:00Z' : null,
+    'reporter': 'Max',
+  };
+
+  @override
+  Future<MissingReport> createReport({
+    required String kind,
+    required String text,
+    String? context,
+  }) async {
+    lastReport = {'kind': kind, 'text': text, 'context': context};
+    return MissingReport.fromJson(reportJson());
+  }
+
+  @override
+  Future<List<MissingReport>> myReports() async => [];
+
+  @override
+  Future<List<MissingReport>> adminReports() async => [MissingReport.fromJson(reportJson())];
+
+  @override
+  Future<MissingReport> setReportDone(String id, {required bool done}) async {
+    calls.add('reportDone:$id:$done');
+    return MissingReport.fromJson(reportJson(done: done));
+  }
+
   // ------------------------------------------------------------------ Sets
 
   static Json setJson() => {
@@ -685,6 +721,29 @@ class FakeApi extends Api {
         progressCard('k3', '3', wished: true),
         progressCard('k4', '4', hasReverse: false),
       ],
+    });
+  }
+
+  @override
+  Future<SetAnalytics> setAnalytics(String setId) async {
+    Json market(String id, String number, String trend, String avg30, double change) => {
+      'card': cardJson(id: id, number: number, name: 'Karte $number'),
+      'trend': trend,
+      'avg30': avg30,
+      'change': change,
+    };
+    return SetAnalytics.fromJson({
+      'card_set': setJson(),
+      'cards_total': 5,
+      'cards_priced': 4,
+      'set_value': '165.50',
+      'master_value': '185.50',
+      'change': 0.0331,
+      'volatility': 0.08,
+      'stability': 'normal',
+      'gainers': [market('k1', '1', '110.00', '100.00', 0.1)],
+      'losers': [market('k2', '2', '45.00', '50.00', -0.1)],
+      'top_cards': [market('k1', '1', '110.00', '100.00', 0.1)],
     });
   }
 

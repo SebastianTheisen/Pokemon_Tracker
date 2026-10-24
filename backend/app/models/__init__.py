@@ -26,6 +26,7 @@ from app.models.pricing import (
     PricePoint,
     PsaCertRecord,
 )
+from app.models.reports import MissingReport, ReportKind
 from app.models.scanner import CardReferenceImage, ScanLog, ScanMode
 from app.models.settings import UserSettings
 from app.models.trades import Trade
@@ -55,6 +56,7 @@ __all__ = [
     "ImageProbe",
     "ImageSource",
     "InviteCode",
+    "MissingReport",
     "OfficialCard",
     "PasswordResetToken",
     "PortfolioSnapshot",
@@ -67,6 +69,7 @@ __all__ = [
     "PsaCertRecord",
     "PushSubscription",
     "RefreshToken",
+    "ReportKind",
     "Role",
     "ScanLog",
     "ScanMode",

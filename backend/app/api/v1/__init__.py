@@ -13,6 +13,7 @@ from app.api.v1 import (
     health,
     me,
     pricing,
+    reports,
     scan,
 )
 
@@ -28,3 +29,4 @@ api_router.include_router(contributions.router)
 api_router.include_router(scan.router)
 api_router.include_router(alerts.router)
 api_router.include_router(friends.router)
+api_router.include_router(reports.router)

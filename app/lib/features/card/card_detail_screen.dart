@@ -2,6 +2,7 @@
 // Quellen mit Datum und Link, Preisverlauf, eBay, Sammlung/Merkliste.
 import '../alerts/alerts_screen.dart';
 import '../collection/owned.dart';
+import '../reports/reports.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -346,6 +347,19 @@ class _CardBodyState extends ConsumerState<_CardBody> {
               onPressed: () => openEbaySold(context, ref, card),
               icon: const Icon(Icons.sell_outlined),
               label: const Text('Verkaufte Angebote bei eBay'),
+            ),
+          ),
+          Center(
+            child: TextButton.icon(
+              key: const Key('card-report'),
+              onPressed: () => showReportDialog(
+                context,
+                ref,
+                kind: 'wrong',
+                reportContext: 'Karte ${card.id} (${card.displayName} · ${card.subtitle})',
+              ),
+              icon: const Icon(Icons.flag_outlined, size: 18),
+              label: const Text('Bild, Name oder Preis falsch? Melden'),
             ),
           ),
         ],

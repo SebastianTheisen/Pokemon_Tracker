@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import uuid
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.deps import CurrentUser, PriceServiceDep, SessionDep
 from app.core.config import CatalogLanguage
 from app.providers.pricing import Condition
-from app.schemas.catalog import CardOut
+from app.schemas.catalog import CardOut, SetOut
 from app.schemas.collection import (
     CollectionHistoryOut,
     FolderCreate,
@@ -38,6 +38,7 @@ from app.schemas.collection import (
 )
 from app.services.collection import CollectionService, ItemFilter, ItemInput, SortKey
 from app.services.errors import InvalidInputError
+from app.services.set_analytics import CardMarket, SetAnalytics, set_analytics
 from app.services.set_progress import SetProgressService
 from app.services.valuation import ItemKind
 
@@ -222,6 +223,57 @@ async def sets_overview(collection: Collection, progress: SetProgressDep) -> lis
     overview = await collection.sets_overview()
     counts = await progress.counts([o.card_set.id for o in overview])
     return [SetOverviewOut.build(o, counts.get(o.card_set.id)) for o in overview]
+
+
+class MarketCardOut(BaseModel):
+    card: CardOut
+    trend: Decimal
+    avg30: Decimal | None
+    change: float | None = Field(description="Trend gegenüber Ø 30 Tage (0.12 = +12 %)")
+
+
+class SetAnalyticsOut(BaseModel):
+    card_set: SetOut
+    cards_total: int
+    cards_priced: int
+    set_value: Decimal
+    master_value: Decimal
+    change: float | None
+    volatility: float | None
+    stability: Literal["ruhig", "normal", "bewegt"] | None
+    gainers: list[MarketCardOut]
+    losers: list[MarketCardOut]
+    top_cards: list[MarketCardOut]
+
+    @classmethod
+    def build(cls, analytics: SetAnalytics) -> SetAnalyticsOut:
+        def card(entry: CardMarket) -> MarketCardOut:
+            return MarketCardOut(
+                card=CardOut.model_validate(entry.card),
+                trend=Decimal(str(entry.trend)).quantize(Decimal("0.01")),
+                avg30=Decimal(str(entry.avg30)).quantize(Decimal("0.01")) if entry.avg30 else None,
+                change=entry.change,
+            )
+
+        return cls(
+            card_set=SetOut.model_validate(analytics.card_set),
+            cards_total=analytics.cards_total,
+            cards_priced=analytics.cards_priced,
+            set_value=analytics.set_value,
+            master_value=analytics.master_value,
+            change=analytics.change,
+            volatility=analytics.volatility,
+            stability=analytics.stability,
+            gainers=[card(c) for c in analytics.gainers],
+            losers=[card(c) for c in analytics.losers],
+            top_cards=[card(c) for c in analytics.top_cards],
+        )
+
+
+@router.get("/collection/sets/{set_id}/analytics")
+async def set_analytics_endpoint(set_id: uuid.UUID, session: SessionDep) -> SetAnalyticsOut:
+    """Set-Analyse aus dem Cardmarket-Preisführer: Wert, Veränderung, Stabilität, Bewegungen."""
+    return SetAnalyticsOut.build(await set_analytics(session, set_id))
 
 
 @router.get("/collection/sets/{set_id}")

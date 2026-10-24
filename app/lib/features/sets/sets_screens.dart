@@ -146,7 +146,17 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
   Widget build(BuildContext context) {
     final progress = ref.watch(setProgressProvider(widget.setId));
     return Scaffold(
-      appBar: AppBar(title: Text(progress.value?.cardSet.displayName ?? 'Set')),
+      appBar: AppBar(
+        title: Text(progress.value?.cardSet.displayName ?? 'Set'),
+        actions: [
+          IconButton(
+            key: const Key('set-analytics'),
+            tooltip: 'Set-Analyse (Wert, Bewegungen, Stabilität)',
+            onPressed: () => context.push('/sets/${widget.setId}/analytics'),
+            icon: const Icon(Icons.insights),
+          ),
+        ],
+      ),
       body: AsyncBody(
         value: progress,
         onRetry: () => ref.invalidate(setProgressProvider(widget.setId)),
@@ -381,6 +391,162 @@ class _CardCell extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+final setAnalyticsProvider = FutureProvider.autoDispose.family<SetAnalytics, String>(
+  (ref, setId) => ref.watch(apiProvider).setAnalytics(setId),
+);
+
+/// Set-Analyse: Setwert, Veränderung (≈ 30 Tage), Stabilität, Gewinner/Verlierer, Top-Karten.
+class SetAnalyticsScreen extends ConsumerWidget {
+  const SetAnalyticsScreen({required this.setId, super.key});
+
+  final String setId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final analytics = ref.watch(setAnalyticsProvider(setId));
+    return Scaffold(
+      appBar: AppBar(title: Text(analytics.value?.cardSet.displayName ?? 'Set-Analyse')),
+      body: AsyncBody(
+        value: analytics,
+        onRetry: () => ref.invalidate(setAnalyticsProvider(setId)),
+        builder: (data) => data.cardsPriced == 0
+            ? const EmptyView(
+                icon: Icons.insights,
+                message: 'Für dieses Set gibt es noch keine Cardmarket-Preise.',
+              )
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                children: [
+                  _AnalyticsHeader(data: data),
+                  if (data.gainers.isNotEmpty) ...[
+                    const SectionTitle('Größte Gewinner (≈ 30 Tage)'),
+                    for (final card in data.gainers) _MarketTile(card: card),
+                  ],
+                  if (data.losers.isNotEmpty) ...[
+                    const SectionTitle('Größte Verlierer (≈ 30 Tage)'),
+                    for (final card in data.losers) _MarketTile(card: card),
+                  ],
+                  const SectionTitle('Wertvollste Karten'),
+                  for (final card in data.topCards) _MarketTile(card: card, showChange: false),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 12),
+                    child: Text(
+                      'Quelle: Cardmarket-Preisführer (täglich). Veränderung = Trend gegenüber '
+                      'dem Durchschnitt der letzten 30 Tage; Stabilität = typische Abweichung des '
+                      'Tagesdurchschnitts vom 30-Tage-Schnitt (Karten ab 1 €).',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _AnalyticsHeader extends StatelessWidget {
+  const _AnalyticsHeader({required this.data});
+
+  final SetAnalytics data;
+
+  @override
+  Widget build(BuildContext context) {
+    final change = data.change;
+    final changeColor = change == null || change == 0
+        ? AppColors.textMuted
+        : (change > 0 ? AppColors.gain : AppColors.loss);
+    final (stabilityIcon, stabilityColor) = switch (data.stability) {
+      'ruhig' => (Icons.waves, AppColors.gain),
+      'bewegt' => (Icons.bolt, AppColors.warning),
+      _ => (Icons.show_chart, AppColors.primary),
+    };
+    return Card(
+      key: const Key('analytics-header'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Setwert (Trend, je Karte einmal)',
+              style: TextStyle(color: AppColors.textMuted),
+            ),
+            Text(
+              money(data.setValue),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            if (change != null)
+              Text(
+                '${signedPercent(change)} gegenüber Ø 30 Tage',
+                key: const Key('analytics-change'),
+                style: TextStyle(color: changeColor, fontWeight: FontWeight.w600),
+              ),
+            const SizedBox(height: 8),
+            Text('Master-Set inkl. Reverse Holo: ${money(data.masterValue)}'),
+            Text(
+              '${data.cardsPriced} von ${data.cardsTotal} Karten mit Preis',
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
+            if (data.stability case final stability?) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(stabilityIcon, color: stabilityColor, size: 20),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Preise $stability'
+                    '${data.volatility == null ? '' : ' (± ${percent(data.volatility!)})'}',
+                    key: const Key('analytics-stability'),
+                    style: TextStyle(color: stabilityColor, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MarketTile extends StatelessWidget {
+  const _MarketTile({required this.card, this.showChange = true});
+
+  final MarketCard card;
+  final bool showChange;
+
+  @override
+  Widget build(BuildContext context) {
+    final change = card.change;
+    final color = change == null || change == 0
+        ? AppColors.textMuted
+        : (change > 0 ? AppColors.gain : AppColors.loss);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      onTap: () => context.push('/card/${card.card.id}'),
+      leading: CardImage(url: card.card.image(), width: 32),
+      title: Text(card.card.displayName, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(
+        [
+          'Nr. ${card.card.number}',
+          if (showChange && card.avg30 != null) '${money(card.avg30)} → ${money(card.trend)}',
+        ].join(' · '),
+      ),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(money(card.trend), style: const TextStyle(fontWeight: FontWeight.w700)),
+          if (showChange && change != null)
+            Text(signedPercent(change), style: TextStyle(color: color, fontSize: 12)),
+        ],
       ),
     );
   }

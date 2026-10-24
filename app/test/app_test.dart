@@ -15,6 +15,7 @@ void main() {
   friendTests();
   ownedTests();
   cardPageTests();
+  reportTests();
   variantTests();
   psaTests();
 
@@ -238,6 +239,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Einladungen'), findsNothing);
 
+    await tester.scrollUntilVisible(find.text('Abmelden'), 200);
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -200));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Abmelden'));
     await tester.pumpAndSettle();
     expect(api.calls, contains('logout'));
@@ -754,6 +758,23 @@ void setTests() {
     expect(find.textContaining('Fehlende Karten ≈ 7,50'), findsOneWidget);
   });
 
+  testWidgets('Set-Analyse: Setwert, Veränderung, Stabilität, Gewinner und Verlierer', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await openSet(tester);
+    await tester.tap(find.byKey(const Key('set-analytics')));
+    await tester.pumpAndSettle();
+    expect(find.text('165,50\u00a0€'), findsOneWidget);
+    expect(find.text('+3,3 % gegenüber Ø 30 Tage'), findsOneWidget);
+    expect(find.text('Master-Set inkl. Reverse Holo: 185,50\u00a0€'), findsOneWidget);
+    expect(find.text('Preise normal (± 8 %)'), findsOneWidget);
+    expect(find.text('Größte Gewinner (≈ 30 Tage)'), findsOneWidget);
+    expect(find.text('+10,0 %'), findsWidgets);
+    expect(find.text('−10,0 %'), findsOneWidget);
+  });
+
   testWidgets('Set-Seite: fehlende (noch nicht gemerkte) auf die Merkliste', (tester) async {
     final api = FakeApi(loggedIn: true);
     await pumpApp(tester, api);
@@ -964,5 +985,49 @@ void cardPageTests() {
     await tester.pumpAndSettle();
     expect(api.calls, contains('history:365'));
     expect(find.textContaining('im letzten Jahr'), findsOneWidget);
+  });
+}
+
+void reportTests() {
+  testWidgets('Suche ohne Treffer: dem Admin melden (Suchbegriff vorbelegt)', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('tab-Suche')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('search-field')), 'Mega Lucario');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('search-report')));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byKey(const Key('report-text'))).controller!.text,
+      'Mega Lucario',
+    );
+    await tester.tap(find.byKey(const Key('report-send')));
+    await tester.pumpAndSettle();
+    expect(api.lastReport, {
+      'kind': 'card',
+      'text': 'Mega Lucario',
+      'context': 'Suche: Mega Lucario',
+    });
+    expect(find.text('Danke! Die Meldung ist beim Admin angekommen.'), findsOneWidget);
+  });
+
+  testWidgets('Admin: Meldungen ansehen und abhaken', (tester) async {
+    final api = FakeApi(loggedIn: true, role: 'admin');
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('tab-Mehr')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Abmelden'), 200);
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -200));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('more-admin-reports')));
+    await tester.pumpAndSettle();
+    expect(find.text('ETB fehlt'), findsOneWidget);
+    expect(find.textContaining('Produkt fehlt · Max'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('report-r1')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('reportDone:r1:true'));
   });
 }

@@ -20,6 +20,7 @@ import '../../models/models.dart';
 import '../../widgets/common.dart';
 import 'item_sheet.dart';
 import 'owned.dart';
+import '../reports/reports.dart';
 import '../card/card_detail_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import 'collection_screen.dart';
@@ -283,9 +284,17 @@ class _OfferGrid extends StatelessWidget {
       final offers = snapshot.data;
       if (offers == null) return const Center(child: CircularProgressIndicator());
       if (offers.isEmpty) {
-        return const EmptyView(
-          icon: Icons.search_off,
-          message: 'Nichts gefunden – weniger Wörter, andere Art oder den englischen Namen.',
+        return Consumer(
+          builder: (context, ref, _) => EmptyView(
+            icon: Icons.search_off,
+            message: 'Nichts gefunden – weniger Wörter, andere Art oder den englischen Namen.',
+            action: TextButton.icon(
+              key: const Key('sealed-report'),
+              onPressed: () => showReportDialog(context, ref, kind: 'sealed'),
+              icon: const Icon(Icons.flag_outlined),
+              label: const Text('Produkt fehlt? Dem Admin melden'),
+            ),
+          ),
         );
       }
       return GridView.builder(

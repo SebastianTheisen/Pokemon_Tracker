@@ -1959,3 +1959,101 @@ class OwnedEntry {
       ? '$gradingCompany ${grade ?? ''}'.trim()
       : (variant == 'reverse' ? 'Reverse Holo' : null);
 }
+
+/// Karte in der Set-Analyse (Cardmarket-Preisführer).
+class MarketCard {
+  const MarketCard({required this.card, required this.trend, this.avg30, this.change});
+
+  factory MarketCard.fromJson(Json json) => MarketCard(
+    card: CardInfo.fromJson(json.obj('card')),
+    trend: json.str('trend'),
+    avg30: json.strOrNull('avg30'),
+    change: (json['change'] as num?)?.toDouble(),
+  );
+
+  final CardInfo card;
+  final String trend;
+  final String? avg30;
+
+  /// Trend gegenüber Ø 30 Tage (0.12 = +12 %).
+  final double? change;
+}
+
+class SetAnalytics {
+  const SetAnalytics({
+    required this.cardSet,
+    required this.cardsTotal,
+    required this.cardsPriced,
+    required this.setValue,
+    required this.masterValue,
+    required this.gainers,
+    required this.losers,
+    required this.topCards,
+    this.change,
+    this.volatility,
+    this.stability,
+  });
+
+  factory SetAnalytics.fromJson(Json json) => SetAnalytics(
+    cardSet: CardSet.fromJson(json.obj('card_set')),
+    cardsTotal: json.integer('cards_total'),
+    cardsPriced: json.integer('cards_priced'),
+    setValue: json.str('set_value'),
+    masterValue: json.str('master_value'),
+    change: (json['change'] as num?)?.toDouble(),
+    volatility: (json['volatility'] as num?)?.toDouble(),
+    stability: json.strOrNull('stability'),
+    gainers: json.list('gainers', MarketCard.fromJson),
+    losers: json.list('losers', MarketCard.fromJson),
+    topCards: json.list('top_cards', MarketCard.fromJson),
+  );
+
+  final CardSet cardSet;
+  final int cardsTotal;
+  final int cardsPriced;
+  final String setValue;
+  final String masterValue;
+  final double? change;
+  final double? volatility;
+
+  /// ruhig | normal | bewegt
+  final String? stability;
+  final List<MarketCard> gainers;
+  final List<MarketCard> losers;
+  final List<MarketCard> topCards;
+}
+
+/// Meldung „Das fehlt“ (an die Admins).
+class MissingReport {
+  const MissingReport({
+    required this.id,
+    required this.kind,
+    required this.text,
+    required this.createdAt,
+    required this.reporter,
+    this.context,
+    this.doneAt,
+  });
+
+  factory MissingReport.fromJson(Json json) => MissingReport(
+    id: json.str('id'),
+    kind: json.str('kind'),
+    text: json.str('text'),
+    context: json.strOrNull('context'),
+    createdAt: json.time('created_at'),
+    doneAt: json.timeOrNull('done_at'),
+    reporter: json.str('reporter'),
+  );
+
+  final String id;
+
+  /// card | sealed | wrong | other
+  final String kind;
+  final String text;
+  final String? context;
+  final DateTime createdAt;
+  final DateTime? doneAt;
+  final String reporter;
+
+  bool get done => doneAt != null;
+}
