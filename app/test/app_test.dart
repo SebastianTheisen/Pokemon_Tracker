@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kartenkiste/app.dart';
 import 'package:kartenkiste/core/prefs.dart';
 import 'package:kartenkiste/core/push/push_bridge.dart';
+import 'package:kartenkiste/core/theme.dart';
 import 'package:kartenkiste/router.dart';
 import 'package:kartenkiste/models/json.dart';
 
@@ -1291,5 +1294,30 @@ void usabilityTests() {
     await tester.tap(find.byKey(const Key('item-row-i1')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('condition-value')), findsOneWidget); // Kartenseite
+  });
+
+  testWidgets('Design: folgt dem Handy, fest dunkel oder hell wählbar und gespeichert', (
+    tester,
+  ) async {
+    final prefs = MemoryPrefsStore({'onboarded': 'true'});
+    tester.platformDispatcher.platformBrightnessTestValue = Brightness.light;
+    addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+    await pumpApp(tester, FakeApi(loggedIn: true), prefs: prefs);
+    expect(AppColors.brightness, Brightness.light); // „Wie Handy“
+    final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
+        .read(routerProvider);
+    unawaited(router.push('/settings'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Dunkel'));
+    await tester.pumpAndSettle();
+    expect(prefs.values['theme'], 'dark');
+    expect(AppColors.brightness, Brightness.dark);
+    expect(Theme.of(tester.element(find.text('Dunkel'))).brightness, Brightness.dark);
+
+    await tester.tap(find.text('Hell'));
+    await tester.pumpAndSettle();
+    expect(prefs.values['theme'], 'light');
+    expect(AppColors.brightness, Brightness.light);
   });
 }

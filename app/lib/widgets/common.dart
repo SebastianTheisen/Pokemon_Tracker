@@ -36,7 +36,7 @@ class ErrorView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, color: AppColors.loss, size: 40),
+          Icon(Icons.error_outline, color: AppColors.loss, size: 40),
           const SizedBox(height: 12),
           Text(message, textAlign: TextAlign.center),
           if (onRetry != null) ...[
@@ -68,7 +68,7 @@ class EmptyView extends StatelessWidget {
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.textMuted),
+            style: TextStyle(color: AppColors.textMuted),
           ),
           if (action != null) ...[const SizedBox(height: 16), action!],
         ],
@@ -161,13 +161,16 @@ class _FoldSectionState extends State<FoldSection> {
                 ),
               ),
               if (!_open && widget.summary != null)
-                Flexible(
-                  child: Text(
-                    widget.summary!,
-                    textAlign: TextAlign.end,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: AppColors.textMuted),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 180),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8, right: 4),
+                    child: Text(
+                      widget.summary!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: AppColors.textMuted),
+                    ),
                   ),
                 ),
               Icon(_open ? Icons.expand_less : Icons.expand_more, color: AppColors.textMuted),
@@ -254,7 +257,7 @@ class CardTile extends StatelessWidget {
           [?card.originalName, card.subtitle].join(' · '),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: AppColors.textMuted),
+          style: TextStyle(color: AppColors.textMuted),
         ),
         ?below,
       ],

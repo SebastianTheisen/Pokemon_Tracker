@@ -120,13 +120,13 @@ class _CardmarketEditionSheetState extends ConsumerState<CardmarketEditionSheet>
             style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Cardmarket führt diese Karte in mehreren Sprachfassungen. Zum Prüfen öffnen und '
             'die richtige wählen – das gilt dann für alle Karten dieses Sets und für alle.',
             style: TextStyle(color: AppColors.textMuted),
           ),
           if (choice.uncertain)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
                 'Die aktuelle Zuordnung stammt nur von TCGdex und kann falsch sein.',
@@ -230,8 +230,8 @@ class _OptionTile extends StatelessWidget {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           Text(option.expansionTitle, style: const TextStyle(fontWeight: FontWeight.w600)),
-          if (option.selected) const Tag('aktuell', color: AppColors.gain),
-          if (option.fromTcgdex) const Tag('TCGdex', color: AppColors.textMuted),
+          if (option.selected) Tag('aktuell', color: AppColors.gain),
+          if (option.fromTcgdex) Tag('TCGdex', color: AppColors.textMuted),
         ],
       ),
       subtitle: Text('${option.name}\n$details'),

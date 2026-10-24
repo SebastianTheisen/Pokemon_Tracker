@@ -261,7 +261,7 @@ class _SetTile extends StatelessWidget {
                 '${set.products} Produkte',
                 if (set.releaseDate != null) date(set.releaseDate),
               ].join(' · '),
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
           ],
         ),
@@ -341,7 +341,7 @@ class _OfferCard extends StatelessWidget {
             ),
             Text(
               productKindLabels[offer.kind] ?? offer.kind,
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
             const SizedBox(height: 4),
             Text(
@@ -367,7 +367,7 @@ class _ProductImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const placeholder = Center(
+    final placeholder = Center(
       child: Icon(Icons.inventory_2_outlined, color: AppColors.textMuted, size: 40),
     );
     return DecoratedBox(
@@ -469,7 +469,7 @@ class _AddSheetState extends State<_AddSheet> {
             ),
             Text(
               [productKindLabels[offer.kind] ?? offer.kind, ?offer.setName].join(' · '),
-              style: const TextStyle(color: AppColors.textMuted),
+              style: TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 8),
             Row(
@@ -483,10 +483,7 @@ class _AddSheetState extends State<_AddSheet> {
                         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                       ),
                       if (prices.isNotEmpty)
-                        Text(
-                          prices.join(' · '),
-                          style: const TextStyle(color: AppColors.textMuted),
-                        ),
+                        Text(prices.join(' · '), style: TextStyle(color: AppColors.textMuted)),
                     ],
                   ),
                 ),

@@ -219,7 +219,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (data.cardSet.originalName case final original?)
-            Text(original, style: const TextStyle(color: AppColors.textMuted)),
+            Text(original, style: TextStyle(color: AppColors.textMuted)),
           _ProgressRow(
             key: const Key('progress-set'),
             label: 'Set',
@@ -240,7 +240,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                 'Fehlende Karten ≈ ${money(_master ? data.missingValue : data.missingSetValue)} '
                 '(Near Mint, soweit Preise bekannt)',
                 key: const Key('missing-cost'),
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
             ),
           const SizedBox(height: 8),
@@ -313,7 +313,7 @@ class _ProgressRow extends StatelessWidget {
                 hint == null ? '' : '  $hint',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
             ),
             Text('$text · ${percent(share)}'),
@@ -366,7 +366,7 @@ class _CardCell extends StatelessWidget {
                     ),
                   ),
                 if (card.onWishlist)
-                  const Positioned(
+                  Positioned(
                     left: 4,
                     top: 4,
                     child: Icon(
@@ -387,7 +387,7 @@ class _CardCell extends StatelessWidget {
               card.nmValue == null ? card.card.displayName : money(card.nmValue),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+              style: TextStyle(color: AppColors.textMuted, fontSize: 11),
             ),
           ],
         ),
@@ -433,7 +433,7 @@ class SetAnalyticsScreen extends ConsumerWidget {
                   ],
                   const SectionTitle('Wertvollste Karten'),
                   for (final card in data.topCards) _MarketTile(card: card, showChange: false),
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(top: 12),
                     child: Text(
                       'Quelle: Cardmarket-Preisführer (täglich). Veränderung = Trend gegenüber '
@@ -472,10 +472,7 @@ class _AnalyticsHeader extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Setwert (Trend, je Karte einmal)',
-              style: TextStyle(color: AppColors.textMuted),
-            ),
+            Text('Setwert (Trend, je Karte einmal)', style: TextStyle(color: AppColors.textMuted)),
             Text(
               money(data.setValue),
               style: Theme.of(context).textTheme.headlineSmall
@@ -491,7 +488,7 @@ class _AnalyticsHeader extends StatelessWidget {
             Text('Master-Set inkl. Reverse Holo: ${money(data.masterValue)}'),
             Text(
               '${data.cardsPriced} von ${data.cardsTotal} Karten mit Preis',
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
             if (data.stability case final stability?) ...[
               const SizedBox(height: 8),

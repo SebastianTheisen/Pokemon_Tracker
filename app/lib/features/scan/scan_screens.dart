@@ -237,10 +237,10 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
           const SizedBox(height: 16),
           Center(
             child: added != null
-                ? const _StatusChip(Icons.check_circle, 'Hinzugefügt', AppColors.gain)
+                ? _StatusChip(Icons.check_circle, 'Hinzugefügt', AppColors.gain)
                 : _isConfirmedBest
-                ? const _StatusChip(Icons.verified, 'Erkannt', AppColors.gain)
-                : const _StatusChip(Icons.help_outline, 'Bitte prüfen', AppColors.warning),
+                ? _StatusChip(Icons.verified, 'Erkannt', AppColors.gain)
+                : _StatusChip(Icons.help_outline, 'Bitte prüfen', AppColors.warning),
           ),
           const SizedBox(height: 10),
           Text(
@@ -252,7 +252,7 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
           Text(
             [?selected.originalName, selected.subtitle, languageTag(selected.language)].join(' · '),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.textMuted),
+            style: TextStyle(color: AppColors.textMuted),
           ),
           // Schon vorhanden? (vor dem Hinzufügen – danach zählt die neue Position mit)
           Center(
@@ -286,7 +286,7 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
                         '${psa.populationHigher != null ? ' (höher: ${psa.populationHigher})' : ''}',
                 ].where((part) => part.isNotEmpty).join(' · '),
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.gain, fontSize: 12),
+                style: TextStyle(color: AppColors.gain, fontSize: 12),
               ),
             ),
           if (widget.result.psaWarning case final warning?)
@@ -296,7 +296,7 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
                 warning,
                 key: const Key('scan-psa-warning'),
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.warning),
+                style: TextStyle(color: AppColors.warning),
               ),
             ),
           const SizedBox(height: 12),
@@ -540,7 +540,7 @@ class _ScanPrice extends ConsumerWidget {
     return Column(
       children: [
         if (nm == null)
-          const Text(
+          Text(
             'Noch kein belegter Preis',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.textMuted),
@@ -608,7 +608,7 @@ class _ScanPrice extends ConsumerWidget {
         Text(
           'Noch kein $label-Preis – der Rohkarten-Preis passt für Slabs nicht.',
           textAlign: TextAlign.center,
-          style: const TextStyle(color: AppColors.textMuted),
+          style: TextStyle(color: AppColors.textMuted),
         ),
         const SizedBox(height: 6),
         OutlinedButton.icon(
@@ -617,7 +617,7 @@ class _ScanPrice extends ConsumerWidget {
           icon: const Icon(Icons.sell_outlined, size: 18),
           label: Text('Verkaufte $label bei eBay'),
         ),
-        const Text(
+        Text(
           'Verkäufe übernehmen – dann steht der Preis hier.',
           textAlign: TextAlign.center,
           style: TextStyle(color: AppColors.textMuted, fontSize: 12),
@@ -657,7 +657,7 @@ class _FetchPrices extends StatelessWidget {
         Text(
           hint,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+          style: TextStyle(color: AppColors.textMuted, fontSize: 12),
         ),
     ],
   );
@@ -680,7 +680,7 @@ class _PriceLine extends StatelessWidget {
       Text(
         label,
         textAlign: TextAlign.center,
-        style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+        style: TextStyle(color: AppColors.textMuted, fontSize: 12),
       ),
     ],
   );
@@ -706,7 +706,7 @@ class _AlternativeThumb extends StatelessWidget {
           Text(match.card.displayName, maxLines: 1, overflow: TextOverflow.ellipsis),
           Text(
             '${match.card.number} · ${languageTag(match.card.language)}',
-            style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+            style: TextStyle(color: AppColors.textMuted, fontSize: 11),
           ),
         ],
       ),
@@ -832,11 +832,11 @@ class _StartView extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: AppColors.primary, width: 3),
           ),
-          child: const Icon(Icons.style, size: 72, color: AppColors.textMuted),
+          child: Icon(Icons.style, size: 72, color: AppColors.textMuted),
         ),
       ),
       const SizedBox(height: 20),
-      const Text(
+      Text(
         'Karte ganz ins Bild – Name und Nummer sollten lesbar sein.',
         textAlign: TextAlign.center,
         style: TextStyle(color: AppColors.textMuted),
@@ -847,7 +847,7 @@ class _StartView extends StatelessWidget {
           child: Text(
             error!,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.loss),
+            style: TextStyle(color: AppColors.loss),
           ),
         ),
       const SizedBox(height: 24),
@@ -944,10 +944,10 @@ class _ResultTile extends ConsumerWidget {
         best == null ? title : '$title · ${best.card.subtitle}',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: AppColors.textMuted),
+        style: TextStyle(color: AppColors.textMuted),
       ),
       trailing: done
-          ? const Icon(Icons.check_circle, color: AppColors.gain)
+          ? Icon(Icons.check_circle, color: AppColors.gain)
           : result == null
           ? null
           : Tag(
@@ -1098,7 +1098,7 @@ class _BinderScanScreenState extends ConsumerState<BinderScanScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text(
+                      Text(
                         'Eine ganze Binderseite fotografieren, gerade von oben und ohne '
                         'Spiegelungen. Beta: Die Erkennung schwankt noch – bitte jede Karte prüfen.',
                         style: TextStyle(color: AppColors.textMuted),

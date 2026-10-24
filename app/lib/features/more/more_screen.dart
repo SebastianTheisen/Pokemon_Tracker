@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/config.dart';
 import '../../core/download/download.dart';
 import '../../core/format.dart';
+import '../../core/prefs.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
@@ -118,8 +119,8 @@ class MoreScreen extends ConsumerWidget {
             children: [
               _Entry(
                 icon: Icons.tune,
-                title: 'Preis-Einstellungen',
-                subtitle: 'Zustandsfaktoren, Sprachfaktoren, Standardsprache',
+                title: 'Einstellungen',
+                subtitle: 'Design hell/dunkel, Zustands- und Sprachfaktoren, Standardsprache',
                 onTap: () => context.push('/settings'),
               ),
               _Entry(
@@ -167,7 +168,7 @@ class MoreScreen extends ConsumerWidget {
                 ),
               ],
             ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(4, 16, 4, 0),
             child: Text(
               '$appName · privat, nur für Freunde.\n'
@@ -292,110 +293,147 @@ class SettingsScreen extends ConsumerWidget {
     final settings = ref.watch(userSettingsProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Einstellungen')),
-      body: AsyncBody(
-        value: settings,
-        onRetry: () => ref.invalidate(userSettingsProvider),
-        builder: (data) => ListView(
-          children: [
-            const SectionTitle('Standardsprache für die Suche'),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: DropdownButtonFormField<String?>(
-                isExpanded: true,
-                initialValue: data.defaultLanguage,
-                items: [
-                  const DropdownMenuItem(child: Text('Alle Sprachen')),
-                  for (final entry in languageLabels.entries)
-                    DropdownMenuItem(value: entry.key, child: Text(entry.value)),
-                ],
-                onChanged: (value) async {
-                  if (value == null) return;
-                  await runAction(
-                    context,
-                    () => ref.read(apiProvider).updateSettings(defaultLanguage: value),
-                  );
-                  ref.invalidate(userSettingsProvider);
-                },
-              ),
-            ),
-            SectionTitle(
-              'Zustandsfaktoren',
-              trailing: TextButton(
-                onPressed: () async {
-                  await runAction(
-                    context,
-                    () => ref.read(apiProvider).updateSettings(resetFactors: true),
-                  );
-                  ref.invalidate(userSettingsProvider);
-                },
-                child: const Text('Zurücksetzen'),
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                'Geschätzter Preis = NM-Basis (Median aus Trend, Ø 7 und Ø 30 Tagen) × Faktor.',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-              ),
-            ),
-            for (final condition in conditions)
-              if (data.conditionFactors[condition] case final factor?)
-                ListTile(
-                  title: Text('$condition · ${conditionLabels[condition]}'),
-                  subtitle: data.customFactors.contains(condition)
-                      ? const Text('eigener Wert')
-                      : null,
-                  trailing: Text(
-                    factor.toStringAsFixed(2).replaceAll('.', ','),
-                    style: const TextStyle(fontSize: 16),
-                  ),
-                  onTap: () => _editFactor(context, ref, condition, factor),
+      // Design ist eine Geräte-Einstellung – auch ohne Verbindung zum Server wählbar.
+      body: ListView(
+        children: [
+          const SectionTitle('Design'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: SegmentedButton<ThemeMode>(
+              key: const Key('theme-mode'),
+              segments: const [
+                ButtonSegment(
+                  value: ThemeMode.system,
+                  icon: Icon(Icons.brightness_auto),
+                  label: Text('Wie Handy'),
                 ),
-            SectionTitle(
-              'Sprachfaktoren',
-              trailing: TextButton(
-                onPressed: () async {
-                  await runAction(
-                    context,
-                    () => ref.read(apiProvider).updateSettings(resetLanguageFactors: true),
-                  );
-                  ref.invalidate(userSettingsProvider);
-                },
-                child: const Text('Zurücksetzen'),
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                'Cardmarket führt westliche Karten aller Sprachen als ein Produkt. Der Faktor '
-                'passt die Schätzung an die Sprache der Karte an, z. B. 0,80 für deutsche '
-                'Karten. Belegte Angebotspreise (Lesezeichen) bleiben unverändert.',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-              ),
-            ),
-            for (final entry in languageLabels.entries)
-              if (data.languageFactors[entry.key] case final factor?)
-                ListTile(
-                  title: Text(entry.value),
-                  subtitle: data.customLanguageFactors.contains(entry.key)
-                      ? const Text('eigener Wert')
-                      : null,
-                  trailing: Text(
-                    factor.toStringAsFixed(2).replaceAll('.', ','),
-                    style: const TextStyle(fontSize: 16),
-                  ),
-                  onTap: () => _editLanguageFactor(context, ref, entry.key, entry.value, factor),
+                ButtonSegment(
+                  value: ThemeMode.light,
+                  icon: Icon(Icons.light_mode_outlined),
+                  label: Text('Hell'),
                 ),
-            const SectionTitle('Cardmarket-Angebote übernehmen'),
-            ListTile(
-              leading: const Icon(Icons.bookmark_add_outlined),
-              title: const Text('Lesezeichen einrichten'),
-              subtitle: const Text('Echte Angebote nach Sprache und Zustand als Preis speichern'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.push('/settings/bookmarklet'),
+                ButtonSegment(
+                  value: ThemeMode.dark,
+                  icon: Icon(Icons.dark_mode_outlined),
+                  label: Text('Dunkel'),
+                ),
+              ],
+              selected: {ref.watch(uiPrefsProvider.select((prefs) => prefs.themeMode))},
+              onSelectionChanged: (mode) =>
+                  ref.read(uiPrefsProvider.notifier).setThemeMode(mode.first),
             ),
-          ],
-        ),
+          ),
+          ...settings.when(
+            loading: () => const [
+              Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            ],
+            error: (error, _) => [
+              ErrorView(message: '$error', onRetry: () => ref.invalidate(userSettingsProvider)),
+            ],
+            data: (data) => [
+              const SectionTitle('Standardsprache für die Suche'),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: DropdownButtonFormField<String?>(
+                  isExpanded: true,
+                  initialValue: data.defaultLanguage,
+                  items: [
+                    const DropdownMenuItem(child: Text('Alle Sprachen')),
+                    for (final entry in languageLabels.entries)
+                      DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+                  ],
+                  onChanged: (value) async {
+                    if (value == null) return;
+                    await runAction(
+                      context,
+                      () => ref.read(apiProvider).updateSettings(defaultLanguage: value),
+                    );
+                    ref.invalidate(userSettingsProvider);
+                  },
+                ),
+              ),
+              SectionTitle(
+                'Zustandsfaktoren',
+                trailing: TextButton(
+                  onPressed: () async {
+                    await runAction(
+                      context,
+                      () => ref.read(apiProvider).updateSettings(resetFactors: true),
+                    );
+                    ref.invalidate(userSettingsProvider);
+                  },
+                  child: const Text('Zurücksetzen'),
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Geschätzter Preis = NM-Basis (Median aus Trend, Ø 7 und Ø 30 Tagen) × Faktor.',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                ),
+              ),
+              for (final condition in conditions)
+                if (data.conditionFactors[condition] case final factor?)
+                  ListTile(
+                    title: Text('$condition · ${conditionLabels[condition]}'),
+                    subtitle: data.customFactors.contains(condition)
+                        ? const Text('eigener Wert')
+                        : null,
+                    trailing: Text(
+                      factor.toStringAsFixed(2).replaceAll('.', ','),
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                    onTap: () => _editFactor(context, ref, condition, factor),
+                  ),
+              SectionTitle(
+                'Sprachfaktoren',
+                trailing: TextButton(
+                  onPressed: () async {
+                    await runAction(
+                      context,
+                      () => ref.read(apiProvider).updateSettings(resetLanguageFactors: true),
+                    );
+                    ref.invalidate(userSettingsProvider);
+                  },
+                  child: const Text('Zurücksetzen'),
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Cardmarket führt westliche Karten aller Sprachen als ein Produkt. Der Faktor '
+                  'passt die Schätzung an die Sprache der Karte an, z. B. 0,80 für deutsche '
+                  'Karten. Belegte Angebotspreise (Lesezeichen) bleiben unverändert.',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                ),
+              ),
+              for (final entry in languageLabels.entries)
+                if (data.languageFactors[entry.key] case final factor?)
+                  ListTile(
+                    title: Text(entry.value),
+                    subtitle: data.customLanguageFactors.contains(entry.key)
+                        ? const Text('eigener Wert')
+                        : null,
+                    trailing: Text(
+                      factor.toStringAsFixed(2).replaceAll('.', ','),
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                    onTap: () => _editLanguageFactor(context, ref, entry.key, entry.value, factor),
+                  ),
+              const SectionTitle('Cardmarket-Angebote übernehmen'),
+              ListTile(
+                leading: const Icon(Icons.bookmark_add_outlined),
+                title: const Text('Lesezeichen einrichten'),
+                subtitle: const Text('Echte Angebote nach Sprache und Zustand als Preis speichern'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/settings/bookmarklet'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -540,7 +578,7 @@ class _Group extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(4, 20, 4, 6),
         child: Text(
           title.toUpperCase(),
-          style: const TextStyle(
+          style: TextStyle(
             color: AppColors.textMuted,
             fontSize: 12,
             fontWeight: FontWeight.w700,
@@ -598,7 +636,7 @@ class _Entry extends StatelessWidget {
     ),
     subtitle: subtitle == null
         ? null
-        : Text(subtitle!, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
-    trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
+        : Text(subtitle!, style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+    trailing: Icon(Icons.chevron_right, color: AppColors.textMuted),
   );
 }

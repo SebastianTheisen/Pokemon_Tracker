@@ -44,7 +44,7 @@ class OwnedLine extends StatelessWidget {
     '✓ In deiner Sammlung: ${ownedShort(entries)}',
     maxLines: 2,
     overflow: TextOverflow.ellipsis,
-    style: const TextStyle(color: AppColors.gain, fontSize: 12, fontWeight: FontWeight.w600),
+    style: TextStyle(color: AppColors.gain, fontSize: 12, fontWeight: FontWeight.w600),
   );
 }
 
@@ -80,7 +80,7 @@ class OwnedPanel extends ConsumerWidget {
         children: [
           Text(
             '✓ In deiner Sammlung: ${ownedTotal(entries)}×',
-            style: const TextStyle(color: AppColors.gain, fontWeight: FontWeight.w700),
+            style: TextStyle(color: AppColors.gain, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),
           for (final entry in entries)
@@ -137,7 +137,7 @@ class OwnedPanel extends ConsumerWidget {
                       ],
                     ),
                     if (onEdit != null)
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.only(left: 4, top: 2),
                         child: Icon(Icons.chevron_right, color: AppColors.textMuted),
                       ),
@@ -146,7 +146,7 @@ class OwnedPanel extends ConsumerWidget {
               ),
             ),
           if (onEdit != null)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 6),
               child: Text(
                 'Zeile antippen zum Bearbeiten, Verschieben oder Entfernen.',

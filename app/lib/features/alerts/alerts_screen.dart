@@ -93,7 +93,7 @@ class AlertsScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         for (final alert in list) _AlertTile(alert: alert),
-                        const Padding(
+                        Padding(
                           padding: EdgeInsets.only(top: 12),
                           child: Text(
                             'Geprüft wird täglich nach der Preisrunde (12:30 Uhr). Ein Alarm '
@@ -264,7 +264,7 @@ class _PushCardState extends ConsumerState<_PushCard> {
                     child: Text(
                       '${data.config.devices} ${data.config.devices == 1 ? 'Gerät' : 'Geräte'} '
                       'angemeldet',
-                      style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                     ),
                   ),
               ],
@@ -309,10 +309,10 @@ class _AlertTile extends ConsumerWidget {
             if (reached)
               Text(
                 'Ausgelöst ${date(alert.triggeredAt)} bei ${money(alert.triggeredValue)}',
-                style: const TextStyle(color: AppColors.gain, fontWeight: FontWeight.w600),
+                style: TextStyle(color: AppColors.gain, fontWeight: FontWeight.w600),
               )
             else if (!alert.active)
-              const Text('Pausiert', style: TextStyle(color: AppColors.textMuted)),
+              Text('Pausiert', style: TextStyle(color: AppColors.textMuted)),
           ],
         ),
         trailing: PopupMenuButton<String>(
@@ -488,7 +488,7 @@ class _AlertFormState extends ConsumerState<_AlertForm> {
             Text(
               'Aktuell: ${money(_current)}',
               key: const Key('alert-current'),
-              style: const TextStyle(color: AppColors.textMuted),
+              style: TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 16),
             SegmentedButton<String>(

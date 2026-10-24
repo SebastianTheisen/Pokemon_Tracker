@@ -172,7 +172,7 @@ class _DraftView extends ConsumerWidget {
         ]) ...[
           SectionTitle(title),
           if (!draft.any((line) => line.side == side))
-            Text(emptyText, style: const TextStyle(color: AppColors.textMuted)),
+            Text(emptyText, style: TextStyle(color: AppColors.textMuted)),
           for (var i = 0; i < draft.length; i++)
             if (draft[i].side == side)
               _LineTile(
@@ -207,7 +207,7 @@ class _DraftView extends ConsumerWidget {
         ],
         if (value.isLoading && draft.isNotEmpty)
           const Padding(padding: EdgeInsets.only(top: 8), child: LinearProgressIndicator()),
-        if (value.hasError) Text('${value.error}', style: const TextStyle(color: AppColors.loss)),
+        if (value.hasError) Text('${value.error}', style: TextStyle(color: AppColors.loss)),
         const SizedBox(height: 16),
         if (draft.isNotEmpty)
           Align(
@@ -317,7 +317,7 @@ class _Summary extends StatelessWidget {
                 child: Text(
                   '${value.unvalued} ohne bekannten Wert – zählen nicht mit.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppColors.warning, fontSize: 12),
+                  style: TextStyle(color: AppColors.warning, fontSize: 12),
                 ),
               ),
             const SizedBox(height: 8),
@@ -343,7 +343,7 @@ class _Amount extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      Text(label, style: const TextStyle(color: AppColors.textMuted)),
+      Text(label, style: TextStyle(color: AppColors.textMuted)),
       Text(money(amount), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
     ],
   );

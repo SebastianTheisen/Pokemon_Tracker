@@ -49,7 +49,7 @@ class FriendsScreen extends ConsumerWidget {
           builder: (list) => ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              const Text(
+              Text(
                 'Hier erscheint, wer Ordner für Freunde freigegeben hat. Eigene Ordner gibst du '
                 'unter Sammlung → Ordner-Symbol → Personen-Symbol frei.',
                 style: TextStyle(color: AppColors.textMuted),
@@ -174,7 +174,7 @@ class _ShowcaseScreenState extends ConsumerState<ShowcaseScreen> {
                             ),
                         ],
                       ),
-                    const Text(
+                    Text(
                       'Antippen: Karte zum Tausch vormerken.',
                       style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                     ),

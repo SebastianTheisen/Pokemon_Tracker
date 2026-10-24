@@ -42,7 +42,7 @@ const List<_Topic> _topics = [
       '„Beleg“: Preis direkt aus einer Quelle (Cardmarket, eBay). „Schätzung“: aus dem Near-Mint-Preis mit Zustandsfaktor berechnet.',
       'Ohne Cardmarket-Preis: US-Preis von PriceCharting, in Euro umgerechnet.',
       'Kartenseite → „Noten vergleichen“: Roh gegen PSA/BGS/CGC – mit Faktor („×4,2“).',
-      'Eigene Faktoren für Zustände und Sprachen: Mehr → Preis-Einstellungen.',
+      'Eigene Faktoren für Zustände und Sprachen: Mehr → Einstellungen.',
     ],
   ),
   (

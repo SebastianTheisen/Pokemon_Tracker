@@ -78,7 +78,7 @@ class _Header extends StatelessWidget {
             key: const Key('wishlist-total'),
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
-          const Text(
+          Text(
             'Nach links wischen zum Entfernen · Preise: Near Mint bei Cardmarket',
             style: TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
@@ -100,7 +100,7 @@ class _WishTile extends ConsumerWidget {
         ? ListTile(
             leading: CardImage(url: entry.product?.imageUrl, width: 40, contain: true),
             title: Text(entry.product?.name ?? '?', maxLines: 2, overflow: TextOverflow.ellipsis),
-            subtitle: const Text('Versiegelt', style: TextStyle(color: AppColors.textMuted)),
+            subtitle: Text('Versiegelt', style: TextStyle(color: AppColors.textMuted)),
             trailing: _Price(entry: entry),
           )
         : CardTile(
@@ -161,7 +161,7 @@ class _Price extends StatelessWidget {
             style: TextStyle(color: pct > 0 ? AppColors.gain : AppColors.loss, fontSize: 12),
           )
         else if (entry.nmValueKind == 'estimated')
-          const Text('Schätzung', style: TextStyle(color: AppColors.warning, fontSize: 11)),
+          Text('Schätzung', style: TextStyle(color: AppColors.warning, fontSize: 11)),
       ],
     );
   }

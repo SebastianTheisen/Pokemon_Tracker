@@ -39,7 +39,7 @@ class ValueChart extends StatelessWidget {
       if (!emptyHint) return SizedBox(height: height);
       return SizedBox(
         height: height,
-        child: const Center(
+        child: Center(
           child: Text(
             'Die Kurve entsteht ab jetzt mit jedem Tag.\nVergangene Tage werden nicht nachgetragen.',
             textAlign: TextAlign.center,
@@ -73,7 +73,7 @@ class ValueChart extends StatelessWidget {
                   LineTooltipItem(
                     '${date(start.add(Duration(hours: (spot.x * 24).round())))}\n'
                     '${money(spot.y.toStringAsFixed(2), currency: currency)}',
-                    const TextStyle(color: Colors.white, fontSize: 12),
+                    TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 12),
                   ),
               ],
             ),

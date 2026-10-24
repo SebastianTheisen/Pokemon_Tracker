@@ -53,7 +53,7 @@ class _AuthFrame extends StatelessWidget {
                 Text(
                   title,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppColors.textMuted),
+                  style: TextStyle(color: AppColors.textMuted),
                 ),
                 const SizedBox(height: 28),
                 ...children,

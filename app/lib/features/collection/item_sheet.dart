@@ -180,7 +180,7 @@ class _ItemFormState extends ConsumerState<ItemForm> {
                             ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       if (card != null)
-                        Text(card.subtitle, style: const TextStyle(color: AppColors.textMuted)),
+                        Text(card.subtitle, style: TextStyle(color: AppColors.textMuted)),
                     ],
                   ),
                 ),
@@ -201,7 +201,7 @@ class _ItemFormState extends ConsumerState<ItemForm> {
             ],
             if (_graded) ..._gradingFields(),
             if (!_isSealed && !_graded) ...[
-              const Text('Zustand', style: TextStyle(color: AppColors.textMuted)),
+              Text('Zustand', style: TextStyle(color: AppColors.textMuted)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 6,
@@ -220,7 +220,7 @@ class _ItemFormState extends ConsumerState<ItemForm> {
             ],
             Row(
               children: [
-                const Text('Anzahl', style: TextStyle(color: AppColors.textMuted)),
+                Text('Anzahl', style: TextStyle(color: AppColors.textMuted)),
                 const Spacer(),
                 IconButton.outlined(
                   onPressed: _quantity > 1 ? () => setState(() => _quantity--) : null,
@@ -260,7 +260,7 @@ class _ItemFormState extends ConsumerState<ItemForm> {
                 childrenPadding: const EdgeInsets.only(bottom: 8),
                 initiallyExpanded: _hasExtras,
                 title: const Text('Weitere Angaben'),
-                subtitle: const Text(
+                subtitle: Text(
                   'Kaufpreis, Eigenpreis, Reverse Holo, Notiz',
                   style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                 ),
@@ -353,7 +353,7 @@ class _ItemFormState extends ConsumerState<ItemForm> {
         ],
       ),
       if (_graded || _isSealed)
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(top: 6),
           child: Text(
             'Slabs: Wert aus gespeicherten eBay-Verkäufen gleicher Firma und Note, sonst '

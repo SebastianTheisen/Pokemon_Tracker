@@ -301,20 +301,17 @@ class _CardBodyState extends ConsumerState<_CardBody> {
                           ),
                         ),
                       ),
-                      Text(
-                        'Nr. ${card.number}',
-                        style: const TextStyle(color: AppColors.textMuted),
-                      ),
+                      Text('Nr. ${card.number}', style: TextStyle(color: AppColors.textMuted)),
                       if (card.variantText case final variants?)
                         Text(
                           variants,
                           key: const Key('card-variants'),
-                          style: const TextStyle(color: AppColors.textMuted),
+                          style: TextStyle(color: AppColors.textMuted),
                         ),
                       if (card.illustrator case final illustrator?)
                         Text(
                           'Illustration: $illustrator',
-                          style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                          style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                         ),
                       const SizedBox(height: 8),
                       Wrap(
@@ -329,7 +326,7 @@ class _CardBodyState extends ConsumerState<_CardBody> {
                             ),
                           if (card.rarity != null) Tag(card.rarity!, color: AppColors.accent),
                           if (card.source == 'user')
-                            const Tag('selbst angelegt', color: AppColors.warning),
+                            Tag('selbst angelegt', color: AppColors.warning),
                         ],
                       ),
                     ],
@@ -379,7 +376,7 @@ class _CardBodyState extends ConsumerState<_CardBody> {
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                       child: Text(
                         'Zuletzt geprüft: ${dateTime(data.lastCheckedAt)}',
-                        style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                       ),
                     ),
                 ],
@@ -451,7 +448,7 @@ class _CardBodyState extends ConsumerState<_CardBody> {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: selected == null
-                  ? const Text(
+                  ? Text(
                       'Kein belegter Preis vorhanden – wir erfinden keine Zahl. '
                       'Du kannst in der Sammlung einen Eigenpreis eintragen.',
                       key: Key('no-price'),
@@ -494,7 +491,7 @@ class _CardBodyState extends ConsumerState<_CardBody> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (price.isEstimate)
-                            const Padding(
+                            Padding(
                               padding: EdgeInsets.only(right: 8),
                               child: Tag('Schätzung', color: AppColors.warning),
                             ),
@@ -555,7 +552,7 @@ class _ConditionValue extends StatelessWidget {
                 'Stand ${date(price.updatedAt)}',
             ?basis,
           ].join('\n'),
-          style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+          style: TextStyle(color: AppColors.textMuted, fontSize: 12),
         ),
         if (price.url != null)
           TextButton.icon(
@@ -598,7 +595,7 @@ class _OfferTile extends StatelessWidget {
                 const Spacer(),
                 Text(
                   date(offer.updatedAt),
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                 ),
               ],
             ),
@@ -663,7 +660,7 @@ class _HistoryState extends ConsumerState<_History> {
           const SizedBox(height: 4),
           RangeChange(points: points, range: _range, currency: data?.currency ?? 'EUR'),
           if (history.hasError)
-            Text('${history.error}', style: const TextStyle(color: AppColors.textMuted))
+            Text('${history.error}', style: TextStyle(color: AppColors.textMuted))
           else if (data == null)
             const SizedBox(height: 160)
           else ...[
@@ -672,7 +669,7 @@ class _HistoryState extends ConsumerState<_History> {
               Text(
                 'Tiefster Preis: ${money(data.lowest)} · Höchster Preis: ${money(data.highest)}'
                 '\nseit Beobachtungsbeginn ${date(data.observedSince)}',
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
           ],
         ],
@@ -694,7 +691,7 @@ class _UsMarket extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final details = ref.watch(pricechartingProvider(cardId)).value;
     if (details == null || !details.available) return const SizedBox.shrink();
-    const muted = TextStyle(color: AppColors.textMuted, fontSize: 12);
+    final muted = TextStyle(color: AppColors.textMuted, fontSize: 12);
     final volume = details.salesVolume.entries.toList()..sort((a, b) => b.value - a.value);
     return FoldSection(
       key: const Key('us-market'),
@@ -864,7 +861,7 @@ class _GradeComparison extends StatelessWidget {
                   ? null
                   : () => showItemSheet(context, card: card, grading: row.grading),
             ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
             child: Text(
               'Slab-Preise: US-Verkäufe (PriceCharting, in € umgerechnet) bzw. deine gespeicherten '
@@ -931,7 +928,7 @@ class _GradeTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(3),
             child: LinearProgressIndicator(value: share.clamp(0, 1), minHeight: 5),
           ),
-          Text(source, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+          Text(source, style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
         ],
       ),
     ),

@@ -194,7 +194,7 @@ class _EbayImportScreenState extends ConsumerState<EbayImportScreen> {
     if (_fetchError case final error?) {
       return ErrorView(message: error, onRetry: () => _runFetch(force: true));
     }
-    return const Center(
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -243,11 +243,11 @@ class _EbayImportScreenState extends ConsumerState<EbayImportScreen> {
         for (final warning in result.warnings)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-            child: Text(warning, style: const TextStyle(color: AppColors.warning)),
+            child: Text(warning, style: TextStyle(color: AppColors.warning)),
           ),
         const SectionTitle('Ergebnis'),
         if (groupNames.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Text('Keine Verkäufe gewählt.', style: TextStyle(color: AppColors.textMuted)),
           ),
@@ -337,9 +337,9 @@ class _FetchInfo extends StatelessWidget {
             'ebay.de · verkauft in den letzten 90 Tagen',
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
-          Text('Suche: ${fetch.query}', style: const TextStyle(color: AppColors.textMuted)),
-          Text(origin, style: const TextStyle(color: AppColors.textMuted)),
-          if (budget != null) Text(budget, style: const TextStyle(color: AppColors.textMuted)),
+          Text('Suche: ${fetch.query}', style: TextStyle(color: AppColors.textMuted)),
+          Text(origin, style: TextStyle(color: AppColors.textMuted)),
+          if (budget != null) Text(budget, style: TextStyle(color: AppColors.textMuted)),
           Wrap(
             spacing: 8,
             children: [

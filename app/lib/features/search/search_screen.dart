@@ -245,7 +245,7 @@ class _CreateCardDialogState extends ConsumerState<CreateCardDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
+            Text(
               'Die Karte ist danach für alle Nutzer sichtbar.',
               style: TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),

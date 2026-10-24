@@ -250,13 +250,13 @@ class _PreviewView extends ConsumerWidget {
           child: Text(
             '${result.accepted} passende Angebote ausgelesen, '
             '${result.skipped} übersprungen (andere Sprache, signiert, …).',
-            style: const TextStyle(color: AppColors.textMuted),
+            style: TextStyle(color: AppColors.textMuted),
           ),
         ),
         for (final warning in result.warnings)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Text(warning, style: const TextStyle(color: AppColors.warning)),
+            child: Text(warning, style: TextStyle(color: AppColors.warning)),
           ),
         if (result.prices.isNotEmpty) const SectionTitle('Preise je Zustand'),
         for (final price in result.prices)

@@ -49,13 +49,13 @@ void invalidateCollection(WidgetRef ref) => ref
   ..invalidate(moversProvider);
 
 /// Farbe für Gewinn (grün), Verlust (rot) oder neutral.
-Color profitColor(String? amount, {Color neutral = AppColors.textMuted}) {
+Color profitColor(String? amount, {Color? neutral}) {
   final value = parseAmount(amount) ?? 0;
   return value > 0
       ? AppColors.gain
       : value < 0
       ? AppColors.loss
-      : neutral;
+      : neutral ?? AppColors.textMuted;
 }
 
 /// „+50,00 € (+20,0 %)“ – Gewinn gegenüber dem Kaufpreis.
@@ -226,7 +226,7 @@ class _ScanCallToAction extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: AppColors.outline),
         ),
-        child: const Row(
+        child: Row(
           children: [
             CircleAvatar(
               radius: 26,
@@ -367,7 +367,7 @@ class _TodayCard extends ConsumerWidget {
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   onTap: () => context.push('/alerts'),
-                  leading: const Icon(Icons.notifications_active, color: AppColors.warning),
+                  leading: Icon(Icons.notifications_active, color: AppColors.warning),
                   title: Text(alert.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                   subtitle: Text(
                     'Preisalarm: ${money(alert.triggeredValue)} – '
@@ -508,7 +508,7 @@ class ItemThumb extends StatelessWidget {
               item.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
           ],
         ),

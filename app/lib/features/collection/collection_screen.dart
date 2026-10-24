@@ -240,7 +240,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                                 '${page.items.length} von ${page.total} Positionen – '
                                 'Filter oder Suche nutzen.',
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(color: AppColors.textMuted),
+                                style: TextStyle(color: AppColors.textMuted),
                               ),
                             ),
                           ),
@@ -613,7 +613,7 @@ class _SummaryHeader extends StatelessWidget {
                 Icon(curveOpen ? Icons.expand_less : Icons.show_chart, color: AppColors.textMuted),
                 Text(
                   curveOpen ? 'Zuklappen' : 'Verlauf',
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 11),
                 ),
               ],
             ),
@@ -663,7 +663,7 @@ class _ItemRow extends StatelessWidget {
         [if (item.card != null) item.card!.subtitle, item.label].join(' · '),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: AppColors.textMuted),
+        style: TextStyle(color: AppColors.textMuted),
       ),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -709,7 +709,7 @@ class _ItemTile extends ConsumerWidget {
         ].join(' · '),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: AppColors.textMuted),
+        style: TextStyle(color: AppColors.textMuted),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -787,7 +787,7 @@ Future<void> showItemActions(
               onTap: () => Navigator.of(context).pop('alert'),
             ),
           ListTile(
-            leading: const Icon(Icons.delete_outline, color: AppColors.loss),
+            leading: Icon(Icons.delete_outline, color: AppColors.loss),
             title: const Text('Entfernen'),
             onTap: () => Navigator.of(context).pop('delete'),
           ),
@@ -906,7 +906,7 @@ class _FolderManager extends ConsumerWidget {
                           : 'Privat – antippen, um ihn Freunden zu zeigen',
                       isSelected: folder.shared,
                       icon: const Icon(Icons.people_outline),
-                      selectedIcon: const Icon(Icons.people, color: AppColors.gain),
+                      selectedIcon: Icon(Icons.people, color: AppColors.gain),
                       onPressed: () async {
                         final ok = await runAction(
                           context,
@@ -984,7 +984,7 @@ Future<String?> _pickFolder(BuildContext context, List<Folder> folders, {require
                 onTap: () => Navigator.of(sheetContext).pop(folder.id),
               ),
             if (folders.length < 2)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.all(16),
                 child: Text(
                   'Tipp: Weitere Ordner legst du oben über das Ordner-Symbol an.',

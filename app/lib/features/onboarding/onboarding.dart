@@ -138,7 +138,7 @@ class _PageBody extends StatelessWidget {
         Text(
           page.text,
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 16, height: 1.4, color: AppColors.textMuted),
+          style: TextStyle(fontSize: 16, height: 1.4, color: AppColors.textMuted),
         ),
       ],
     ),

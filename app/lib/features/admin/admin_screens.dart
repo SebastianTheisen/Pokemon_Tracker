@@ -42,7 +42,7 @@ Future<void> showCode(BuildContext context, String title, String code, String hi
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 1.5),
             ),
             const SizedBox(height: 8),
-            Text(hint, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            Text(hint, style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
           ],
         ),
         actions: [
@@ -86,12 +86,12 @@ class AdminUsersScreen extends ConsumerWidget {
                   Flexible(child: Text(user.displayName, overflow: TextOverflow.ellipsis)),
                   const SizedBox(width: 6),
                   if (user.isAdmin) const Tag('Admin', color: AppColors.accent),
-                  if (!user.isActive) const Tag('gesperrt', color: AppColors.loss),
+                  if (!user.isActive) Tag('gesperrt', color: AppColors.loss),
                 ],
               ),
               subtitle: Text(
                 '${user.email}\nzuletzt aktiv: ${dateTime(user.lastLoginAt)}',
-                style: const TextStyle(color: AppColors.textMuted),
+                style: TextStyle(color: AppColors.textMuted),
               ),
               isThreeLine: true,
               onTap: () => context.push(
@@ -187,7 +187,7 @@ class AdminInvitesScreen extends ConsumerWidget {
                     title: Text(invite.note ?? 'Ohne Notiz'),
                     subtitle: Text(
                       'erstellt ${date(invite.createdAt)} · gültig bis ${date(invite.expiresAt)}',
-                      style: const TextStyle(color: AppColors.textMuted),
+                      style: TextStyle(color: AppColors.textMuted),
                     ),
                     trailing: invite.status == 'open'
                         ? TextButton(
@@ -252,7 +252,7 @@ class AdminUserCollectionScreen extends ConsumerWidget {
           final (summary, page) = value;
           return ListView(
             children: [
-              const Padding(
+              Padding(
                 padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
                 child: Text(
                   'Nur lesend. Der Zugriff wird im Audit-Log protokolliert.',

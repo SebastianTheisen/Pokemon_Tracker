@@ -76,7 +76,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     return Scaffold(
       body: shell,
       bottomNavigationBar: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: AppColors.surface,
           border: Border(top: BorderSide(color: AppColors.outline)),
         ),
