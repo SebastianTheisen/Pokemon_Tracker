@@ -48,6 +48,7 @@ class FolderOut(BaseModel):
     id: uuid.UUID
     name: str
     sort_order: int
+    shared: bool = Field(default=False, description="Für Freunde sichtbar (Showcase)")
     created_at: datetime
 
 
@@ -58,6 +59,7 @@ class FolderCreate(BaseModel):
 class FolderUpdate(BaseModel):
     name: FolderName | None = None
     sort_order: Annotated[int, Field(ge=0, le=1000)] | None = None
+    shared: bool | None = None
 
 
 # --------------------------------------------------------------------- Produkte
@@ -223,6 +225,22 @@ class ItemOut(BaseModel):
             created_at=item.created_at,
             updated_at=item.updated_at,
         )
+
+
+def public_item(valued: ValuedItem) -> ItemOut:
+    """Position für Freunde: ohne Kaufpreis/-datum, Eigenpreis, Notiz, Gewinn, Startwert."""
+    out = ItemOut.build(valued)
+    value = out.value.model_copy(update={"change": None, "cost": None, "profit": None})
+    return out.model_copy(
+        update={
+            "purchase_price": None,
+            "purchase_date": None,
+            "custom_price": None,
+            "note": None,
+            "value_at_add": None,
+            "value": value,
+        }
+    )
 
 
 class ItemPage(BaseModel):

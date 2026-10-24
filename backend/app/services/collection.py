@@ -237,9 +237,16 @@ class CollectionService:
         return folder
 
     async def update_folder(
-        self, folder_id: uuid.UUID, *, name: str | None = None, sort_order: int | None = None
+        self,
+        folder_id: uuid.UUID,
+        *,
+        name: str | None = None,
+        sort_order: int | None = None,
+        shared: bool | None = None,
     ) -> Folder:
         folder = await self._own_folder(folder_id)
+        if shared is not None:
+            folder.shared = shared
         if name is not None and name != folder.name:
             clash = await self._session.scalar(
                 select(Folder.id).where(

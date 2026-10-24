@@ -28,6 +28,7 @@ from app.models.pricing import (
 )
 from app.models.scanner import CardReferenceImage, ScanLog, ScanMode
 from app.models.settings import UserSettings
+from app.models.trades import Trade
 from app.models.user import Role, User
 
 __all__ = [
@@ -69,6 +70,7 @@ __all__ = [
     "Role",
     "ScanLog",
     "ScanMode",
+    "Trade",
     "User",
     "UserSettings",
     "WishlistItem",

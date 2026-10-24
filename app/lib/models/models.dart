@@ -708,14 +708,26 @@ class SealedSet {
 }
 
 class Folder {
-  const Folder({required this.id, required this.name, required this.sortOrder});
+  const Folder({
+    required this.id,
+    required this.name,
+    required this.sortOrder,
+    this.shared = false,
+  });
 
-  factory Folder.fromJson(Json json) =>
-      Folder(id: json.str('id'), name: json.str('name'), sortOrder: json.integer('sort_order'));
+  factory Folder.fromJson(Json json) => Folder(
+    id: json.str('id'),
+    name: json.str('name'),
+    sortOrder: json.integer('sort_order'),
+    shared: json['shared'] == true,
+  );
 
   final String id;
   final String name;
   final int sortOrder;
+
+  /// Showcase: für Freunde sichtbar (ohne Kaufpreise und Notizen).
+  final bool shared;
 }
 
 class ItemValue {
@@ -1723,4 +1735,191 @@ class PushConfig {
 
   final String? publicKey;
   final int devices;
+}
+
+/// Freund mit freigegebenen Ordnern.
+class Friend {
+  const Friend({
+    required this.userId,
+    required this.displayName,
+    required this.folders,
+    required this.items,
+    required this.totalValue,
+  });
+
+  factory Friend.fromJson(Json json) => Friend(
+    userId: json.str('user_id'),
+    displayName: json.str('display_name'),
+    folders: json.integer('folders'),
+    items: json.integer('items'),
+    totalValue: json.str('total_value'),
+  );
+
+  final String userId;
+  final String displayName;
+  final int folders;
+  final int items;
+  final String totalValue;
+}
+
+/// Freigegebene Sammlung eines Freundes (ohne Kaufpreise, Notizen, Gewinn).
+class Showcase {
+  const Showcase({
+    required this.userId,
+    required this.displayName,
+    required this.folders,
+    required this.items,
+    required this.totalValue,
+  });
+
+  factory Showcase.fromJson(Json json) => Showcase(
+    userId: json.str('user_id'),
+    displayName: json.str('display_name'),
+    folders: json.list('folders', Folder.fromJson),
+    items: json.list('items', CollectionItem.fromJson),
+    totalValue: json.str('total_value'),
+  );
+
+  final String userId;
+  final String displayName;
+  final List<Folder> folders;
+  final List<CollectionItem> items;
+  final String totalValue;
+}
+
+/// Zeile im Tausch-Rechner (Entwurf): Quelle ist eine Position (eigene oder vom Freund)
+/// oder eine Katalogkarte.
+class TradeDraftLine {
+  const TradeDraftLine({
+    required this.side,
+    this.itemId,
+    this.cardId,
+    this.productId,
+    this.quantity = 1,
+    this.maxQuantity,
+  });
+
+  /// `give` (ich gebe) oder `get` (ich bekomme).
+  final String side;
+  final String? itemId;
+  final String? cardId;
+  final String? productId;
+  final int quantity;
+
+  /// Höchstmenge bei Positionen (so viele besitzt man).
+  final int? maxQuantity;
+
+  /// Gleiche Quelle auf gleicher Seite → Menge erhöhen statt neue Zeile.
+  bool sameSource(TradeDraftLine other) =>
+      side == other.side &&
+      itemId == other.itemId &&
+      cardId == other.cardId &&
+      productId == other.productId;
+
+  TradeDraftLine withQuantity(int value) => TradeDraftLine(
+    side: side,
+    itemId: itemId,
+    cardId: cardId,
+    productId: productId,
+    quantity: value,
+    maxQuantity: maxQuantity,
+  );
+
+  Json toJson() => {
+    'side': side,
+    'item_id': ?itemId,
+    'card_id': ?cardId,
+    'product_id': ?productId,
+    'quantity': quantity,
+  };
+}
+
+class TradeLineValue {
+  const TradeLineValue({
+    required this.side,
+    required this.label,
+    required this.quantity,
+    this.cardId,
+    this.imageUrl,
+    this.unitValue,
+    this.total,
+  });
+
+  factory TradeLineValue.fromJson(Json json) => TradeLineValue(
+    side: json.str('side'),
+    label: json.str('label'),
+    quantity: json.integer('quantity'),
+    cardId: json.strOrNull('card_id'),
+    imageUrl: json.strOrNull('image_url'),
+    unitValue: json.strOrNull('unit_value'),
+    total: json.strOrNull('total'),
+  );
+
+  final String side;
+  final String label;
+  final int quantity;
+  final String? cardId;
+  final String? imageUrl;
+  final String? unitValue;
+  final String? total;
+}
+
+class TradeValue {
+  const TradeValue({
+    required this.lines,
+    required this.giveValue,
+    required this.getValue,
+    required this.difference,
+    required this.unvalued,
+  });
+
+  factory TradeValue.fromJson(Json json) => TradeValue(
+    lines: json.list('lines', TradeLineValue.fromJson),
+    giveValue: json.str('give_value'),
+    getValue: json.str('get_value'),
+    difference: json.str('difference'),
+    unvalued: json.integer('unvalued'),
+  );
+
+  final List<TradeLineValue> lines;
+  final String giveValue;
+  final String getValue;
+
+  /// Bekomme minus gebe (positiv = gut für mich).
+  final String difference;
+  final int unvalued;
+}
+
+/// Gespeicherter Tausch: Werte damals und dieselben Karten heute.
+class SavedTrade {
+  const SavedTrade({
+    required this.id,
+    required this.createdAt,
+    required this.giveValue,
+    required this.getValue,
+    required this.now,
+    this.partner,
+    this.note,
+  });
+
+  factory SavedTrade.fromJson(Json json) => SavedTrade(
+    id: json.str('id'),
+    partner: json.strOrNull('partner'),
+    note: json.strOrNull('note'),
+    createdAt: json.time('created_at'),
+    giveValue: json.str('give_value'),
+    getValue: json.str('get_value'),
+    now: TradeValue.fromJson(json.obj('now')),
+  );
+
+  final String id;
+  final String? partner;
+  final String? note;
+  final DateTime createdAt;
+  final String giveValue;
+  final String getValue;
+  final TradeValue now;
+
+  /// Differenz damals (bekomme minus gebe).
+  double get differenceThen => (double.tryParse(getValue) ?? 0) - (double.tryParse(giveValue) ?? 0);
 }

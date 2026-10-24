@@ -59,6 +59,12 @@ Danach startet Kartenkiste wie eine normale App, auch die Kamera funktioniert.
 * **Versiegeltes** (Booster, Displays, Top-Trainer-Boxen): unter **Sammlung → „Versiegelt“**,
   Suche auch auf Deutsch („Top-Trainer-Box Prismatische Entwicklungen“).
 * **Merkliste:** Herz-Symbol auf einer Karte.
+* **Mit Freunden teilen (freiwillig):** Sammlung → Ordner-Symbol → Personen-Symbol bei einem
+  Ordner. Dann sehen die anderen unter **Mehr → Freunde** diese Karten mit Zustand und Wert –
+  **nie** Kaufpreise, Notizen oder Gewinn. Nochmal antippen = wieder privat.
+* **Tausch-Rechner:** Mehr → Tausch-Rechner. „Ich gebe“ aus deiner Sammlung, „Ich bekomme“ aus dem
+  Showcase eines Freundes oder per Suche – die App zeigt, wer wie viel Wert bekommt. Speichern
+  merkt den Tausch (später „damals vs. heute“); die Sammlung änderst du danach selbst.
 * **Sets vervollständigen:** Auf einer Karte den Set-Namen antippen (oder Sammlung → Sets).
   Dort siehst du alle Karten des Sets, was fehlt und was es kostet. Schalter **„Master“**: dann
   zählt auch jede Reverse-Holo-Fassung. „Fehlende auf die Merkliste“ merkt alle auf einmal.

@@ -49,6 +49,20 @@ class MoreScreen extends ConsumerWidget {
             onTap: () => context.push('/settings'),
           ),
           ListTile(
+            key: const Key('more-friends'),
+            leading: const Icon(Icons.people_outline),
+            title: const Text('Freunde'),
+            subtitle: const Text('Freigegebene Sammlungen ansehen'),
+            onTap: () => context.push('/friends'),
+          ),
+          ListTile(
+            key: const Key('more-trade'),
+            leading: const Icon(Icons.swap_horiz),
+            title: const Text('Tausch-Rechner'),
+            subtitle: const Text('Wert von Geben und Bekommen vergleichen'),
+            onTap: () => context.push('/trade'),
+          ),
+          ListTile(
             key: const Key('more-alerts'),
             leading: const Icon(Icons.notifications_outlined),
             title: const Text('Preisalarme'),

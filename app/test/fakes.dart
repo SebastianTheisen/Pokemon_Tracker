@@ -541,6 +541,112 @@ class FakeApi extends Api {
 
   List<String>? lastWishedIds;
 
+  // ------------------------------------------------------- Freunde, Tausch
+
+  List<TradeDraftLine>? lastTradeLines;
+  String? lastTradePartner;
+
+  @override
+  Future<Folder> shareFolder(String id, {required bool shared}) async {
+    calls.add('share:$id:$shared');
+    return Folder(id: id, name: 'Sammlung', sortOrder: 0, shared: shared);
+  }
+
+  @override
+  Future<List<Friend>> friends() async => [
+    Friend.fromJson({
+      'user_id': 'u2',
+      'display_name': 'Max',
+      'folders': 1,
+      'items': 2,
+      'total_value': '1855.90',
+    }),
+  ];
+
+  @override
+  Future<Showcase> showcase(String userId, {String? folderId}) async {
+    calls.add('showcase:$userId');
+    return Showcase.fromJson({
+      'user_id': userId,
+      'display_name': 'Max',
+      'folders': [
+        {
+          'id': 'f9',
+          'name': 'Tausch',
+          'sort_order': 0,
+          'shared': true,
+          'created_at': '2026-10-24T00:00:00Z',
+        },
+      ],
+      'items': [itemJson(id: 'm1', total: '50.00')],
+      'total_value': '50.00',
+    });
+  }
+
+  static Json tradeLineJson(String side, String label, String unit, int quantity) => {
+    'side': side,
+    'card_id': 'c1',
+    'product_id': null,
+    'label': label,
+    'image_url': null,
+    'variant': 'normal',
+    'condition': 'NM',
+    'grading_company': null,
+    'grade': null,
+    'quantity': quantity,
+    'unit_value': unit,
+    'total': (double.parse(unit) * quantity).toStringAsFixed(2),
+  };
+
+  Json _tradeValue(List<TradeDraftLine> lines) {
+    final json = [
+      for (final line in lines)
+        tradeLineJson(
+          line.side,
+          line.side == 'give' ? 'Meine Karte' : 'Karte von Max',
+          line.side == 'give' ? '30.00' : '50.00',
+          line.quantity,
+        ),
+    ];
+    double sum(String side) => json
+        .where((l) => l['side'] == side)
+        .fold(0, (total, l) => total + double.parse(l['total']! as String));
+    return {
+      'lines': json,
+      'give_value': sum('give').toStringAsFixed(2),
+      'get_value': sum('get').toStringAsFixed(2),
+      'difference': (sum('get') - sum('give')).toStringAsFixed(2),
+      'unvalued': 0,
+    };
+  }
+
+  @override
+  Future<TradeValue> evaluateTrade(List<TradeDraftLine> lines) async {
+    calls.add(
+      'evaluate:${lines.map((l) => '${l.side}:${l.itemId ?? l.cardId}:${l.quantity}').join(',')}',
+    );
+    return TradeValue.fromJson(_tradeValue(lines));
+  }
+
+  @override
+  Future<SavedTrade> saveTrade(List<TradeDraftLine> lines, {String? partner, String? note}) async {
+    lastTradeLines = lines;
+    lastTradePartner = partner;
+    final value = _tradeValue(lines);
+    return SavedTrade.fromJson({
+      'id': 't1',
+      'partner': partner,
+      'note': note,
+      'created_at': '2026-10-24T15:00:00Z',
+      'give_value': value['give_value'],
+      'get_value': value['get_value'],
+      'now': value,
+    });
+  }
+
+  @override
+  Future<List<SavedTrade>> trades() async => [];
+
   @override
   Future<List<SetOverview>> collectionSets() async => [
     SetOverview.fromJson({

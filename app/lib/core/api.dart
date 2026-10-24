@@ -448,6 +448,47 @@ class Api {
   Future<Folder> renameFolder(String id, String name) async =>
       Folder.fromJson((await _send('PATCH', '/folders/$id', body: {'name': name}))! as Json);
 
+  /// Ordner für Freunde sichtbar machen (Showcase) bzw. wieder privat.
+  Future<Folder> shareFolder(String id, {required bool shared}) async =>
+      Folder.fromJson((await _send('PATCH', '/folders/$id', body: {'shared': shared}))! as Json);
+
+  // ------------------------------------------------------- Freunde und Tausch
+
+  Future<List<Friend>> friends() async => parseList(await _getList('/friends'), Friend.fromJson);
+
+  Future<Showcase> showcase(String userId, {String? folderId}) async =>
+      Showcase.fromJson(await _get('/friends/$userId', query: {'folder_id': folderId}));
+
+  Future<TradeValue> evaluateTrade(List<TradeDraftLine> lines) async => TradeValue.fromJson(
+    (await _send(
+          'POST',
+          '/trades/evaluate',
+          body: {
+            'lines': [for (final line in lines) line.toJson()],
+          },
+        ))!
+        as Json,
+  );
+
+  Future<SavedTrade> saveTrade(List<TradeDraftLine> lines, {String? partner, String? note}) async =>
+      SavedTrade.fromJson(
+        (await _send(
+              'POST',
+              '/trades',
+              body: {
+                'lines': [for (final line in lines) line.toJson()],
+                'partner': ?partner,
+                'note': ?note,
+              },
+            ))!
+            as Json,
+      );
+
+  Future<List<SavedTrade>> trades() async =>
+      parseList(await _getList('/trades'), SavedTrade.fromJson);
+
+  Future<void> deleteTrade(String id) => _send('DELETE', '/trades/$id');
+
   Future<void> deleteFolder(String id, {String? moveTo}) =>
       _send('DELETE', '/folders/$id', query: {'move_to': moveTo});
 

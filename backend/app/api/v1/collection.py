@@ -69,7 +69,9 @@ async def create_folder(body: FolderCreate, collection: Collection) -> FolderOut
 async def update_folder(
     folder_id: uuid.UUID, body: FolderUpdate, collection: Collection
 ) -> FolderOut:
-    folder = await collection.update_folder(folder_id, name=body.name, sort_order=body.sort_order)
+    folder = await collection.update_folder(
+        folder_id, name=body.name, sort_order=body.sort_order, shared=body.shared
+    )
     return FolderOut.model_validate(folder)
 
 

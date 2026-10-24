@@ -1,5 +1,6 @@
 // Sammlung: Wert und Aufteilung, Ordner, Filter, Sortierung, Positionen bearbeiten.
 import '../alerts/alerts_screen.dart';
+import '../trade/trade_screen.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -533,6 +534,12 @@ Future<void> showItemActions(
             title: const Text('Bearbeiten'),
             onTap: () => Navigator.of(context).pop('edit'),
           ),
+          ListTile(
+            key: const Key('item-trade'),
+            leading: const Icon(Icons.swap_horiz),
+            title: const Text('Zum Tausch geben'),
+            onTap: () => Navigator.of(context).pop('trade'),
+          ),
           if (item.kind != 'graded')
             ListTile(
               key: const Key('item-alert'),
@@ -560,6 +567,8 @@ Future<void> showItemActions(
   if (!context.mounted) return;
   if (action == 'select') {
     onSelect?.call();
+  } else if (action == 'trade') {
+    addItemToTrade(context, ref, item, 'give');
   } else if (action == 'alert') {
     await showAlertSheet(
       context,
@@ -651,6 +660,30 @@ class _FolderManager extends ConsumerWidget {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    IconButton(
+                      key: Key('share-${folder.id}'),
+                      tooltip: folder.shared
+                          ? 'Für Freunde sichtbar – antippen für privat'
+                          : 'Privat – antippen, um ihn Freunden zu zeigen',
+                      isSelected: folder.shared,
+                      icon: const Icon(Icons.people_outline),
+                      selectedIcon: const Icon(Icons.people, color: AppColors.gain),
+                      onPressed: () async {
+                        final ok = await runAction(
+                          context,
+                          () => api.shareFolder(folder.id, shared: !folder.shared),
+                        );
+                        if (!ok || !context.mounted) return;
+                        ref.invalidate(foldersProvider);
+                        showMessage(
+                          context,
+                          folder.shared
+                              ? '„${folder.name}“ ist wieder privat.'
+                              : '„${folder.name}“ ist für Freunde sichtbar (ohne Kaufpreise '
+                                    'und Notizen).',
+                        );
+                      },
+                    ),
                     IconButton(
                       tooltip: 'Umbenennen',
                       icon: const Icon(Icons.edit),

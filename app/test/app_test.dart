@@ -12,6 +12,7 @@ void main() {
   filterTests();
   alertTests();
   setTests();
+  friendTests();
   variantTests();
   psaTests();
 
@@ -210,6 +211,9 @@ void main() {
     final api = FakeApi(loggedIn: true, role: 'admin');
     await pumpApp(tester, api);
     await tester.tap(find.byKey(const Key('tab-Mehr')));
+    await tester.pumpAndSettle();
+    // Liste ist länger als der Bildschirm: bis über die untere Leiste scrollen.
+    await tester.scrollUntilVisible(find.text('Abmelden'), 200);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Einladungen'));
     await tester.pumpAndSettle();
@@ -759,5 +763,77 @@ void setTests() {
     await tester.pumpAndSettle();
     expect(api.lastWishedIds, ['k4']);
     expect(find.text('1 Karten auf die Merkliste gesetzt.'), findsOneWidget);
+  });
+}
+
+void friendTests() {
+  testWidgets('Ordner für Freunde freigeben', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await tester.tap(find.text('Sammlung').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Ordner verwalten'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('share-f1')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('share:f1:true'));
+    expect(find.textContaining('ist für Freunde sichtbar'), findsOneWidget);
+  });
+
+  testWidgets('Showcase eines Freundes → Karte zum Tausch → eigene Karte geben → speichern', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await tester.tap(find.text('Mehr').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('more-friends')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2 Stück · 1 Ordner · 1.855,90'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('friend-u2')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('showcase:u2'));
+    await tester.tap(find.byKey(const Key('showcase-item-m1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('showcase-trade')));
+    await tester.pumpAndSettle();
+    expect(find.text('Tausch (1)'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('showcase-open-trade')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('evaluate:get:m1:1'));
+    expect(find.text('+50,00\u00a0€ für dich'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('trade-add-mine')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('trade-pick-i2')));
+    await tester.pumpAndSettle();
+    expect(find.text('+20,00\u00a0€ für dich'), findsOneWidget); // 50 − 30
+
+    await tester.tap(find.byKey(const Key('trade-save')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('trade-partner')), 'Max');
+    await tester.tap(find.byKey(const Key('trade-save-confirm')));
+    await tester.pumpAndSettle();
+    expect(api.lastTradePartner, 'Max');
+    expect(api.lastTradeLines!.map((l) => '${l.side}:${l.itemId}').toList(), ['get:m1', 'give:i2']);
+    expect(find.byKey(const Key('trade-summary')), findsNothing); // Entwurf geleert
+  });
+
+  testWidgets('Sammlung: „Zum Tausch geben“ legt die Position auf „Ich gebe“', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await tester.tap(find.text('Sammlung').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nachtara VMAX').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('item-trade')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('→ „Ich gebe“'), findsOneWidget);
+    await tester.tap(find.text('Zum Tausch'));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('evaluate:give:i1:1'));
+    expect(find.text('−30,00\u00a0€ für den anderen'), findsOneWidget);
   });
 }

@@ -13,7 +13,9 @@ import 'features/card/card_detail_screen.dart';
 import 'features/cardmarket/cardmarket_import.dart';
 import 'features/cardmarket/ebay_import.dart';
 import 'features/collection/collection_screen.dart';
+import 'features/friends/friends_screens.dart';
 import 'features/sets/sets_screens.dart';
+import 'features/trade/trade_screen.dart';
 import 'features/collection/sealed_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/more/more_screen.dart';
@@ -116,6 +118,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) => SetDetailScreen(setId: state.pathParameters['id']!),
       ),
       GoRoute(path: '/alerts', builder: (_, _) => const AlertsScreen()),
+      GoRoute(path: '/friends', builder: (_, _) => const FriendsScreen()),
+      GoRoute(
+        path: '/friends/:id',
+        builder: (_, state) => ShowcaseScreen(userId: state.pathParameters['id']!),
+      ),
+      GoRoute(path: '/trade', builder: (_, _) => const TradeScreen()),
       GoRoute(path: '/sealed/add', builder: (_, _) => const SealedAddScreen()),
       GoRoute(path: '/admin/users', builder: (_, _) => const AdminUsersScreen()),
       GoRoute(path: '/admin/invites', builder: (_, _) => const AdminInvitesScreen()),
