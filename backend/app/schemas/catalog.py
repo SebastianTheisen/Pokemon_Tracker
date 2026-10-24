@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
@@ -76,3 +77,9 @@ class CardOut(BaseModel):
 class SearchHitOut(BaseModel):
     score: float
     card: CardOut
+    price: Decimal | None = Field(
+        default=None, description="Near-Mint-Preis (Normal) zur Orientierung; null = unbekannt"
+    )
+    price_estimated: bool = Field(
+        default=False, description="Näherung (Preisführer bzw. Zustandsfaktor), kein Beleg"
+    )

@@ -325,13 +325,28 @@ String? cardImageUrl(String? url, {bool high = false}) {
 }
 
 class SearchHit {
-  const SearchHit({required this.score, required this.card});
+  const SearchHit({
+    required this.score,
+    required this.card,
+    this.price,
+    this.priceEstimated = false,
+  });
 
-  factory SearchHit.fromJson(Json json) =>
-      SearchHit(score: json.number('score'), card: CardInfo.fromJson(json.obj('card')));
+  factory SearchHit.fromJson(Json json) => SearchHit(
+    score: json.number('score'),
+    card: CardInfo.fromJson(json.obj('card')),
+    price: json.strOrNull('price'),
+    priceEstimated: json['price_estimated'] as bool? ?? false,
+  );
 
   final double score;
   final CardInfo card;
+
+  /// Near-Mint-Preis zur Orientierung (`null` = noch unbekannt).
+  final String? price;
+
+  /// Näherung (Preisführer bzw. Zustandsfaktor) – in der Liste mit „≈“.
+  final bool priceEstimated;
 }
 
 // ------------------------------------------------------------------ Preise

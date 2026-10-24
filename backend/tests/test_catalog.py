@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.models import Card, CardSet, CardSource, CmExpansion, CmProduct
+from app.models import Card, CardSet, CardSource, CmExpansion, CmPrice, CmProduct
 from app.providers.tcgdex import TcgdexClient
 from app.services.catalog_search import search_cards
 from app.services.catalog_sync import LanguageReport, remove_digital_sets, sync_catalog
@@ -543,3 +543,41 @@ async def test_merge_adopts_cardmarket_and_removes_derived_copies(
         )
         assert glurak is not None and glurak.cardmarket_product_id == 900001
         assert await session.scalar(select(CardSet).where(CardSet.external_id == "30th-c")) is None
+
+
+async def test_search_shows_price_from_store_or_price_guide(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    synced: FakeTcgdex,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Wie bei Collectr: Preis gleich in der Trefferliste – ohne Abruf bei einer Quelle."""
+    user = await register_user("max@example.com")
+
+    async def search() -> dict[str, object]:
+        response = await client.get(
+            f"{API}/cards/search",
+            params={"q": "nachtara 215", "language": "de"},
+            headers=user.headers,
+        )
+        assert response.status_code == 200, response.text
+        return response.json()[0]
+
+    hit = await search()
+    assert (hit["price"], hit["price_estimated"]) == (None, False)  # nichts bekannt
+
+    async with session_factory() as session:
+        card = await session.scalar(select(Card).where(Card.external_id == "swsh7-215"))
+        assert card is not None
+        card.cardmarket_product_id = 4242
+        session.add(
+            CmPrice(
+                id_product=4242,
+                metrics={"trend": 50.0, "avg7": 40.0, "avg30": 45.0, "low": 0},
+                updated_at=datetime.now(UTC),
+            )
+        )
+        await session.commit()
+
+    hit = await search()
+    assert (hit["price"], hit["price_estimated"]) == ("45.00", True)  # Median aus dem Preisführer

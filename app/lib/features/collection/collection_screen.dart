@@ -163,95 +163,112 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
           onRefresh: () async => _reload(),
           child: CustomScrollView(
             slivers: [
-              SliverToBoxAdapter(
-                child: summary.maybeWhen(
-                  data: (data) => _SummaryHeader(
-                    summary: data,
-                    curveOpen: _curveOpen,
-                    onToggleCurve: () => setState(() => _curveOpen = !_curveOpen),
+              // Ganz leere Sammlung: keine Leiste voller Filter für nichts – nur die Einladung.
+              if (_brandNew(summary.value))
+                SliverFillRemaining(hasScrollBody: false, child: _empty())
+              else ...[
+                SliverToBoxAdapter(
+                  child: summary.maybeWhen(
+                    data: (data) => _SummaryHeader(
+                      summary: data,
+                      curveOpen: _curveOpen,
+                      onToggleCurve: () => setState(() => _curveOpen = !_curveOpen),
+                    ),
+                    orElse: () => const SizedBox(height: 8),
                   ),
-                  orElse: () => const SizedBox(height: 8),
                 ),
-              ),
-              if (_curveOpen) SliverToBoxAdapter(child: _FolderCurve(folderId: _filter.folderId)),
-              // Suche und Filter bleiben beim Scrollen oben stehen.
-              SliverPersistentHeader(pinned: true, delegate: _PinnedBar(child: _filters(folders))),
-              ...items.when(
-                loading: () => [
-                  const SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
-                ],
-                error: (error, _) => [
-                  SliverFillRemaining(
-                    child: ErrorView(message: '$error', onRetry: _reload),
-                  ),
-                ],
-                data: (page) => page.items.isEmpty
-                    ? [SliverFillRemaining(hasScrollBody: false, child: _empty())]
-                    : [
-                        if (listView)
-                          SliverPadding(
-                            padding: const EdgeInsets.only(top: 4, bottom: 24),
-                            sliver: SliverList.separated(
-                              itemCount: page.items.length,
-                              separatorBuilder: (_, _) => const Divider(height: 1, indent: 72),
-                              itemBuilder: (context, index) {
-                                final item = page.items[index];
-                                return _ItemRow(
-                                  item: item,
-                                  selected: _selecting ? _selected.contains(item.id) : null,
-                                  onLongPress: () => _toggle(item),
-                                  onTap: _selecting ? () => _toggle(item) : () => _open(item),
-                                );
-                              },
-                            ),
-                          )
-                        else
-                          SliverPadding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                            sliver: SliverGrid(
-                              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: 130,
-                                mainAxisSpacing: 16,
-                                crossAxisSpacing: 12,
-                                childAspectRatio: 0.5, // Bild + Wert + Name ohne Überlauf
+                if (_curveOpen) SliverToBoxAdapter(child: _FolderCurve(folderId: _filter.folderId)),
+                // Suche und Filter bleiben beim Scrollen oben stehen.
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _PinnedBar(child: _filters(folders)),
+                ),
+                ...items.when(
+                  loading: () => [
+                    const SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
+                  ],
+                  error: (error, _) => [
+                    SliverFillRemaining(
+                      child: ErrorView(message: '$error', onRetry: _reload),
+                    ),
+                  ],
+                  data: (page) => page.items.isEmpty
+                      ? [SliverFillRemaining(hasScrollBody: false, child: _empty())]
+                      : [
+                          if (listView)
+                            SliverPadding(
+                              padding: const EdgeInsets.only(top: 4, bottom: 24),
+                              sliver: SliverList.separated(
+                                itemCount: page.items.length,
+                                separatorBuilder: (_, _) => const Divider(height: 1, indent: 72),
+                                itemBuilder: (context, index) {
+                                  final item = page.items[index];
+                                  return _ItemRow(
+                                    item: item,
+                                    selected: _selecting ? _selected.contains(item.id) : null,
+                                    onLongPress: () => _toggle(item),
+                                    onTap: _selecting ? () => _toggle(item) : () => _open(item),
+                                  );
+                                },
                               ),
-                              delegate: SliverChildBuilderDelegate(
-                                childCount: page.items.length,
-                                (context, index) => LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    final item = page.items[index];
-                                    return ItemThumb(
-                                      item: item,
-                                      width: constraints.maxWidth,
-                                      selected: _selecting ? _selected.contains(item.id) : null,
-                                      onLongPress: () => _toggle(item),
-                                      onTap: _selecting ? () => _toggle(item) : () => _open(item),
-                                    );
-                                  },
+                            )
+                          else
+                            SliverPadding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                              sliver: SliverGrid(
+                                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 130,
+                                  mainAxisSpacing: 16,
+                                  crossAxisSpacing: 12,
+                                  childAspectRatio: 0.5, // Bild + Wert + Name ohne Überlauf
+                                ),
+                                delegate: SliverChildBuilderDelegate(
+                                  childCount: page.items.length,
+                                  (context, index) => LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final item = page.items[index];
+                                      return ItemThumb(
+                                        item: item,
+                                        width: constraints.maxWidth,
+                                        selected: _selecting ? _selected.contains(item.id) : null,
+                                        onLongPress: () => _toggle(item),
+                                        onTap: _selecting ? () => _toggle(item) : () => _open(item),
+                                      );
+                                    },
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        if (page.total > page.items.length)
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Text(
-                                '${page.items.length} von ${page.total} Positionen – '
-                                'Filter oder Suche nutzen.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: AppColors.textMuted),
+                          if (page.total > page.items.length)
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Text(
+                                  '${page.items.length} von ${page.total} Positionen – '
+                                  'Filter oder Suche nutzen.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: AppColors.textMuted),
+                                ),
                               ),
                             ),
-                          ),
-                      ],
-              ),
+                        ],
+                ),
+              ],
             ],
           ),
         ),
       ),
     );
   }
+
+  bool get _filtered =>
+      _filter.query.isNotEmpty ||
+      _filter.kind != null ||
+      _filter.folderId != null ||
+      _filter.extraCount > 0;
+
+  /// Noch keine einzige Position (und kein Filter aktiv).
+  bool _brandNew(CollectionSummary? summary) => summary != null && summary.items == 0 && !_filtered;
 
   /// Wie bei Collectr: Antippen öffnet die Kartenseite (dort bearbeiten, verschieben …).
   /// Versiegeltes hat keine eigene Seite – dort gleich die Aktionen.
@@ -364,8 +381,20 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
   );
 
   Widget _empty() {
-    final filtered = _filter.query.isNotEmpty || _filter.kind != null || _filter.extraCount > 0;
-    if (filtered) {
+    final onlyFolder =
+        _filter.folderId != null &&
+        _filter.query.isEmpty &&
+        _filter.kind == null &&
+        _filter.extraCount == 0;
+    if (onlyFolder) {
+      return const EmptyView(
+        icon: Icons.folder_open,
+        message:
+            'Dieser Ordner ist noch leer. Beim Scannen oder Hinzufügen wählst du ihn '
+            'oben als Ziel („Ordner: …“).',
+      );
+    }
+    if (_filtered) {
       return EmptyView(
         icon: Icons.search_off,
         message: 'Nichts gefunden – Suche oder Filter lockern.',
@@ -379,12 +408,32 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     return EmptyView(
       icon: Icons.collections_bookmark_outlined,
       message:
-          'Noch nichts hier. Scanne eine Karte, füge sie über die Suche hinzu oder lege '
-          'Versiegeltes über „+“ oben an.',
-      action: FilledButton.icon(
-        onPressed: () => context.push('/scan'),
-        icon: const Icon(Icons.document_scanner),
-        label: const Text('Karte scannen'),
+          'Hier landen deine Karten – mit Wert, Gewinn und Ordnern.\n'
+          'Leg mit deiner ersten Karte los:',
+      action: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          FilledButton.icon(
+            key: const Key('empty-scan'),
+            onPressed: () => context.push('/scan'),
+            icon: const Icon(Icons.document_scanner),
+            label: const Text('Karte scannen'),
+          ),
+          OutlinedButton.icon(
+            key: const Key('empty-search'),
+            onPressed: () => context.go('/search'),
+            icon: const Icon(Icons.search),
+            label: const Text('Karte suchen'),
+          ),
+          TextButton.icon(
+            key: const Key('empty-sealed'),
+            onPressed: () => context.push('/sealed/add'),
+            icon: const Icon(Icons.inventory_2_outlined),
+            label: const Text('Versiegeltes'),
+          ),
+        ],
       ),
     );
   }

@@ -34,6 +34,7 @@ from app.core.config import Settings
 from app.models import (
     Card,
     CardPriceLink,
+    CmPrice,
     CollectionItem,
     PriceAlert,
     PriceCheck,
@@ -408,6 +409,48 @@ class PriceService:
             await self._session.refresh(cached)
 
     # ------------------------------------------------------------- Anzeige
+
+    async def preview_prices(
+        self, cards: Sequence[Card], user: User | None
+    ) -> dict[uuid.UUID, tuple[Decimal, bool]]:
+        """Near-Mint-Preis je Karte für Trefferlisten: gespeicherter Zustandspreis (Normal, NM),
+        sonst Basis aus dem Cardmarket-Preisführer (als Näherung markiert). Ruft keine Quelle ab.
+
+        Rückgabe: Karten-ID → (Wert, ``True`` = Näherung bzw. Schätzung).
+        """
+        stored = await self.prices_for_cards([card.id for card in cards], user)
+        result: dict[uuid.UUID, tuple[Decimal, bool]] = {}
+        missing: list[tuple[Card, int]] = []
+        for card in cards:
+            nm = next(
+                (
+                    c
+                    for c in stored[card.id].conditions
+                    if c.variant == "normal" and c.condition == "NM"
+                ),
+                None,
+            )
+            if nm is not None:
+                result[card.id] = (nm.value, nm.kind == "estimated")
+            elif (product := (await resolve_product(self._session, card)).product_id) is not None:
+                missing.append((card, product))
+        if missing:
+            guide = {
+                row.id_product: row.metrics
+                for row in await self._session.scalars(
+                    select(CmPrice).where(CmPrice.id_product.in_([p for _, p in missing]))
+                )
+            }
+            for card, product in missing:
+                metrics = guide.get(product)
+                numbers = {
+                    key: Decimal(str(value))
+                    for key, value in (metrics or {}).items()
+                    if isinstance(value, int | float) and value > 0
+                }
+                if (basis := nm_basis(numbers)) is not None:
+                    result[card.id] = (basis[1].quantize(CENT), True)
+        return result
 
     async def get_prices(self, card: Card, user: User | None) -> CardPrices:
         """Aktuelle Preise je Quelle/Variante und Zustandspreise (Faktoren des Nutzers,

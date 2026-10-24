@@ -10,7 +10,9 @@ import '../../models/models.dart';
 import '../../widgets/common.dart';
 import '../../widgets/value_chart.dart';
 import '../alerts/alerts_screen.dart';
+import '../../core/prefs.dart';
 import '../collection/owned.dart';
+import 'first_steps.dart';
 
 final dashboardProvider = FutureProvider.autoDispose<CollectionSummary>(
   (ref) => ref.watch(apiProvider).dashboard(),
@@ -93,16 +95,19 @@ class DashboardScreen extends ConsumerWidget {
               AsyncBody(
                 value: summary,
                 onRetry: () => invalidateCollection(ref),
-                builder: (data) => _ValueHero(summary: data),
+                builder: (data) =>
+                    data.items == 0 ? const _WelcomeHero() : _ValueHero(summary: data),
               ),
+              // Für Neue: Checkliste mit dem jeweils nächsten Schritt (ausblendbar).
+              if (summary.value case final data?) FirstSteps(summary: data),
               // Reihenfolge: Wert → Heute → Bewegungen → Schnellzugriffe → Karten. Scannen
-              // steckt im runden Knopf unten; die große Kachel nur bei leerer Kiste.
+              // steckt im runden Knopf unten; die große Kachel nur bei leerer Kiste ohne Checkliste.
               if (summary.value case final data? when data.items == 0) ...[
-                const SizedBox(height: 16),
-                _ScanCallToAction(onTap: () => context.push('/scan')),
-                const SizedBox(height: 12),
-                const _QuickActions(),
-                const _EmptyHint(),
+                if (ref.watch(uiPrefsProvider).firstStepsHidden) ...[
+                  const SizedBox(height: 16),
+                  _ScanCallToAction(onTap: () => context.push('/scan')),
+                  const _EmptyHint(),
+                ],
               ] else ...[
                 const _TodayCard(),
                 const _MoversSection(),
@@ -205,6 +210,43 @@ class _ValueHero extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Leere Kiste: statt „0,00 €“ ein Willkommen, das sagt, was hier gleich passiert.
+class _WelcomeHero extends StatelessWidget {
+  const _WelcomeHero();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('welcome-hero'),
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      gradient: AppColors.scanGradient,
+      borderRadius: BorderRadius.circular(24),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.auto_awesome, color: Colors.white, size: 36),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Willkommen in deiner Kartenkiste!',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Füge deine erste Karte hinzu – hier siehst du dann, was deine Sammlung wert ist.',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.9)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _ScanCallToAction extends StatelessWidget {

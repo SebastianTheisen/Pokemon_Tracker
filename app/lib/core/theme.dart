@@ -89,7 +89,10 @@ ThemeData buildTheme(Brightness brightness) {
   final scheme = ColorScheme.fromSeed(seedColor: AppColors.primary, brightness: brightness)
       .copyWith(
         primary: AppColors.primary,
+        // Weiße Schrift auf den blauen Knöpfen – sonst wirken sie ausgegraut.
+        onPrimary: Colors.white,
         secondary: AppColors.accent,
+        onSecondary: Colors.white,
         surface: AppColors.surface,
         error: AppColors.loss,
       );

@@ -55,6 +55,13 @@ class _CardSearchState extends ConsumerState<CardSearch> {
     );
   }
 
+  /// Beispiel antippen: wie getippt, nur ohne Warten.
+  void _searchFor(String text) {
+    _controller.text = text;
+    _debounce?.cancel();
+    setState(() => _query = (text: text, language: _query.language));
+  }
+
   void _setLanguage(String? language) =>
       setState(() => _query = (text: _controller.text, language: language));
 
@@ -88,7 +95,9 @@ class _CardSearchState extends ConsumerState<CardSearch> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: ChoiceChip(
-                    label: Text(language == null ? 'Alle' : languageTag(language)),
+                    label: Text(
+                      language == null ? 'Alle Sprachen' : languageLabels[language] ?? language,
+                    ),
                     selected: _query.language == language,
                     onSelected: (_) => _setLanguage(language),
                   ),
@@ -98,10 +107,7 @@ class _CardSearchState extends ConsumerState<CardSearch> {
         ),
         Expanded(
           child: _query.text.trim().isEmpty
-              ? const EmptyView(
-                  icon: Icons.search,
-                  message: 'Suche nach Name (Deutsch oder Englisch) und/oder Kartennummer.',
-                )
+              ? _StartHint(onExample: _searchFor, showScan: widget.onSelect == null)
               : AsyncBody(
                   value: results,
                   onRetry: () => ref.invalidate(searchProvider(_query)),
@@ -143,7 +149,9 @@ class _CardSearchState extends ConsumerState<CardSearch> {
                               itemCount: hits.length,
                               separatorBuilder: (_, _) => const Divider(indent: 72),
                               itemBuilder: (context, index) {
-                                final card = hits[index].card;
+                                final hit = hits[index];
+                                final card = hit.card;
+                                final price = _HitPrice(hit: hit);
                                 return CardTile(
                                   below: switch (owned[card.id]) {
                                     final entries? => OwnedLine(entries: entries),
@@ -154,8 +162,14 @@ class _CardSearchState extends ConsumerState<CardSearch> {
                                       ? widget.onSelect!(card)
                                       : context.push('/card/${card.id}'),
                                   trailing: widget.onSelect == null
-                                      ? QuickAddButton(card: card)
-                                      : null,
+                                      ? Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            price,
+                                            QuickAddButton(card: card),
+                                          ],
+                                        )
+                                      : price,
                                 );
                               },
                             );
@@ -179,6 +193,79 @@ class _CardSearchState extends ConsumerState<CardSearch> {
       await context.push('/card/${card.id}');
     }
   }
+}
+
+/// Preis am Treffer: „87,45 €“ (Beleg) bzw. „≈ 87,45 €“ (Näherung); leer, wenn unbekannt.
+class _HitPrice extends StatelessWidget {
+  const _HitPrice({required this.hit});
+
+  final SearchHit hit;
+
+  @override
+  Widget build(BuildContext context) => hit.price == null
+      ? const SizedBox.shrink()
+      : Text(
+          '${hit.priceEstimated ? '≈ ' : ''}${money(hit.price)}',
+          key: Key('hit-price-${hit.card.id}'),
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        );
+}
+
+/// Leere Suche: Beispiele zum Antippen statt einer leeren Fläche – und der Weg zum Scanner.
+class _StartHint extends StatelessWidget {
+  const _StartHint({required this.onExample, required this.showScan});
+
+  final ValueChanged<String> onExample;
+  final bool showScan;
+
+  static const _examples = ['Glurak', 'Pikachu', 'Mew', 'Nachtara 215', 'Evoli'];
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+    children: [
+      Icon(Icons.search, size: 48, color: AppColors.textMuted),
+      const SizedBox(height: 12),
+      Text(
+        'Tippe den Namen der Karte – Deutsch oder Englisch. Mit Nummer findest du '
+        'genau die richtige.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: AppColors.textMuted),
+      ),
+      const SizedBox(height: 16),
+      Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final example in _examples)
+            ActionChip(
+              key: Key('search-example-$example'),
+              avatar: const Icon(Icons.north_west, size: 16),
+              label: Text(example),
+              onPressed: () => onExample(example),
+            ),
+        ],
+      ),
+      if (showScan) ...[
+        const SizedBox(height: 32),
+        Text(
+          'Karte liegt vor dir? Scannen ist schneller:',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: AppColors.textMuted),
+        ),
+        const SizedBox(height: 8),
+        Center(
+          child: FilledButton.icon(
+            key: const Key('search-scan'),
+            onPressed: () => context.push('/scan'),
+            icon: const Icon(Icons.document_scanner),
+            label: const Text('Karte scannen'),
+          ),
+        ),
+      ],
+    ],
+  );
 }
 
 class SearchScreen extends StatelessWidget {

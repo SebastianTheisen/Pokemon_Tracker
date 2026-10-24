@@ -271,9 +271,14 @@ class FakeApi extends Api {
   @override
   Future<List<SearchHit>> search(String query, {String? language, int limit = 30}) async {
     calls.add('search:$query');
-    return query.contains('nachtara')
+    return query.toLowerCase().contains('nachtara')
         ? [
-            SearchHit.fromJson({'score': 1.0, 'card': cardJson()}),
+            SearchHit.fromJson({
+              'score': 1.0,
+              'card': cardJson(),
+              'price': '1805.90',
+              'price_estimated': true,
+            }),
           ]
         : [];
   }
@@ -446,6 +451,9 @@ class FakeApi extends Api {
       if (cardIds.contains(json['card_id'])) OwnedEntry.fromJson(json),
   ];
 
+  /// Positionen der Sammlung (Standard: zwei).
+  List<Json>? itemsOverride;
+
   @override
   Future<ItemPage> items({
     String? folderId,
@@ -463,10 +471,8 @@ class FakeApi extends Api {
     calls.add(
       'items:${[language, condition, minValue, maxValue, withPurchase].map((v) => v ?? '-').join('|')}',
     );
-    return ItemPage.fromJson({
-      'items': [itemJson(), itemJson(id: 'i2', total: '50.00')],
-      'total': 2,
-    });
+    final items = itemsOverride ?? [itemJson(), itemJson(id: 'i2', total: '50.00')];
+    return ItemPage.fromJson({'items': items, 'total': items.length});
   }
 
   @override
@@ -1007,8 +1013,10 @@ Future<void> pumpApp(
         apiProvider.overrideWithValue(api),
         imageSourceProvider.overrideWithValue(images ?? FakeImageSource()),
         pushBridgeProvider.overrideWithValue(push ?? FakePushBridge()),
-        // Standard: Anleitung schon gesehen, damit sie die übrigen Tests nicht verdeckt.
-        prefsStoreProvider.overrideWithValue(prefs ?? MemoryPrefsStore({'onboarded': 'true'})),
+        // Standard: Anleitung gesehen, Erste Schritte aus – verdecken sonst die übrigen Tests.
+        prefsStoreProvider.overrideWithValue(
+          prefs ?? MemoryPrefsStore({'onboarded': 'true', 'first_steps_hidden': 'true'}),
+        ),
       ],
       child: const KartenkisteApp(),
     ),

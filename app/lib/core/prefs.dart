@@ -46,6 +46,7 @@ class UiPrefs {
     this.listView = false,
     this.themeMode = ThemeMode.system,
     this.onboarded = false,
+    this.firstStepsHidden = false,
   });
 
   /// Erst nach dem Laden entscheiden (sonst blitzt z. B. die Anleitung kurz auf).
@@ -58,13 +59,22 @@ class UiPrefs {
   /// Erst-Start-Anleitung gesehen.
   final bool onboarded;
 
-  UiPrefs copyWith({bool? loaded, bool? listView, ThemeMode? themeMode, bool? onboarded}) =>
-      UiPrefs(
-        loaded: loaded ?? this.loaded,
-        listView: listView ?? this.listView,
-        themeMode: themeMode ?? this.themeMode,
-        onboarded: onboarded ?? this.onboarded,
-      );
+  /// Karte „Erste Schritte“ auf der Startseite ausgeblendet.
+  final bool firstStepsHidden;
+
+  UiPrefs copyWith({
+    bool? loaded,
+    bool? listView,
+    ThemeMode? themeMode,
+    bool? onboarded,
+    bool? firstStepsHidden,
+  }) => UiPrefs(
+    loaded: loaded ?? this.loaded,
+    listView: listView ?? this.listView,
+    themeMode: themeMode ?? this.themeMode,
+    onboarded: onboarded ?? this.onboarded,
+    firstStepsHidden: firstStepsHidden ?? this.firstStepsHidden,
+  );
 }
 
 class UiPrefsController extends Notifier<UiPrefs> {
@@ -88,6 +98,7 @@ class UiPrefsController extends Notifier<UiPrefs> {
       listView: values['list_view'] == 'true',
       themeMode: ThemeMode.values.asNameMap()[values['theme']] ?? ThemeMode.system,
       onboarded: values['onboarded'] == 'true',
+      firstStepsHidden: values['first_steps_hidden'] == 'true',
     );
   }
 
@@ -107,6 +118,11 @@ class UiPrefsController extends Notifier<UiPrefs> {
   void setThemeMode(ThemeMode mode) {
     state = state.copyWith(themeMode: mode);
     _save('theme', mode.name);
+  }
+
+  void hideFirstSteps() {
+    state = state.copyWith(firstStepsHidden: true);
+    _save('first_steps_hidden', 'true');
   }
 
   void finishOnboarding() {

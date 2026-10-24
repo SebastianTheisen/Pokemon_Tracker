@@ -1320,4 +1320,65 @@ void usabilityTests() {
     expect(prefs.values['theme'], 'light');
     expect(AppColors.brightness, Brightness.light);
   });
+
+  testWidgets('Neuling: Willkommen, Erste Schritte, leere Sammlung mit klaren Knöpfen', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true)
+      ..summaryOverride = {
+        ...summaryJson(total: '0.00'),
+        'items': 0,
+        'positions': 0,
+        'top_item': null,
+      }
+      ..itemsOverride = [];
+    final prefs = MemoryPrefsStore({'onboarded': 'true'});
+    await pumpApp(tester, api, prefs: prefs);
+
+    expect(find.byKey(const Key('welcome-hero')), findsOneWidget);
+    expect(find.byKey(const Key('total-value')), findsNothing); // kein „0,00 €“
+    expect(find.byKey(const Key('first-steps')), findsOneWidget);
+    expect(find.text('0 von 4'), findsOneWidget);
+    expect(
+      find.byKey(const Key('first-scan')),
+      findsOneWidget,
+    ); // nur der nächste Schritt hat Knöpfe
+    expect(find.text('Zur Sammlung'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('tab-Sammlung')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('collection-filter')), findsNothing); // keine Leiste für nichts
+    expect(find.byKey(const Key('empty-scan')), findsOneWidget);
+    expect(find.byKey(const Key('empty-search')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('tab-Übersicht')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('first-steps-hide')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('first-steps')), findsNothing);
+    expect(prefs.values['first_steps_hidden'], 'true');
+  });
+
+  testWidgets('Suche: Beispiele antippen, Preis direkt am Treffer', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('tab-Suche')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('search-scan')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('search-example-Nachtara 215')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('search:Nachtara 215'));
+    expect(find.text('≈ 1.805,90\u00a0€'), findsOneWidget);
+  });
+
+  testWidgets('Erste Schritte: Kaufpreis mit einem Tipp – öffnet die neueste Karte', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api, prefs: MemoryPrefsStore({'onboarded': 'true'}));
+    expect(find.byKey(const Key('first-card-done')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('first-price-edit')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('item-save')), findsOneWidget); // Bearbeiten-Formular offen
+  });
 }
