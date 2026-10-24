@@ -315,13 +315,24 @@ class _Showcase extends ConsumerWidget {
 
 /// Kartenbild mit Name und Wert darunter (Startseite und Sammlungs-Raster).
 class ItemThumb extends StatelessWidget {
-  const ItemThumb({required this.item, this.width = 104, this.onTap, super.key});
+  const ItemThumb({
+    required this.item,
+    this.width = 104,
+    this.onTap,
+    this.onLongPress,
+    this.selected,
+    super.key,
+  });
 
   final CollectionItem item;
   final double width;
 
   /// Statt die Karte zu öffnen (z. B. Aktionsmenü in der Sammlung).
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+
+  /// Auswahlmodus: `true`/`false` zeigt einen Haken bzw. Kreis; `null` = kein Auswahlmodus.
+  final bool? selected;
 
   @override
   Widget build(BuildContext context) {
@@ -331,12 +342,27 @@ class ItemThumb extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: onTap ?? (card == null ? null : () => context.push('/card/${card.id}')),
+        onLongPress: onLongPress,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Stack(
               children: [
-                CardImage(url: item.image, width: width, contain: card == null),
+                Opacity(
+                  opacity: selected == false ? 0.55 : 1,
+                  child: CardImage(url: item.image, width: width, contain: card == null),
+                ),
+                if (selected case final isSelected?)
+                  Positioned(
+                    left: 4,
+                    top: 4,
+                    child: Icon(
+                      isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+                      key: Key('select-${item.id}'),
+                      color: isSelected ? AppColors.primary : Colors.white,
+                      shadows: const [Shadow(blurRadius: 4)],
+                    ),
+                  ),
                 if (item.quantity > 1 || item.kind == 'graded')
                   Positioned(
                     right: 4,

@@ -434,8 +434,11 @@ class Api {
   Future<Movers> movers({int days = 7}) async =>
       Movers.fromJson(await _get('/collection/movers', query: {'days': days}));
 
-  Future<CollectionHistory> collectionHistory({int days = 90}) async =>
-      CollectionHistory.fromJson(await _get('/collection/history', query: {'days': days}));
+  /// Wertkurve der Sammlung oder eines Ordners.
+  Future<CollectionHistory> collectionHistory({int days = 90, String? folderId}) async =>
+      CollectionHistory.fromJson(
+        await _get('/collection/history', query: {'days': days, 'folder_id': folderId}),
+      );
 
   Future<List<Folder>> folders() async => parseList(await _getList('/folders'), Folder.fromJson);
 
@@ -478,6 +481,16 @@ class Api {
       );
 
   Future<void> deleteItem(String id) => _send('DELETE', '/collection/items/$id');
+
+  /// Mehrfachauswahl: `move` / `copy` (mit [folderId]) oder `delete`. Gibt die Anzahl zurück.
+  Future<int> bulkItems(List<String> ids, String action, {String? folderId}) async {
+    final result = await _send(
+      'POST',
+      '/collection/items/bulk',
+      body: {'item_ids': ids, 'action': action, 'folder_id': ?folderId},
+    );
+    return ((result! as Json)['count'] as num).toInt();
+  }
 
   Future<List<SetOverview>> collectionSets() async =>
       parseList(await _getList('/collection/sets'), SetOverview.fromJson);

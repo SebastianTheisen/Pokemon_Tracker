@@ -58,6 +58,8 @@ Danach startet Kartenkiste wie eine normale App, auch die Kamera funktioniert.
 * **Gewinn/Verlust:** Trag den Kaufpreis ein (direkt nach dem Scan oder über „Bearbeiten“). Dann
   zeigt die App, was du bezahlt hast und wie viel du heute im Plus oder Minus bist – gesamt, je
   Ordner und je Karte. Sortieren nach „Höchster Gewinn“ / „Größter Verlust“ geht auch.
+* **Mehrere auf einmal:** In der Sammlung lange auf eine Karte drücken → weitere antippen (oder
+  „alle auswählen“) → verschieben, in einen anderen Ordner kopieren oder entfernen.
 
 Deine Sammlung sieht nur du (und der Admin zur Hilfe). Gespeichert werden keine Fotos, nur
 die Merkmale zum Wiedererkennen.

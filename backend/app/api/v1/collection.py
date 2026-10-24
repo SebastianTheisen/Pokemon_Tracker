@@ -20,6 +20,8 @@ from app.schemas.collection import (
     ItemCreate,
     ItemOut,
     ItemPage,
+    ItemsBulk,
+    ItemsBulkResult,
     ItemUpdate,
     MarkerOut,
     MoversOut,
@@ -30,6 +32,7 @@ from app.schemas.collection import (
     WishlistEntryOut,
 )
 from app.services.collection import CollectionService, ItemFilter, ItemInput, SortKey
+from app.services.errors import InvalidInputError
 from app.services.valuation import ItemKind
 
 router = APIRouter(tags=["collection"])
@@ -105,6 +108,19 @@ async def add_item(body: ItemCreate, collection: Collection) -> ItemOut:
     return await _item_out(collection, item.id)
 
 
+@router.post("/collection/items/bulk")
+async def bulk_items(body: ItemsBulk, collection: Collection) -> ItemsBulkResult:
+    """Mehrere Positionen auf einmal verschieben, kopieren (zählt als neu) oder entfernen."""
+    if body.action == "delete":
+        return ItemsBulkResult(count=await collection.delete_items(body.item_ids))
+    if body.folder_id is None:
+        raise InvalidInputError("Bitte einen Zielordner wählen.")
+    if body.action == "move":
+        return ItemsBulkResult(count=await collection.move_items(body.item_ids, body.folder_id))
+    copies = await collection.copy_items(body.item_ids, body.folder_id)
+    return ItemsBulkResult(count=len(copies))
+
+
 @router.get("/collection/items/{item_id}")
 async def get_item(item_id: uuid.UUID, collection: Collection) -> ItemOut:
     return await _item_out(collection, item_id)
@@ -158,9 +174,12 @@ async def sets_overview(collection: Collection) -> list[SetOverviewOut]:
 
 @router.get("/collection/history")
 async def history(
-    collection: Collection, days: Annotated[int, Query(ge=1, le=3650)] = 90
+    collection: Collection,
+    days: Annotated[int, Query(ge=1, le=3650)] = 90,
+    folder_id: uuid.UUID | None = None,
 ) -> CollectionHistoryOut:
-    points, markers = await collection.history(days)
+    """Wertkurve der Sammlung oder eines Ordners (dann ohne Bestandsmarkierungen)."""
+    points, markers = await collection.history(days, folder_id)
     return CollectionHistoryOut(
         points=[HistoryPointOut.build(p) for p in points],
         markers=[MarkerOut.build(m) for m in markers],

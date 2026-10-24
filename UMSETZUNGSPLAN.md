@@ -354,7 +354,7 @@ Quellen: getcollectr.com, App-Store-/Play-Store-Eintrag, Hilfe-Center (Notion), 
 #### Plan Phase 7 (Vorschlag, Reihenfolge = Priorität)
 
 1. [x] **Kaufpreis → Gewinn/Verlust:** je Position, je Ordner und gesamt („investiert“ / „Gewinn“ in € und %); „Seit dem Kauf“ mit bestem/schlechtestem Kauf; Sortierung nach Gewinn/Verlust; Kaufpreis direkt nach dem Scan; CSV mit Spalte Gewinn. API: `GET /dashboard?folder_id=`, `GET /collection/folders`, `sort=profit_desc|profit_asc`
-2. [ ] **Ordner als Portfolios:** ~~Wert und Gewinn je Ordner~~ ✅ (Kopf der Sammlung folgt dem Ordner-Filter, Ordnerverwaltung zeigt Wert/Gewinn); offen: Verlauf je Ordner, Mehrfachauswahl zum Verschieben/Kopieren/Löschen
+2. [x] **Ordner als Portfolios:** Wert und Gewinn je Ordner (Kopf der Sammlung folgt dem Ordner-Filter, Ordnerverwaltung zeigt Wert/Gewinn); Wertkurve je Ordner aus Tageswerten (`folder_snapshots`, Migration 0017, ab der nächsten Preisrunde); Mehrfachauswahl per langem Druck: alle auswählen, verschieben, kopieren (zählt als neu), entfernen. API: `POST /collection/items/bulk`, `GET /collection/history?folder_id=`
 3. [ ] **Filter erweitern:** Sprache, Raw/Graded, Preisspanne, Zustand; Schnell-Hinzufügen per Langdruck in der Suche
 4. [ ] **Preisalarme:** Zielpreis ↑/↓ an Merkliste und Sammlung, Prüfung nach der täglichen Preisrunde; Zustellung per Web-Push der PWA (iPhone ab iOS 16.4 vom Home-Bildschirm) – eigenes ntfy-Thema je Nutzer als Alternative, Entscheidung offen
 5. [ ] **Set-Fortschritt / Master-Set:** %-Leiste je Set, Ansicht „fehlt mir“ (mit einem Tipp in die Merkliste), Master-Set zählt Varianten (Reverse Holo, Holo) aus den TCGdex-Varianten

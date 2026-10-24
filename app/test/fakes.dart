@@ -255,7 +255,7 @@ class FakeApi extends Api {
   Future<Movers> movers({int days = 7}) async => Movers.fromJson(moversJson);
 
   @override
-  Future<CollectionHistory> collectionHistory({int days = 90}) async =>
+  Future<CollectionHistory> collectionHistory({int days = 90, String? folderId}) async =>
       CollectionHistory.fromJson({'points': <Json>[], 'markers': <Json>[]});
 
   @override
@@ -437,8 +437,8 @@ class FakeApi extends Api {
     int limit = 500,
     int offset = 0,
   }) async => ItemPage.fromJson({
-    'items': [itemJson()],
-    'total': 1,
+    'items': [itemJson(), itemJson(id: 'i2', total: '50.00')],
+    'total': 2,
   });
 
   @override
@@ -497,13 +497,19 @@ class FakeApi extends Api {
   Map<String, Object?>? lastItemChanges;
 
   @override
+  Future<int> bulkItems(List<String> ids, String action, {String? folderId}) async {
+    calls.add('bulk:$action:${ids.join(',')}:$folderId');
+    return ids.length;
+  }
+
+  @override
   Future<CollectionItem> updateItem(String id, Map<String, Object?> changes) async {
     calls.add('updateItem:$id');
     lastItemChanges = changes;
     final price = changes['purchase_price'] as String?;
     final json = itemJson()..['purchase_price'] = price;
     if (price != null) {
-      final total = double.parse(itemJson()['value']['total_value'] as String);
+      final total = double.parse((itemJson()['value'] as Json)['total_value'] as String);
       final cost = double.parse(price);
       (json['value'] as Json)
         ..['cost'] = cost.toStringAsFixed(2)

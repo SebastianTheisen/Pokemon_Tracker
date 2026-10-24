@@ -27,6 +27,7 @@ from app.models import (
     CollectionEventType,
     CollectionItem,
     Folder,
+    FolderSnapshot,
     GradingCompany,
     PortfolioSnapshot,
     Product,
@@ -398,6 +399,73 @@ class CollectionService:
         await self._session.flush()
         await self._session.delete(item)
 
+    async def _own_items(self, item_ids: Sequence[uuid.UUID]) -> list[CollectionItem]:
+        """Eigene Positionen in der Reihenfolge der IDs – fremde/unbekannte → 404."""
+        found = {
+            item.id: item
+            for item in (
+                await self._session.scalars(
+                    select(CollectionItem).where(
+                        CollectionItem.id.in_(item_ids),
+                        CollectionItem.user_id == self._owner.id,
+                    )
+                )
+            )
+            .unique()
+            .all()
+        }
+        if len(found) != len(set(item_ids)):
+            raise NotFoundError("Position nicht gefunden.")
+        return [found[i] for i in dict.fromkeys(item_ids)]
+
+    async def move_items(self, item_ids: Sequence[uuid.UUID], folder_id: uuid.UUID) -> int:
+        """Verschiebt Positionen in einen Ordner (Wert und Verlauf bleiben)."""
+        folder = await self._own_folder(folder_id)
+        items = await self._own_items(item_ids)
+        for item in items:
+            item.folder_id = folder.id
+        await self._session.flush()
+        return len(items)
+
+    async def copy_items(
+        self, item_ids: Sequence[uuid.UUID], folder_id: uuid.UUID
+    ) -> list[CollectionItem]:
+        """Kopiert Positionen in einen Ordner – zählt wie neu hinzugefügt (Startwert = heute)."""
+        folder = await self._own_folder(folder_id)
+        copies = []
+        for original in await self._own_items(item_ids):
+            item = CollectionItem(
+                id=uuid.uuid4(),
+                user_id=self._owner.id,
+                folder_id=folder.id,
+                card_id=original.card_id,
+                product_id=original.product_id,
+                variant=original.variant,
+                condition=original.condition,
+                quantity=original.quantity,
+                purchase_price=original.purchase_price,
+                purchase_date=original.purchase_date,
+                custom_price=original.custom_price,
+                note=original.note,
+                grading_company=original.grading_company,
+                grade=original.grade,
+            )
+            self._session.add(item)
+            await self._session.flush()
+            await self._session.refresh(item, ["card", "product", "folder"])
+            start = await self._current_unit_value(item)
+            item.value_at_add = start.unit_value
+            self._event(item, CollectionEventType.ADDED, item.quantity, start.unit_value)
+            copies.append(item)
+        await self._session.flush()
+        return copies
+
+    async def delete_items(self, item_ids: Sequence[uuid.UUID]) -> int:
+        items = await self._own_items(item_ids)
+        for item in items:
+            await self.delete_item(item.id)
+        return len(items)
+
     # ------------------------------------------------------------ Bewertung
 
     def _filtered(self, item_filter: ItemFilter) -> Select[CollectionItem]:
@@ -539,11 +607,14 @@ class CollectionService:
     # ------------------------------------------------------------- Verlauf
 
     async def take_snapshot(self, day: date | None = None) -> PortfolioSnapshot:
-        """Speichert den Tageswert (überschreibt den Wert desselben Tages)."""
-        summary = await self.summary()
+        """Speichert den Tageswert – gesamt und je Ordner (überschreibt denselben Tag)."""
+        day = day or self._now().date()
+        valued = await self.valued_items()
+        summary = summarize(valued)
+        await self._snapshot_folders(valued, day)
         values = {
             "user_id": self._owner.id,
-            "day": day or self._now().date(),
+            "day": day,
             "total_value": summary.total_value,
             "raw_value": summary.by_kind["raw"].value,
             "graded_value": summary.by_kind["graded"].value,
@@ -564,10 +635,57 @@ class CollectionService:
         await self._session.refresh(snapshot)
         return snapshot
 
-    async def history(self, days: int = 90) -> tuple[list[HistoryEntry], list[EventMarker]]:
-        """Tageswerte plus heutiger Live-Wert und Bestandsänderungen als Markierungen."""
+    async def _snapshot_folders(self, valued: Sequence[ValuedItem], day: date) -> None:
+        grouped: dict[uuid.UUID, list[ValuedItem]] = {f.id: [] for f in await self.list_folders()}
+        for entry in valued:
+            grouped.setdefault(entry.item.folder_id, []).append(entry)
+        for folder_id, entries in grouped.items():
+            summary = summarize(entries)
+            values = {
+                "folder_id": folder_id,
+                "day": day,
+                "total_value": summary.total_value,
+                "estimated_value": summary.estimated_value,
+                "invested": summary.invested,
+                "item_count": summary.items,
+            }
+            await self._session.execute(
+                insert(FolderSnapshot)
+                .values(values)
+                .on_conflict_do_update(
+                    index_elements=[FolderSnapshot.folder_id, FolderSnapshot.day],
+                    set_={k: v for k, v in values.items() if k not in ("folder_id", "day")},
+                )
+            )
+
+    async def history(
+        self, days: int = 90, folder_id: uuid.UUID | None = None
+    ) -> tuple[list[HistoryEntry], list[EventMarker]]:
+        """Tageswerte plus heutiger Live-Wert und Bestandsänderungen als Markierungen.
+
+        Mit ``folder_id`` die Kurve eines Ordners – ohne Markierungen, weil verschobene
+        Positionen ihre Ereignisse nicht eindeutig einem Ordner zuordnen.
+        """
         today = self._now().date()
         since = today - timedelta(days=days)
+        if folder_id is not None:
+            await self._own_folder(folder_id)
+            folder_rows = (
+                await self._session.scalars(
+                    select(FolderSnapshot)
+                    .where(FolderSnapshot.folder_id == folder_id, FolderSnapshot.day >= since)
+                    .order_by(FolderSnapshot.day)
+                )
+            ).all()
+            live = await self.summary(folder_id)
+            return [
+                *(
+                    HistoryEntry(r.day, r.total_value, r.estimated_value)
+                    for r in folder_rows
+                    if r.day != today
+                ),
+                HistoryEntry(today, live.total_value, live.estimated_value, is_live=True),
+            ], []
         snapshots = (
             await self._session.scalars(
                 select(PortfolioSnapshot)

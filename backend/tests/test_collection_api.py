@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
-from app.models import AuditLog, Card, PortfolioSnapshot
+from app.models import AuditLog, Card, FolderSnapshot, PortfolioSnapshot
 from app.services.price_health import SourceHealth
 from app.services.pricing import tracked_card_ids
 from app.worker import refresh_tracked_prices
@@ -288,6 +288,123 @@ async def test_item_validation(
     for body, expected in cases:
         response = await client.post(f"{API}/collection/items", json=body, headers=alice.headers)
         assert response.status_code == expected, (body, response.text)
+
+
+async def test_bulk_move_copy_delete(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    cards: tuple[Card, Card],
+    price_provider: FakeProvider,
+) -> None:
+    alice = await register_user("alice@example.com")
+    price_provider.quotes = [cardmarket("trend", "100")]
+    binder = (
+        await client.post(f"{API}/folders", json={"name": "Binder"}, headers=alice.headers)
+    ).json()
+    first = await _add(client, alice, card_id=str(cards[0].id), purchase_price="80", note="A")
+    second = await _add(client, alice, card_id=str(cards[1].id), quantity=2)
+    third = await _add(client, alice, card_id=str(cards[1].id))
+
+    async def bulk(**body: Any) -> Any:
+        return await client.post(f"{API}/collection/items/bulk", json=body, headers=alice.headers)
+
+    moved = await bulk(item_ids=[first["id"], second["id"]], action="move", folder_id=binder["id"])
+    assert moved.json() == {"count": 2}
+    in_binder = (
+        await client.get(
+            f"{API}/collection/items", params={"folder_id": binder["id"]}, headers=alice.headers
+        )
+    ).json()
+    assert {i["id"] for i in in_binder["items"]} == {first["id"], second["id"]}
+
+    default_id = (await client.get(f"{API}/folders", headers=alice.headers)).json()[0]["id"]
+    copied = await bulk(item_ids=[first["id"]], action="copy", folder_id=default_id)
+    assert copied.json() == {"count": 1}
+    in_default = (
+        await client.get(
+            f"{API}/collection/items", params={"folder_id": default_id}, headers=alice.headers
+        )
+    ).json()["items"]
+    copy = next(i for i in in_default if i["id"] != third["id"])
+    assert (copy["card"]["id"], copy["purchase_price"], copy["note"]) == (
+        str(cards[0].id),
+        "80.00",
+        "A",
+    )
+    summary = (await client.get(f"{API}/dashboard", headers=alice.headers)).json()
+    assert summary["items"] == 5  # 1 + 2 + 1 + Kopie 1
+
+    assert (await bulk(item_ids=[first["id"]], action="move")).status_code == 400
+    deleted = await bulk(item_ids=[second["id"], third["id"]], action="delete")
+    assert deleted.json() == {"count": 2}
+    summary = (await client.get(f"{API}/dashboard", headers=alice.headers)).json()
+    assert summary["items"] == 2
+
+
+async def test_bulk_rejects_foreign_items_completely(
+    client: AsyncClient, register_user: RegisterUser, cards: tuple[Card, Card]
+) -> None:
+    alice = await register_user("alice@example.com")
+    bob = await register_user("bob@example.com")
+    mine = await _add(client, bob, card_id=str(cards[0].id))
+    foreign = await _add(client, alice, card_id=str(cards[0].id))
+    response = await client.post(
+        f"{API}/collection/items/bulk",
+        json={"item_ids": [mine["id"], foreign["id"]], "action": "delete"},
+        headers=bob.headers,
+    )
+    assert response.status_code == 404
+    still = await client.get(f"{API}/collection/items/{mine['id']}", headers=bob.headers)
+    assert still.status_code == 200  # nichts gelöscht
+
+
+async def test_folder_curve_from_daily_snapshots(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    cards: tuple[Card, Card],
+    price_provider: FakeProvider,
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+) -> None:
+    alice = await register_user("alice@example.com")
+    price_provider.quotes = [cardmarket("trend", "100")]
+    binder = (
+        await client.post(f"{API}/folders", json={"name": "Binder"}, headers=alice.headers)
+    ).json()
+    await _add(client, alice, card_id=str(cards[0].id))
+    await _add(client, alice, card_id=str(cards[1].id), folder_id=binder["id"], purchase_price="70")
+
+    health = SourceHealth(threshold=3, pause=timedelta(minutes=60))
+    await refresh_tracked_prices(session_factory, settings, [price_provider], health)
+    async with session_factory() as session:
+        rows = (await session.scalars(select(FolderSnapshot))).all()
+        assert sorted((r.total_value, r.invested, r.item_count) for r in rows) == [
+            (Decimal("100.00"), Decimal("0.00"), 1),
+            (Decimal("100.00"), Decimal("70.00"), 1),
+        ]
+        yesterday = rows[0].day - timedelta(days=1)
+        session.add(
+            FolderSnapshot(
+                folder_id=binder["id"],
+                day=yesterday,
+                total_value=Decimal("90.00"),
+                estimated_value=Decimal("90.00"),
+                invested=Decimal("70.00"),
+                item_count=1,
+            )
+        )
+        await session.commit()
+
+    history = (
+        await client.get(
+            f"{API}/collection/history", params={"folder_id": binder["id"]}, headers=alice.headers
+        )
+    ).json()
+    assert [(p["total_value"], p["is_live"]) for p in history["points"]] == [
+        ("90.00", False),
+        ("100.00", True),
+    ]
+    assert history["markers"] == []
 
 
 async def test_folders_lifecycle(

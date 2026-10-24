@@ -187,6 +187,21 @@ class PortfolioSnapshot(Base):
     position_count: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
+class FolderSnapshot(Base):
+    """Tageswert eines Ordners (Wertkurve je Ordner/Portfolio)."""
+
+    __tablename__ = "folder_snapshots"
+
+    folder_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("folders.id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    total_value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    estimated_value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    invested: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    item_count: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
 class WishlistItem(UuidPrimaryKeyMixin, Base):
     """Eintrag der (einen) Merkliste eines Nutzers."""
 

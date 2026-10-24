@@ -8,6 +8,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
+import '../../widgets/value_chart.dart';
 import '../dashboard/dashboard_screen.dart';
 import 'item_sheet.dart';
 
@@ -17,6 +18,11 @@ final itemsProvider = FutureProvider.autoDispose.family<ItemPage, ItemFilter>(
   (ref, filter) => ref
       .watch(apiProvider)
       .items(folderId: filter.folderId, kind: filter.kind, query: filter.query, sort: filter.sort),
+);
+
+/// Wertkurve der ganzen Sammlung (`null`) oder eines Ordners.
+final folderHistoryProvider = FutureProvider.autoDispose.family<CollectionHistory, String?>(
+  (ref, folderId) => ref.watch(apiProvider).collectionHistory(folderId: folderId),
 );
 
 final collectionSetsProvider = FutureProvider.autoDispose<List<SetOverview>>(
@@ -45,12 +51,71 @@ class CollectionScreen extends ConsumerStatefulWidget {
 class _CollectionScreenState extends ConsumerState<CollectionScreen> {
   ItemFilter _filter = (folderId: null, kind: null, query: '', sort: 'value_desc');
 
+  /// Mehrfachauswahl (IDs); leer = normaler Modus.
+  final Set<String> _selected = {};
+
+  bool get _selecting => _selected.isNotEmpty;
+
   void _reload() {
     ref
       ..invalidate(itemsProvider)
       ..invalidate(foldersProvider)
+      ..invalidate(folderHistoryProvider)
       ..invalidate(collectionSetsProvider);
     invalidateCollection(ref);
+  }
+
+  void _toggle(CollectionItem item) => setState(
+    () => _selected.contains(item.id) ? _selected.remove(item.id) : _selected.add(item.id),
+  );
+
+  /// Verschieben/Kopieren (mit Zielordner) oder Entfernen der ausgewählten Positionen.
+  Future<void> _bulk(String action, List<Folder> folders) async {
+    final ids = _selected.toList();
+    String? folderId;
+    if (action != 'delete') {
+      folderId = await _pickFolder(
+        context,
+        folders,
+        title: action == 'move' ? 'Verschieben nach …' : 'Kopieren nach …',
+      );
+      if (folderId == null) return;
+    } else {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('${ids.length} Positionen entfernen?'),
+          content: const Text('Die ausgewählten Positionen werden aus der Sammlung entfernt.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              key: const Key('bulk-delete-confirm'),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Entfernen'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    if (!mounted) return;
+    var count = 0;
+    final ok = await runAction(
+      context,
+      () async => count = await ref.read(apiProvider).bulkItems(ids, action, folderId: folderId),
+    );
+    if (!ok || !mounted) return;
+    final verb = switch (action) {
+      'move' => 'verschoben',
+      'copy' => 'kopiert',
+      _ => 'entfernt',
+    };
+    showMessage(context, '$count ${count == 1 ? 'Position' : 'Positionen'} $verb');
+    setState(_selected.clear);
+    _reload();
   }
 
   @override
@@ -58,124 +123,181 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     final summary = ref.watch(folderSummaryProvider(_filter.folderId));
     final items = ref.watch(itemsProvider(_filter));
     final folders = ref.watch(foldersProvider).value ?? const <Folder>[];
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sammlung'),
-        actions: [
-          IconButton(
-            tooltip: 'Sets',
-            onPressed: () => context.push('/sets'),
-            icon: const Icon(Icons.layers_outlined),
-          ),
-          IconButton(
-            tooltip: 'Ordner verwalten',
-            onPressed: () => _manageFolders(context, folders),
-            icon: const Icon(Icons.folder_outlined),
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'Sortieren',
-            icon: const Icon(Icons.sort),
-            initialValue: _filter.sort,
-            onSelected: (sort) => setState(
-              () => _filter = (
-                folderId: _filter.folderId,
-                kind: _filter.kind,
-                query: _filter.query,
-                sort: sort,
-              ),
-            ),
-            itemBuilder: (_) => [
-              for (final entry in sortLabels.entries)
-                PopupMenuItem(value: entry.key, child: Text(entry.value)),
-            ],
-          ),
-        ],
-      ),
-      // Gut sichtbar statt Symbol in der Kopfzeile: Karten kommen über „Scannen“, Versiegeltes hier.
-      floatingActionButton: FloatingActionButton.extended(
-        key: const Key('add-sealed'),
-        heroTag: 'add-sealed',
-        tooltip: 'Versiegeltes hinzufügen (Booster, Display, ETB …)',
-        onPressed: () => context.push('/sealed/add'),
-        icon: const Icon(Icons.inventory_2_outlined),
-        label: const Text('Versiegelt'),
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async => _reload(),
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: summary.maybeWhen(
-                data: (data) => _SummaryHeader(summary: data),
-                orElse: () => const SizedBox(height: 8),
-              ),
-            ),
-            SliverToBoxAdapter(child: _filters(folders)),
-            ...items.when(
-              loading: () => [
-                const SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
-              ],
-              error: (error, _) => [
-                SliverFillRemaining(
-                  child: ErrorView(message: '$error', onRetry: _reload),
+    final pageItems = items.value?.items ?? const <CollectionItem>[];
+    return PopScope(
+      canPop: !_selecting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(_selected.clear);
+      },
+      child: Scaffold(
+        appBar: _selecting
+            ? AppBar(
+                leading: IconButton(
+                  tooltip: 'Auswahl beenden',
+                  onPressed: () => setState(_selected.clear),
+                  icon: const Icon(Icons.close),
                 ),
-              ],
-              data: (page) => page.items.isEmpty
-                  ? [
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: EmptyView(
-                          icon: Icons.collections_bookmark_outlined,
-                          message:
-                              'Noch nichts hier. Scanne eine Karte, füge sie über die Suche '
-                              'hinzu oder lege Versiegeltes an (Knopf unten rechts).',
-                          action: FilledButton.icon(
-                            onPressed: () => context.push('/scan'),
-                            icon: const Icon(Icons.document_scanner),
-                            label: const Text('Karte scannen'),
+                title: Text('${_selected.length} ausgewählt', key: const Key('selection-count')),
+                actions: [
+                  IconButton(
+                    key: const Key('select-all'),
+                    tooltip: 'Alle auswählen',
+                    onPressed: () => setState(() => _selected.addAll(pageItems.map((i) => i.id))),
+                    icon: const Icon(Icons.select_all),
+                  ),
+                  IconButton(
+                    key: const Key('bulk-move'),
+                    tooltip: 'In Ordner verschieben',
+                    onPressed: () => _bulk('move', folders),
+                    icon: const Icon(Icons.drive_file_move_outline),
+                  ),
+                  IconButton(
+                    key: const Key('bulk-copy'),
+                    tooltip: 'In Ordner kopieren',
+                    onPressed: () => _bulk('copy', folders),
+                    icon: const Icon(Icons.copy_all_outlined),
+                  ),
+                  IconButton(
+                    key: const Key('bulk-delete'),
+                    tooltip: 'Entfernen',
+                    onPressed: () => _bulk('delete', folders),
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ],
+              )
+            : AppBar(
+                title: const Text('Sammlung'),
+                actions: [
+                  IconButton(
+                    tooltip: 'Sets',
+                    onPressed: () => context.push('/sets'),
+                    icon: const Icon(Icons.layers_outlined),
+                  ),
+                  IconButton(
+                    tooltip: 'Ordner verwalten',
+                    onPressed: () => _manageFolders(context, folders),
+                    icon: const Icon(Icons.folder_outlined),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'Sortieren',
+                    icon: const Icon(Icons.sort),
+                    initialValue: _filter.sort,
+                    onSelected: (sort) => setState(
+                      () => _filter = (
+                        folderId: _filter.folderId,
+                        kind: _filter.kind,
+                        query: _filter.query,
+                        sort: sort,
+                      ),
+                    ),
+                    itemBuilder: (_) => [
+                      for (final entry in sortLabels.entries)
+                        PopupMenuItem(value: entry.key, child: Text(entry.value)),
+                    ],
+                  ),
+                ],
+              ),
+        // Gut sichtbar statt Symbol in der Kopfzeile: Karten kommen über „Scannen“, Versiegeltes hier.
+        floatingActionButton: _selecting
+            ? null
+            : FloatingActionButton.extended(
+                key: const Key('add-sealed'),
+                heroTag: 'add-sealed',
+                tooltip: 'Versiegeltes hinzufügen (Booster, Display, ETB …)',
+                onPressed: () => context.push('/sealed/add'),
+                icon: const Icon(Icons.inventory_2_outlined),
+                label: const Text('Versiegelt'),
+              ),
+        body: RefreshIndicator(
+          onRefresh: () async => _reload(),
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: summary.maybeWhen(
+                  data: (data) => _SummaryHeader(summary: data),
+                  orElse: () => const SizedBox(height: 8),
+                ),
+              ),
+              SliverToBoxAdapter(child: _FolderCurve(folderId: _filter.folderId)),
+              SliverToBoxAdapter(child: _filters(folders)),
+              ...items.when(
+                loading: () => [
+                  const SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
+                ],
+                error: (error, _) => [
+                  SliverFillRemaining(
+                    child: ErrorView(message: '$error', onRetry: _reload),
+                  ),
+                ],
+                data: (page) => page.items.isEmpty
+                    ? [
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: EmptyView(
+                            icon: Icons.collections_bookmark_outlined,
+                            message:
+                                'Noch nichts hier. Scanne eine Karte, füge sie über die Suche '
+                                'hinzu oder lege Versiegeltes an (Knopf unten rechts).',
+                            action: FilledButton.icon(
+                              onPressed: () => context.push('/scan'),
+                              icon: const Icon(Icons.document_scanner),
+                              label: const Text('Karte scannen'),
+                            ),
                           ),
                         ),
-                      ),
-                    ]
-                  : [
-                      SliverPadding(
-                        // unten Platz für den Knopf „Versiegelt“
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
-                        sliver: SliverGrid(
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 130,
-                            mainAxisSpacing: 16,
-                            crossAxisSpacing: 12,
-                            childAspectRatio: 0.5, // Bild + Wert + Name ohne Überlauf
-                          ),
-                          delegate: SliverChildBuilderDelegate(
-                            childCount: page.items.length,
-                            (context, index) => LayoutBuilder(
-                              builder: (context, constraints) => ItemThumb(
-                                item: page.items[index],
-                                width: constraints.maxWidth,
-                                onTap: () =>
-                                    showItemActions(context, ref, page.items[index], _reload),
+                      ]
+                    : [
+                        SliverPadding(
+                          // unten Platz für den Knopf „Versiegelt“
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+                          sliver: SliverGrid(
+                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 130,
+                              mainAxisSpacing: 16,
+                              crossAxisSpacing: 12,
+                              childAspectRatio: 0.5, // Bild + Wert + Name ohne Überlauf
+                            ),
+                            delegate: SliverChildBuilderDelegate(
+                              childCount: page.items.length,
+                              (context, index) => LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final item = page.items[index];
+                                  return ItemThumb(
+                                    item: item,
+                                    width: constraints.maxWidth,
+                                    selected: _selecting ? _selected.contains(item.id) : null,
+                                    onLongPress: () => _toggle(item),
+                                    onTap: _selecting
+                                        ? () => _toggle(item)
+                                        : () => showItemActions(
+                                            context,
+                                            ref,
+                                            item,
+                                            _reload,
+                                            onSelect: () => _toggle(item),
+                                          ),
+                                  );
+                                },
                               ),
                             ),
                           ),
                         ),
-                      ),
-                      if (page.total > page.items.length)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text(
-                              '${page.items.length} von ${page.total} Positionen – '
-                              'Filter oder Suche nutzen.',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: AppColors.textMuted),
+                        if (page.total > page.items.length)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Text(
+                                '${page.items.length} von ${page.total} Positionen – '
+                                'Filter oder Suche nutzen.',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: AppColors.textMuted),
+                              ),
                             ),
                           ),
-                        ),
-                    ],
-            ),
-          ],
+                      ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -392,8 +514,9 @@ Future<void> showItemActions(
   BuildContext context,
   WidgetRef ref,
   CollectionItem item,
-  VoidCallback onChanged,
-) async {
+  VoidCallback onChanged, {
+  VoidCallback? onSelect,
+}) async {
   final action = await showModalBottomSheet<String>(
     context: context,
     builder: (_) => SafeArea(
@@ -416,12 +539,22 @@ Future<void> showItemActions(
             title: const Text('Entfernen'),
             onTap: () => Navigator.of(context).pop('delete'),
           ),
+          if (onSelect != null)
+            ListTile(
+              key: const Key('item-select'),
+              leading: const Icon(Icons.checklist),
+              title: const Text('Mehrere auswählen'),
+              subtitle: const Text('Verschieben, kopieren oder entfernen – auch per langem Druck'),
+              onTap: () => Navigator.of(context).pop('select'),
+            ),
         ],
       ),
     ),
   );
   if (!context.mounted) return;
-  if (action == 'open') {
+  if (action == 'select') {
+    onSelect?.call();
+  } else if (action == 'open') {
     await context.push('/card/${item.card!.id}');
   } else if (action == 'edit') {
     if (await showItemSheet(context, item: item) != null) onChanged();
@@ -589,6 +722,59 @@ class SetOverviewScreen extends ConsumerWidget {
                   );
                 },
               ),
+      ),
+    );
+  }
+}
+
+/// Zielordner wählen (Verschieben/Kopieren).
+Future<String?> _pickFolder(BuildContext context, List<Folder> folders, {required String title}) =>
+    showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SectionTitle(title),
+            for (final folder in folders)
+              ListTile(
+                key: Key('pick-folder-${folder.id}'),
+                leading: const Icon(Icons.folder),
+                title: Text(folder.name),
+                onTap: () => Navigator.of(sheetContext).pop(folder.id),
+              ),
+            if (folders.length < 2)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'Tipp: Weitere Ordner legst du oben über das Ordner-Symbol an.',
+                  style: TextStyle(color: AppColors.textMuted),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+
+/// Wertkurve der Sammlung bzw. des gewählten Ordners – erst ab zwei Tageswerten.
+class _FolderCurve extends ConsumerWidget {
+  const _FolderCurve({required this.folderId});
+
+  final String? folderId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final points = ref.watch(folderHistoryProvider(folderId)).value?.points ?? const [];
+    if (points.length < 2) return const SizedBox.shrink();
+    return Padding(
+      key: const Key('folder-curve'),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: ValueChart(
+        height: 90,
+        emptyHint: false,
+        points: [
+          for (final point in points) ChartPoint(point.date, parseAmount(point.totalValue) ?? 0),
+        ],
       ),
     );
   }

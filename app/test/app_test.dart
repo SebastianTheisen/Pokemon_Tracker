@@ -7,6 +7,7 @@ import 'fakes.dart';
 void main() {
   moversTests();
   profitTests();
+  selectionTests();
   variantTests();
   psaTests();
 
@@ -471,5 +472,55 @@ void profitTests() {
     await tester.tap(find.byKey(const Key('scan-purchase-save')));
     await tester.pumpAndSettle();
     expect(api.calls.where((c) => c.startsWith('updateItem')), isEmpty);
+  });
+}
+
+void selectionTests() {
+  Future<void> openCollection(WidgetTester tester, FakeApi api) async {
+    await pumpApp(tester, api);
+    await tester.tap(find.text('Sammlung').last);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('Mehrfachauswahl: langer Druck, alle auswählen, verschieben', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await openCollection(tester, api);
+
+    await tester.longPress(find.text('Nachtara VMAX').first);
+    await tester.pumpAndSettle();
+    expect(find.text('1 ausgewählt'), findsOneWidget);
+    expect(find.byKey(const Key('add-sealed')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('select-all')));
+    await tester.pumpAndSettle();
+    expect(find.text('2 ausgewählt'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('bulk-move')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('pick-folder-f1')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('bulk:move:i1,i2:f1'));
+    expect(find.text('2 Positionen verschoben'), findsOneWidget);
+    expect(find.byKey(const Key('selection-count')), findsNothing);
+  });
+
+  testWidgets('Mehrfachauswahl: abwählen und entfernen mit Rückfrage', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await openCollection(tester, api);
+
+    await tester.longPress(find.text('Nachtara VMAX').first); // erste Position (i1)
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('select-i2')));
+    await tester.pumpAndSettle();
+    expect(find.text('2 ausgewählt'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('select-i2')));
+    await tester.pumpAndSettle();
+    expect(find.text('1 ausgewählt'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('bulk-delete')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bulk-delete-confirm')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('bulk:delete:i1:null'));
   });
 }

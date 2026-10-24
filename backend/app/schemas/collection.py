@@ -144,6 +144,20 @@ class ItemUpdate(BaseModel):
     )
 
 
+class ItemsBulk(BaseModel):
+    """Mehrfachauswahl: verschieben, kopieren oder entfernen."""
+
+    item_ids: Annotated[list[uuid.UUID], Field(min_length=1, max_length=200)]
+    action: Literal["move", "copy", "delete"]
+    folder_id: uuid.UUID | None = Field(
+        default=None, description="Zielordner – nötig für move und copy."
+    )
+
+
+class ItemsBulkResult(BaseModel):
+    count: int
+
+
 class ValueOut(BaseModel):
     kind: Literal["manual", "external", "estimated", "none"] = Field(
         description=(
