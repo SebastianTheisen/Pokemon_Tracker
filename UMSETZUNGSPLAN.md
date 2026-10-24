@@ -321,7 +321,48 @@ Ausgangslage (23.10.2026): Compose läuft, API nur auf `127.0.0.1:8000`, erreich
 Leitbild (Entscheidung 24.10.2026): Ideen von Collectr übernehmen (Katalog mit Bildern, Sealed gleichwertig neben Raw/Graded, Kaufpreis → Gewinn/Verlust, größte Gewinner/Verlierer).
 
 - [x] Versiegeltes hinzufügen neu: Start mit „Neueste Sets“ (Bild, Anzahl, Datum) statt leerem Bildschirm; Filter nach Art; Treffer als Raster mit großen Bildern und Wert; Produktblatt mit Preisen, Sprache als Auswahl, Anzahl, Kaufpreis und Kaufdatum (optional). API: `GET /cardmarket/sealed/sets`, `GET /cardmarket/sealed?q=&kind=&expansion=`
-- [ ] Weitere Collectr-Ideen (Vorschlag an Nutzer): Gewinn/Verlust je Position und gesamt, größte Gewinner/Verlierer, Kaufpreis auch beim Scan, Set-Fortschritt mit „Master-Set“ (Reverse Holo)
+- [ ] VPS-Rollout Versiegeltes neu (git pull, `docker compose up -d --build api worker monitor`, `bash deploy/phase5_app.sh`)
+
+#### Abgleich Collectr ↔ Kartenkiste (Stand 24.10.2026)
+
+Quellen: getcollectr.com, App-Store-/Play-Store-Eintrag, Hilfe-Center (Notion), Versionshinweise 2.5.12/2.5.13. Die Webseiten selbst ließen sich aus der Entwicklungsumgebung nicht abrufen, nur über die Websuche.
+
+| Collectr-Funktion | Kartenkiste | Anmerkung |
+|---|---|---|
+| Katalog mit Bildern (Raw, Graded, Sealed) | ✅ | ~86.000 Karten, 99 % mit Bild; Sealed aus Cardmarket |
+| Kamera-Scan | ✅ | inkl. Slab-Etikett, Binder (Beta) |
+| Gesamtwert + Verlauf (1 Tag … alles) | ✅ | Wertkurve mit Zeiträumen |
+| Größte Gewinner/Verlierer | ✅ | 7 Tage (Cardmarket-Trend) und seit Hinzufügen |
+| Gewinn/Verlust gegen **Kaufpreis** (Cost Basis) | 🟡 | Kaufpreis wird gespeichert, Gewinn rechnet aber ab Wert beim Hinzufügen |
+| Mehrere Portfolios, Kopieren/Verschieben | 🟡 | Ordner vorhanden; kein eigener Wert/Verlauf je Ordner |
+| Massenaktionen (Mehrfachauswahl verschieben/löschen) | ❌ | |
+| Watchlist | ✅ | Merkliste |
+| **Preisalarme** (Zielpreis ↑/↓ mit Benachrichtigung) | ❌ | neu in Collectr 2.5.13 |
+| Filter: Raw/Graded, Art, Sprache, Preisspanne, Anzahl, besessen/nicht besessen | 🟡 | Ordner, Art, Text, Sortierung; Sprache/Preisspanne fehlen |
+| Preisverlauf je Karte (bis 5+ Jahre) | 🟡 | ab Start der Preisrunde (Okt. 2026), wächst täglich |
+| Grades vergleichen (Raw ↔ PSA 9 ↔ PSA 10 …) | 🟡 | Preise je Firma/Note vorhanden, keine Vergleichsansicht |
+| Set-Fortschritt in % (Wunsch der Nutzer: Master-Set mit Reverse Holo) | 🟡 | Set-Übersicht mit Anzahl verschiedener Karten; keine %-Leiste, keine Varianten |
+| Set-Analyse (Volatilität, Top-Mover, Verkaufsvolumen je Set) | ❌ | |
+| Showcase: Sammlung teilen (Link) | ❌ | bei uns: Freigabe für Freunde in der App |
+| Trade-Analyzer (Tausch bewerten, speichern) | ❌ | passt gut zur Freundesgruppe |
+| Schnell-Hinzufügen (Langdruck auf „+“ in der Suche) | ❌ | |
+| Fehlendes Produkt melden | ❌ | |
+| Daten-Export | ✅ | CSV |
+| Mehrere Währungen | – | nicht nötig (Euro) |
+| Marktplatz, Abo, Widgets | – | nicht übernommen (privat, PWA) |
+
+#### Plan Phase 7 (Vorschlag, Reihenfolge = Priorität)
+
+1. [ ] **Kaufpreis → Gewinn/Verlust:** je Position, je Ordner und gesamt („investiert“ / „Gewinn“ in € und %); Gewinner/Verlierer wahlweise gegen Kaufpreis; Kaufpreis und Datum auch direkt nach dem Scan
+2. [ ] **Ordner als Portfolios:** Wert, Gewinn und Verlauf je Ordner; Mehrfachauswahl zum Verschieben/Kopieren/Löschen
+3. [ ] **Filter erweitern:** Sprache, Raw/Graded, Preisspanne, Zustand; Schnell-Hinzufügen per Langdruck in der Suche
+4. [ ] **Preisalarme:** Zielpreis ↑/↓ an Merkliste und Sammlung, Prüfung nach der täglichen Preisrunde; Zustellung per Web-Push der PWA (iPhone ab iOS 16.4 vom Home-Bildschirm) – eigenes ntfy-Thema je Nutzer als Alternative, Entscheidung offen
+5. [ ] **Set-Fortschritt / Master-Set:** %-Leiste je Set, Ansicht „fehlt mir“ (mit einem Tipp in die Merkliste), Master-Set zählt Varianten (Reverse Holo, Holo) aus den TCGdex-Varianten
+6. [ ] **Freunde:** Showcase (Sammlung oder einzelne Ordner freiwillig für Freunde sichtbar, ohne Kaufpreise) und Tausch-Rechner (Karten beider Seiten → Wertdifferenz, Tausch speichern)
+7. [ ] **Kartenseite:** Grades vergleichen (Raw, PSA/BGS/CGC je Note nebeneinander), Preisverlauf mit Zeitraum
+8. [ ] **Set-Analyse:** Top-Mover und Schwankung je Set aus den eigenen Tageswerten
+9. [ ] **Fehlendes Produkt melden:** Knopf in Suche/Versiegeltes → Meldung an den Admin (Liste unter Mehr)
+10. [ ] **Aus Phase 4 übernommen:** Scanner-Latenz ≤ 3 s, Abnahme Top-1 ≥ 85 % mit weiteren Testfotos
 
 ### Änderungsprotokoll
 
