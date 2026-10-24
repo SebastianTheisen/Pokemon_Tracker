@@ -1057,6 +1057,7 @@ class _FolderCurve extends ConsumerStatefulWidget {
 
 class _FolderCurveState extends ConsumerState<_FolderCurve> {
   ChartRange _range = ChartRange.quarter;
+  ChartPoint? _scrub;
 
   @override
   Widget build(BuildContext context) {
@@ -1075,14 +1076,16 @@ class _FolderCurveState extends ConsumerState<_FolderCurve> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ValueChart(height: 90, emptyHint: false, points: points),
-          Row(
-            children: [
-              Expanded(
-                child: RangeChange(points: points, range: _range),
-              ),
-            ],
+          ValueChart(
+            height: 90,
+            emptyHint: false,
+            points: points,
+            onScrub: (point) => setState(() => _scrub = point),
           ),
+          if (_scrub case final point? when points.isNotEmpty)
+            ScrubLine(point: point, first: points.first)
+          else
+            RangeChange(points: points, range: _range),
           RangeChips(value: _range, onChanged: (range) => setState(() => _range = range)),
         ],
       ),

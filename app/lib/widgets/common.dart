@@ -369,3 +369,37 @@ class _TextInputDialogState extends State<_TextInputDialog> {
     ],
   );
 }
+
+/// Betrag, der beim ersten Anzeigen bzw. bei Änderungen kurz hochzählt (wie bei Banking-Apps).
+class CountUpMoney extends StatefulWidget {
+  const CountUpMoney({required this.value, this.style, super.key});
+
+  final double value;
+  final TextStyle? style;
+
+  @override
+  State<CountUpMoney> createState() => _CountUpMoneyState();
+}
+
+class _CountUpMoneyState extends State<CountUpMoney> {
+  late double _from = 0;
+
+  @override
+  void didUpdateWidget(CountUpMoney oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) _from = oldWidget.value;
+  }
+
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+    tween: Tween(begin: _from, end: widget.value),
+    duration: const Duration(milliseconds: 700),
+    curve: Curves.easeOutCubic,
+    builder: (_, value, _) => Text(
+      money(value.toStringAsFixed(2)),
+      // Text des Endwerts für Bedienungshilfen und Tests, nicht der Zwischenschritte.
+      semanticsLabel: money(widget.value.toStringAsFixed(2)),
+      style: widget.style,
+    ),
+  );
+}

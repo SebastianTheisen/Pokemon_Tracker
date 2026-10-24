@@ -126,15 +126,25 @@ class DashboardScreen extends ConsumerWidget {
   }
 }
 
-class _ValueHero extends ConsumerWidget {
+class _ValueHero extends ConsumerStatefulWidget {
   const _ValueHero({required this.summary});
 
   final CollectionSummary summary;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ValueHero> createState() => _ValueHeroState();
+}
+
+class _ValueHeroState extends ConsumerState<_ValueHero> {
+  /// Finger auf der Kurve: Wert dieses Tages statt des aktuellen.
+  ChartPoint? _scrub;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = widget.summary;
     final change = parseAmount(summary.changeSinceAdded) ?? 0;
     final history = ref.watch(collectionHistoryProvider).value;
+    final scrub = _scrub;
     return InkWell(
       onTap: () => context.go('/collection'),
       borderRadius: BorderRadius.circular(24),
@@ -147,19 +157,33 @@ class _ValueHero extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Sammlungswert', style: TextStyle(color: Colors.white.withValues(alpha: 0.85))),
+            Text(
+              scrub == null ? 'Sammlungswert' : 'Sammlungswert am ${date(scrub.date)}',
+              key: const Key('hero-label'),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.85)),
+            ),
             const SizedBox(height: 4),
             FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text(
-                money(summary.totalValue),
-                key: const Key('total-value'),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 38,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
+              child: scrub != null
+                  ? Text(
+                      money(scrub.value.toStringAsFixed(2)),
+                      key: const Key('hero-scrub-value'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 38,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    )
+                  : CountUpMoney(
+                      value: parseAmount(summary.totalValue) ?? 0,
+                      key: const Key('total-value'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 38,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
             ),
             const SizedBox(height: 8),
             Row(
@@ -200,6 +224,7 @@ class _ValueHero extends ConsumerWidget {
               height: 70,
               onDark: true,
               emptyHint: false,
+              onScrub: (point) => setState(() => _scrub = point),
               points: [
                 for (final point in history?.points ?? const <ValuePoint>[])
                   ChartPoint(point.date, parseAmount(point.totalValue) ?? 0),

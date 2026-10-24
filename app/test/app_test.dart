@@ -8,6 +8,7 @@ import 'package:kartenkiste/core/prefs.dart';
 import 'package:kartenkiste/core/push/push_bridge.dart';
 import 'package:kartenkiste/core/theme.dart';
 import 'package:kartenkiste/router.dart';
+import 'package:kartenkiste/widgets/value_chart.dart';
 import 'package:kartenkiste/models/json.dart';
 
 import 'fakes.dart';
@@ -1412,8 +1413,35 @@ void usabilityTests() {
     await tester.pumpAndSettle();
     expect(api.calls, contains('card:k3'));
 
-    await tester.fling(find.byType(ListView).first, const Offset(400, 0), 1500); // zurück
+    await tester.fling(find.byKey(const Key('card-header')), const Offset(400, 0), 1500); // zurück
     await tester.pumpAndSettle();
     expect(api.calls.where((c) => c == 'card:c1').length, greaterThanOrEqualTo(1));
+  });
+
+  testWidgets('Kurve zum Anfassen: Finger zeigt Tageswert, Loslassen zeigt wieder den Zeitraum', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    final topCard = find.text('Nachtara VMAX').first;
+    await tester.ensureVisible(topCard);
+    await tester.pumpAndSettle();
+    await tester.tap(topCard);
+    await tester.pumpAndSettle();
+    final chart = find.byType(ValueChart).first;
+    await tester.scrollUntilVisible(chart, 300, scrollable: find.byType(Scrollable).first);
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -150));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('range-change')), findsOneWidget);
+
+    final gesture = await tester.startGesture(tester.getCenter(chart));
+    await tester.pump();
+    await gesture.moveBy(const Offset(40, 0));
+    await tester.pump();
+    expect(find.byKey(const Key('scrub-line')), findsOneWidget);
+    expect(find.byKey(const Key('range-change')), findsNothing);
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('range-change')), findsOneWidget);
   });
 }

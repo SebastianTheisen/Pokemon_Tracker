@@ -264,17 +264,8 @@ class _CardBodyState extends ConsumerState<_CardBody> {
     final card = widget.card;
     final prices = ref.watch(pricesProvider(card.id));
     final neighbors = _neighbors(ref.watch(setProgressProvider(card.cardSet.id)).value);
-    return GestureDetector(
-      // Wischen links/rechts: nächste bzw. vorige Karte im Set (wie Blättern im Album).
-      onHorizontalDragEnd: (details) {
-        final velocity = details.primaryVelocity ?? 0;
-        final target = velocity < -300
-            ? neighbors?.next
-            : velocity > 300
-            ? neighbors?.previous
-            : null;
-        if (target != null) context.pushReplacement('/card/${target.id}');
-      },
+    return KeyedSubtree(
+      key: const Key('card-body'),
       child: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(pricesProvider(card.id));
@@ -283,8 +274,8 @@ class _CardBodyState extends ConsumerState<_CardBody> {
         child: ListView(
           padding: const EdgeInsets.only(bottom: 24),
           children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
+            _SwipeHeader(
+              neighbors: neighbors,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -708,6 +699,9 @@ class _History extends ConsumerStatefulWidget {
 class _HistoryState extends ConsumerState<_History> {
   ChartRange _range = ChartRange.quarter;
 
+  /// Punkt unter dem Finger (Kurve zum Anfassen).
+  ChartPoint? _scrub;
+
   @override
   Widget build(BuildContext context) {
     final history = ref.watch(
@@ -725,13 +719,20 @@ class _HistoryState extends ConsumerState<_History> {
         children: [
           RangeChips(value: _range, onChanged: (range) => setState(() => _range = range)),
           const SizedBox(height: 4),
-          RangeChange(points: points, range: _range, currency: data?.currency ?? 'EUR'),
+          if (_scrub case final point? when points.isNotEmpty)
+            ScrubLine(point: point, first: points.first, currency: data?.currency ?? 'EUR')
+          else
+            RangeChange(points: points, range: _range, currency: data?.currency ?? 'EUR'),
           if (history.hasError)
             Text('${history.error}', style: TextStyle(color: AppColors.textMuted))
           else if (data == null)
             const SizedBox(height: 160)
           else ...[
-            ValueChart(currency: data.currency ?? 'EUR', points: points),
+            ValueChart(
+              currency: data.currency ?? 'EUR',
+              points: points,
+              onScrub: (point) => setState(() => _scrub = point),
+            ),
             if (data.lowest != null)
               Text(
                 'Tiefster Preis: ${money(data.lowest)} · Höchster Preis: ${money(data.highest)}'
@@ -1017,5 +1018,30 @@ class _StepButton extends StatelessWidget {
     constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
     onPressed: target == null ? null : () => context.pushReplacement('/card/${target!.id}'),
     icon: Icon(icon),
+  );
+}
+
+/// Kopf der Kartenseite (Bild, Name, Set): Wischen links/rechts blättert im Set – wie im Album.
+/// Bewusst nur hier: auf der Preiskurve gehört die Bewegung dem Finger.
+class _SwipeHeader extends StatelessWidget {
+  const _SwipeHeader({required this.neighbors, required this.child});
+
+  final ({CardInfo? previous, CardInfo? next, int index, int total})? neighbors;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    key: const Key('card-header'),
+    behavior: HitTestBehavior.opaque,
+    onHorizontalDragEnd: (details) {
+      final velocity = details.primaryVelocity ?? 0;
+      final target = velocity < -300
+          ? neighbors?.next
+          : velocity > 300
+          ? neighbors?.previous
+          : null;
+      if (target != null) context.pushReplacement('/card/${target.id}');
+    },
+    child: Padding(padding: const EdgeInsets.all(16), child: child),
   );
 }
