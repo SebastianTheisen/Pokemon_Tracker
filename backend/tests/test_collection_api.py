@@ -407,6 +407,48 @@ async def test_folder_curve_from_daily_snapshots(
     assert history["markers"] == []
 
 
+async def test_filter_by_condition_value_range_and_purchase(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    cards: tuple[Card, Card],
+    price_provider: FakeProvider,
+) -> None:
+    alice = await register_user("alice@example.com")
+    price_provider.quotes = [cardmarket("trend", "100")]
+    near_mint = await _add(client, alice, card_id=str(cards[0].id), purchase_price="50")  # 100
+    played = await _add(client, alice, card_id=str(cards[0].id), condition="LP")  # 55
+    slab = await _add(
+        client,
+        alice,
+        card_id=str(cards[1].id),
+        grading_company="PSA",
+        grade="10",
+        custom_price="500",
+    )
+    await _add(client, alice, product_id=await _product(client, alice, "tin", "Tin"))  # ohne Wert
+
+    async def ids(**params: Any) -> list[str]:
+        page = (
+            await client.get(
+                f"{API}/collection/items",
+                params={"sort": "value_desc", **params},
+                headers=alice.headers,
+            )
+        ).json()
+        return [i["id"] for i in page["items"]]
+
+    assert await ids(condition="LP") == [played["id"]]
+    assert await ids(min_value="60") == [slab["id"], near_mint["id"]]
+    assert await ids(max_value="100") == [near_mint["id"], played["id"]]
+    assert await ids(min_value="56", max_value="499.99") == [near_mint["id"]]
+    assert await ids(with_purchase="true") == [near_mint["id"]]
+    assert len(await ids(with_purchase="false")) == 3
+    bad = await client.get(
+        f"{API}/collection/items", params={"condition": "XX"}, headers=alice.headers
+    )
+    assert bad.status_code == 422
+
+
 async def test_folders_lifecycle(
     client: AsyncClient, register_user: RegisterUser, cards: tuple[Card, Card]
 ) -> None:

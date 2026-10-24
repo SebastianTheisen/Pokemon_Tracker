@@ -434,12 +434,22 @@ class FakeApi extends Api {
     String? kind,
     String? query,
     String sort = 'value_desc',
+    String? language,
+    String? condition,
+    String? minValue,
+    String? maxValue,
+    bool? withPurchase,
     int limit = 500,
     int offset = 0,
-  }) async => ItemPage.fromJson({
-    'items': [itemJson(), itemJson(id: 'i2', total: '50.00')],
-    'total': 2,
-  });
+  }) async {
+    calls.add(
+      'items:${[language, condition, minValue, maxValue, withPurchase].map((v) => v ?? '-').join('|')}',
+    );
+    return ItemPage.fromJson({
+      'items': [itemJson(), itemJson(id: 'i2', total: '50.00')],
+      'total': 2,
+    });
+  }
 
   @override
   Future<List<SealedSet>> sealedSets() async {
@@ -495,6 +505,13 @@ class FakeApi extends Api {
   }
 
   Map<String, Object?>? lastItemChanges;
+
+  @override
+  Future<void> deleteItem(String id) async => calls.add('deleteItem:$id');
+
+  @override
+  Future<void> addToWishlist({String? cardId, String? productId}) async =>
+      calls.add('wishlist:${cardId ?? productId}');
 
   @override
   Future<int> bulkItems(List<String> ids, String action, {String? folderId}) async {

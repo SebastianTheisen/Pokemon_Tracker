@@ -8,6 +8,7 @@ void main() {
   moversTests();
   profitTests();
   selectionTests();
+  filterTests();
   variantTests();
   psaTests();
 
@@ -522,5 +523,91 @@ void selectionTests() {
     await tester.tap(find.byKey(const Key('bulk-delete-confirm')));
     await tester.pumpAndSettle();
     expect(api.calls, contains('bulk:delete:i1:null'));
+  });
+}
+
+void filterTests() {
+  testWidgets('Filter: Sprache, Zustand, Wertspanne, Kaufpreis – Abzeichen und Zurücksetzen', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await tester.tap(find.text('Sammlung').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('collection-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('filter-language-ja')));
+    await tester.tap(find.byKey(const Key('filter-condition-NM')));
+    await tester.enterText(find.byKey(const Key('filter-min')), '10');
+    await tester.enterText(find.byKey(const Key('filter-max')), '1.000,50');
+    await tester.ensureVisible(find.byKey(const Key('filter-purchase-true')));
+    await tester.tap(find.byKey(const Key('filter-purchase-true')));
+    await tester.ensureVisible(find.byKey(const Key('filter-apply')));
+    await tester.tap(find.byKey(const Key('filter-apply')));
+    await tester.pumpAndSettle();
+
+    expect(api.calls, contains('items:ja|NM|10|1000.50|true'));
+    expect(find.text('5'), findsOneWidget); // Abzeichen: 5 aktive Filter
+
+    await tester.tap(find.byKey(const Key('collection-filter')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('filter-reset')));
+    await tester.tap(find.byKey(const Key('filter-reset')));
+    await tester.pumpAndSettle();
+    expect(api.calls.last, 'items:-|-|-|-|-');
+  });
+
+  testWidgets('Filter: „von“ größer als „bis“ wird abgelehnt', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await tester.tap(find.text('Sammlung').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('collection-filter')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('filter-min')), '100');
+    await tester.enterText(find.byKey(const Key('filter-max')), '5');
+    await tester.ensureVisible(find.byKey(const Key('filter-apply')));
+    await tester.tap(find.byKey(const Key('filter-apply')));
+    await tester.pumpAndSettle();
+    expect(find.text('„von“ ist größer als „bis“.'), findsOneWidget);
+    expect(api.calls.where((c) => c.startsWith('items:') && c.contains('100')), isEmpty);
+  });
+
+  Future<void> searchNachtara(WidgetTester tester) async {
+    await tester.tap(find.byKey(const Key('tab-Suche')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('search-field')), 'nachtara');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('Suche: „+“ fügt 1× NM hinzu, Rückgängig entfernt wieder', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await searchNachtara(tester);
+
+    await tester.tap(find.byKey(const Key('quick-add-c1')));
+    await tester.pumpAndSettle();
+    expect(api.lastItemBody, {'card_id': 'c1', 'quantity': 1, 'condition': 'NM'});
+    expect(find.text('Nachtara VMAX hinzugefügt'), findsOneWidget);
+
+    await tester.tap(find.text('Rückgängig'));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('deleteItem:i1'));
+  });
+
+  testWidgets('Suche: langer Druck auf „+“ → Schnellmenü (Merkliste)', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await searchNachtara(tester);
+
+    await tester.longPress(find.byKey(const Key('quick-add-c1')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('quick-details')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('quick-wishlist')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('wishlist:c1'));
+    expect(find.text('Auf der Merkliste'), findsOneWidget);
   });
 }

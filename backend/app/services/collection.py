@@ -78,6 +78,23 @@ class ItemFilter:
     set_id: uuid.UUID | None = None
     language: str | None = None
     query: str | None = None
+    condition: str | None = None
+    """Nur Rohkarten in diesem Zustand (NM, EX, …)."""
+    min_value: Decimal | None = None
+    """Gesamtwert der Position mindestens … (Positionen ohne Wert fallen dann heraus)."""
+    max_value: Decimal | None = None
+    with_purchase: bool | None = None
+    """``True`` nur mit Kaufpreis, ``False`` nur ohne."""
+
+    def matches_value(self, value: ItemValue) -> bool:
+        """Filter, die erst nach der Bewertung greifen (Wertspanne)."""
+        if self.min_value is None and self.max_value is None:
+            return True
+        if value.total_value is None:
+            return False
+        if self.min_value is not None and value.total_value < self.min_value:
+            return False
+        return self.max_value is None or value.total_value <= self.max_value
 
 
 # --------------------------------------------------------------- Ergebnisse
@@ -493,6 +510,18 @@ class CollectionService:
             statement = statement.where(
                 or_(Card.language == item_filter.language, Product.language == item_filter.language)
             )
+        if item_filter.condition is not None:
+            statement = statement.where(
+                CollectionItem.condition == item_filter.condition,
+                CollectionItem.grading_company.is_(None),
+                CollectionItem.card_id.is_not(None),
+            )
+        if item_filter.with_purchase is not None:
+            statement = statement.where(
+                CollectionItem.purchase_price.is_not(None)
+                if item_filter.with_purchase
+                else CollectionItem.purchase_price.is_(None)
+            )
         if item_filter.query:
             pattern = f"%{item_filter.query.strip().casefold()}%"
             statement = statement.where(
@@ -505,18 +534,16 @@ class CollectionService:
         return statement
 
     async def valued_items(self, item_filter: ItemFilter | None = None) -> list[ValuedItem]:
-        items = list(
-            (await self._session.scalars(self._filtered(item_filter or ItemFilter())))
-            .unique()
-            .all()
-        )
+        item_filter = item_filter or ItemFilter()
+        items = list((await self._session.scalars(self._filtered(item_filter))).unique().all())
         prices = await self._prices.prices_for_cards(
             [i.card_id for i in items if i.card_id is not None], self._owner
         )
         sealed = await sealed_prices(
             self._session, [i.product_id for i in items if i.product_id is not None]
         )
-        return [ValuedItem(item=i, value=value_item(i, prices, sealed)) for i in items]
+        valued = [ValuedItem(item=i, value=value_item(i, prices, sealed)) for i in items]
+        return [v for v in valued if item_filter.matches_value(v.value)]
 
     async def valued_item(self, item_id: uuid.UUID) -> ValuedItem:
         """Eine eigene Position samt Bewertung."""

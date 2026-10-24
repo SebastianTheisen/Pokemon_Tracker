@@ -50,6 +50,10 @@ Danach startet Kartenkiste wie eine normale App, auch die Kamera funktioniert.
   Der Preis richtet sich nach Firma und Note.
 * **Suche:** Deutsch oder Englisch („Glurak“ oder „Charizard“), mit Nummer („nachtara 215“)
   oder mit Setkürzel wie auf der Karte („PFL077“, „s6a 095“).
+  Das **„+“** neben einem Treffer legt die Karte sofort in die Sammlung (1× Near Mint);
+  lange drücken für Reverse Holo, Details oder Merkliste.
+* **Filter in der Sammlung:** Regler-Symbol im Suchfeld – Sprache, Zustand, Wert von/bis,
+  „Kaufpreis fehlt noch“ (praktisch zum Nachtragen).
 * **Preise:** zuerst Cardmarket (Euro). Wo Cardmarket nichts hat, ein US-Preis von
   PriceCharting, umgerechnet in Euro („US-Preis in €“). Geschätzte Preise sind markiert.
 * **Versiegeltes** (Booster, Displays, Top-Trainer-Boxen): unter **Sammlung → „Versiegelt“**,

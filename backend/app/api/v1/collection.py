@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.api.deps import CurrentUser, PriceServiceDep, SessionDep
 from app.core.config import CatalogLanguage
+from app.providers.pricing import Condition
 from app.schemas.catalog import CardOut
 from app.schemas.collection import (
     CollectionHistoryOut,
@@ -91,12 +93,25 @@ async def list_items(
     set_id: uuid.UUID | None = None,
     language: CatalogLanguage | None = None,
     q: Annotated[str | None, Query(max_length=100)] = None,
+    condition: Condition | None = None,
+    min_value: Annotated[Decimal | None, Query(ge=0, le=10_000_000)] = None,
+    max_value: Annotated[Decimal | None, Query(ge=0, le=10_000_000)] = None,
+    with_purchase: bool | None = None,
     sort: SortKey = "added_desc",
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> ItemPage:
+    """Positionen mit Bewertung. Wertspanne bezieht sich auf den Gesamtwert der Position."""
     item_filter = ItemFilter(
-        folder_id=folder_id, kind=kind, set_id=set_id, language=language, query=q
+        folder_id=folder_id,
+        kind=kind,
+        set_id=set_id,
+        language=language,
+        query=q,
+        condition=condition,
+        min_value=min_value,
+        max_value=max_value,
+        with_purchase=with_purchase,
     )
     items, total = await collection.list_items(item_filter, sort=sort, limit=limit, offset=offset)
     return ItemPage(items=[ItemOut.build(i) for i in items], total=total)

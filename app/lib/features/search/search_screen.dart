@@ -10,6 +10,8 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
+import '../collection/item_sheet.dart';
+import '../dashboard/dashboard_screen.dart';
 
 typedef SearchQuery = ({String text, String? language});
 
@@ -121,6 +123,7 @@ class _CardSearchState extends ConsumerState<CardSearch> {
                               onTap: () => widget.onSelect != null
                                   ? widget.onSelect!(card)
                                   : context.push('/card/${card.id}'),
+                              trailing: widget.onSelect == null ? QuickAddButton(card: card) : null,
                             );
                           },
                         ),
@@ -248,5 +251,113 @@ class _CreateCardDialogState extends ConsumerState<CreateCardDialog> {
       TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Abbrechen')),
       FilledButton(onPressed: _busy ? null : _save, child: const Text('Anlegen')),
     ],
+  );
+}
+
+/// „+“ in der Suche: Tippen fügt 1× Near Mint hinzu (mit „Rückgängig“), langer Druck öffnet
+/// das Schnellmenü (Reverse Holo, mit Details, Merkliste).
+class QuickAddButton extends ConsumerWidget {
+  const QuickAddButton({required this.card, super.key});
+
+  final CardInfo card;
+
+  Future<void> _add(BuildContext context, WidgetRef ref, {String variant = 'normal'}) async {
+    final api = ref.read(apiProvider);
+    CollectionItem? item;
+    final ok = await runAction(context, () async {
+      item = await api.addItem({
+        'card_id': card.id,
+        'quantity': 1,
+        'condition': 'NM',
+        if (variant != 'normal') 'variant': variant,
+      });
+    });
+    if (!ok || !context.mounted) return;
+    invalidateCollection(ref);
+    final added = item!;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            '${card.displayName}${variant == 'reverse' ? ' (Reverse Holo)' : ''} hinzugefügt',
+          ),
+          action: SnackBarAction(
+            label: 'Rückgängig',
+            onPressed: () async {
+              await api.deleteItem(added.id);
+              invalidateCollection(ref);
+            },
+          ),
+        ),
+      );
+  }
+
+  Future<void> _menu(BuildContext context, WidgetRef ref) async {
+    final hasReverse = card.variants?['reverse'] ?? false;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SectionTitle(card.displayName),
+            ListTile(
+              key: const Key('quick-normal'),
+              leading: const Icon(Icons.add),
+              title: const Text('1× Near Mint hinzufügen'),
+              onTap: () => Navigator.of(sheetContext).pop('normal'),
+            ),
+            if (hasReverse)
+              ListTile(
+                key: const Key('quick-reverse'),
+                leading: const Icon(Icons.auto_awesome),
+                title: const Text('1× Reverse Holo hinzufügen'),
+                onTap: () => Navigator.of(sheetContext).pop('reverse'),
+              ),
+            ListTile(
+              key: const Key('quick-details'),
+              leading: const Icon(Icons.edit_note),
+              title: const Text('Mit Details …'),
+              subtitle: const Text('Zustand, Anzahl, Kaufpreis, Ordner, Slab'),
+              onTap: () => Navigator.of(sheetContext).pop('details'),
+            ),
+            ListTile(
+              key: const Key('quick-wishlist'),
+              leading: const Icon(Icons.favorite_border),
+              title: const Text('Auf die Merkliste'),
+              onTap: () => Navigator.of(sheetContext).pop('wishlist'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !context.mounted) return;
+    switch (choice) {
+      case 'details':
+        if (await showItemSheet(context, card: card) != null) invalidateCollection(ref);
+      case 'wishlist':
+        if (await runAction(context, () => ref.read(apiProvider).addToWishlist(cardId: card.id)) &&
+            context.mounted) {
+          showMessage(context, 'Auf der Merkliste');
+        }
+      default:
+        await _add(context, ref, variant: choice);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Tooltip(
+    message: 'Hinzufügen – lange drücken für mehr',
+    child: InkResponse(
+      key: Key('quick-add-${card.id}'),
+      radius: 24,
+      onTap: () => _add(context, ref),
+      onLongPress: () => _menu(context, ref),
+      child: const Padding(
+        padding: EdgeInsets.all(8),
+        child: Icon(Icons.add_circle_outline, color: AppColors.primary),
+      ),
+    ),
   );
 }

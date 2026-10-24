@@ -10,14 +10,23 @@ import '../../models/models.dart';
 import '../../widgets/common.dart';
 import '../../widgets/value_chart.dart';
 import '../dashboard/dashboard_screen.dart';
+import 'item_filter.dart';
 import 'item_sheet.dart';
-
-typedef ItemFilter = ({String? folderId, String? kind, String query, String sort});
 
 final itemsProvider = FutureProvider.autoDispose.family<ItemPage, ItemFilter>(
   (ref, filter) => ref
       .watch(apiProvider)
-      .items(folderId: filter.folderId, kind: filter.kind, query: filter.query, sort: filter.sort),
+      .items(
+        folderId: filter.folderId,
+        kind: filter.kind,
+        query: filter.query,
+        sort: filter.sort,
+        language: filter.language,
+        condition: filter.condition,
+        minValue: filter.minValue,
+        maxValue: filter.maxValue,
+        withPurchase: filter.withPurchase,
+      ),
 );
 
 /// Wertkurve der ganzen Sammlung (`null`) oder eines Ordners.
@@ -49,7 +58,7 @@ class CollectionScreen extends ConsumerStatefulWidget {
 }
 
 class _CollectionScreenState extends ConsumerState<CollectionScreen> {
-  ItemFilter _filter = (folderId: null, kind: null, query: '', sort: 'value_desc');
+  ItemFilter _filter = const ItemFilter();
 
   /// Mehrfachauswahl (IDs); leer = normaler Modus.
   final Set<String> _selected = {};
@@ -182,14 +191,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                     tooltip: 'Sortieren',
                     icon: const Icon(Icons.sort),
                     initialValue: _filter.sort,
-                    onSelected: (sort) => setState(
-                      () => _filter = (
-                        folderId: _filter.folderId,
-                        kind: _filter.kind,
-                        query: _filter.query,
-                        sort: sort,
-                      ),
-                    ),
+                    onSelected: (sort) => setState(() => _filter = _filter.copyWith(sort: sort)),
                     itemBuilder: (_) => [
                       for (final entry in sortLabels.entries)
                         PopupMenuItem(value: entry.key, child: Text(entry.value)),
@@ -303,24 +305,32 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     );
   }
 
+  Future<void> _openFilter() async {
+    final filter = await showItemFilterSheet(context, _filter);
+    if (filter != null && mounted) setState(() => _filter = filter);
+  }
+
   Widget _filters(List<Folder> folders) => Column(
     children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
         child: TextField(
-          decoration: const InputDecoration(
-            prefixIcon: Icon(Icons.filter_list),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.search),
             hintText: 'In der Sammlung suchen',
             isDense: true,
-          ),
-          onSubmitted: (query) => setState(
-            () => _filter = (
-              folderId: _filter.folderId,
-              kind: _filter.kind,
-              query: query.trim(),
-              sort: _filter.sort,
+            suffixIcon: IconButton(
+              key: const Key('collection-filter'),
+              tooltip: 'Filter (Sprache, Zustand, Wert, Kaufpreis)',
+              onPressed: _openFilter,
+              icon: Badge(
+                isLabelVisible: _filter.extraCount > 0,
+                label: Text('${_filter.extraCount}'),
+                child: const Icon(Icons.tune),
+              ),
             ),
           ),
+          onSubmitted: (query) => setState(() => _filter = _filter.copyWith(query: query.trim())),
         ),
       ),
       SizedBox(
@@ -335,14 +345,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                 child: ChoiceChip(
                   label: Text(kind == null ? 'Alle' : kindLabels[kind]!),
                   selected: _filter.kind == kind,
-                  onSelected: (_) => setState(
-                    () => _filter = (
-                      folderId: _filter.folderId,
-                      kind: kind,
-                      query: _filter.query,
-                      sort: _filter.sort,
-                    ),
-                  ),
+                  onSelected: (_) => setState(() => _filter = _filter.copyWith(kind: kind)),
                 ),
               ),
             if (folders.length > 1) ...[
@@ -354,14 +357,8 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                     avatar: const Icon(Icons.folder, size: 16),
                     label: Text(folder?.name ?? 'Alle Ordner'),
                     selected: _filter.folderId == folder?.id,
-                    onSelected: (_) => setState(
-                      () => _filter = (
-                        folderId: folder?.id,
-                        kind: _filter.kind,
-                        query: _filter.query,
-                        sort: _filter.sort,
-                      ),
-                    ),
+                    onSelected: (_) =>
+                        setState(() => _filter = _filter.copyWith(folderId: folder?.id)),
                   ),
                 ),
             ],
