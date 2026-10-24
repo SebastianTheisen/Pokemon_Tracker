@@ -1138,6 +1138,9 @@ class WishlistEntry {
     this.product,
     this.nmValue,
     this.nmValueKind,
+    this.change,
+    this.changePct,
+    this.changeDays = 7,
   });
 
   factory WishlistEntry.fromJson(Json json) => WishlistEntry(
@@ -1147,7 +1150,15 @@ class WishlistEntry {
     product: json.objOrNull('product') == null ? null : Product.fromJson(json.obj('product')),
     nmValue: json.strOrNull('nm_value'),
     nmValueKind: json.strOrNull('nm_value_kind'),
+    change: json.strOrNull('change'),
+    changePct: json.strOrNull('change_pct'),
+    changeDays: json.intOrNull('change_days') ?? 7,
   );
+
+  /// Veränderung des Stückpreises (Cardmarket-Trend) in [changeDays] Tagen.
+  final String? change;
+  final String? changePct;
+  final int changeDays;
 
   final String id;
   final DateTime createdAt;
@@ -1945,6 +1956,7 @@ class OwnedEntry {
     this.valueKind = 'none',
     this.valueSource,
     this.valueBasis,
+    this.itemIds = const [],
   });
 
   factory OwnedEntry.fromJson(Json json) => OwnedEntry(
@@ -1960,7 +1972,11 @@ class OwnedEntry {
     valueKind: json.strOrNull('value_kind') ?? 'none',
     valueSource: json.strOrNull('value_source'),
     valueBasis: json.strOrNull('value_basis'),
+    itemIds: json.containsKey('item_ids') ? json.strings('item_ids') : const [],
   );
+
+  /// Zusammengefasste Positionen – zum Bearbeiten direkt von der Kartenseite.
+  final List<String> itemIds;
 
   final String? condition;
 

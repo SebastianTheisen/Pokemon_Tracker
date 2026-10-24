@@ -312,6 +312,8 @@ void sealedTests() {
     await pumpApp(tester, api);
     await tester.tap(find.byKey(const Key('tab-Sammlung')));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('collection-add')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('add-sealed')));
     await tester.pumpAndSettle();
 
@@ -359,6 +361,8 @@ void sealedTests() {
     final api = FakeApi(loggedIn: true);
     await pumpApp(tester, api);
     await tester.tap(find.byKey(const Key('tab-Sammlung')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('collection-add')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('add-sealed')));
     await tester.pumpAndSettle();

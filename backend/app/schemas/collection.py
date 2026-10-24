@@ -464,8 +464,15 @@ class WishlistEntryOut(BaseModel):
     created_at: datetime
     card: CardOut | None
     product: ProductOut | None
-    nm_value: Decimal | None = Field(description="Near-Mint-Wert (normal), falls belegt.")
+    nm_value: Decimal | None = Field(
+        description="Near-Mint-Wert (normal) bzw. Preis des versiegelten Produkts, falls belegt."
+    )
     nm_value_kind: Literal["external", "estimated"] | None
+    change: Decimal | None = Field(
+        default=None, description="Veränderung des Stückpreises (Cardmarket-Trend) im Zeitraum"
+    )
+    change_pct: Decimal | None = None
+    change_days: int = 7
 
 
 class SealedOfferOut(BaseModel):

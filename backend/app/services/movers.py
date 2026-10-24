@@ -80,6 +80,38 @@ async def _trend_points(
     return {(row.card_id, row.variant): (row.value, row.source_updated_at) for row in rows}
 
 
+@dataclass(frozen=True)
+class TrendChange:
+    """Veränderung des Cardmarket-Trends einer Karte (Stückpreis, normale Fassung)."""
+
+    change: Decimal
+    change_pct: Decimal
+
+
+async def trend_changes(
+    session: AsyncSession, card_ids: list[uuid.UUID], *, now: datetime, days: int = 7
+) -> dict[uuid.UUID, TrendChange]:
+    """Stückpreis-Veränderung (normal) im Zeitraum – z. B. für die Merkliste. Ohne beide
+    Werte (neu, Vergleich vor ``days`` Tagen) oder unter :data:`MIN_VALUE` keine Angabe."""
+    if not card_ids:
+        return {}
+    latest = await _trend_points(session, card_ids, before=None)
+    earlier = await _trend_points(session, card_ids, before=now - timedelta(days=days))
+    result: dict[uuid.UUID, TrendChange] = {}
+    for card_id in card_ids:
+        key = (card_id, "normal")
+        if key not in latest or key not in earlier:
+            continue
+        now_value, before_value = latest[key][0], earlier[key][0]
+        if before_value < MIN_VALUE:
+            continue
+        result[card_id] = TrendChange(
+            change=(now_value - before_value).quantize(CENT),
+            change_pct=((now_value - before_value) / before_value * 100).quantize(Decimal("0.1")),
+        )
+    return result
+
+
 async def price_movers(
     session: AsyncSession, owner_id: uuid.UUID, *, now: datetime, days: int = 7, limit: int = 5
 ) -> Movers:

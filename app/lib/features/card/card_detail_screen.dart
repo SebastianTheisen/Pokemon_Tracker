@@ -18,6 +18,7 @@ import '../../widgets/common.dart';
 import '../../widgets/range_chips.dart';
 import '../../widgets/value_chart.dart';
 import '../cardmarket/cardmarket_edition.dart';
+import '../collection/collection_screen.dart';
 import '../collection/item_sheet.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../wishlist/wishlist_screen.dart';
@@ -150,6 +151,21 @@ Future<void> openEbaySold(
 Future<void> openLink(BuildContext context, String url) async {
   final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   if (!ok && context.mounted) showMessage(context, 'Link konnte nicht geöffnet werden.');
+}
+
+/// Eigene Position von der Kartenseite aus bearbeiten (wie aus der Sammlung, ohne „ansehen“).
+Future<void> _editOwned(BuildContext context, WidgetRef ref, OwnedEntry entry) async {
+  CollectionItem? item;
+  final ok = await runAction(
+    context,
+    () async => item = await ref.read(apiProvider).item(entry.itemIds.first),
+  );
+  final loaded = item;
+  if (!ok || loaded == null || !context.mounted) return;
+  await showItemActions(context, ref, loaded, () {
+    ref.invalidate(itemsProvider);
+    invalidateCollection(ref);
+  }, showOpen: false);
 }
 
 class CardDetailScreen extends ConsumerWidget {
@@ -327,6 +343,7 @@ class _CardBodyState extends ConsumerState<_CardBody> {
             child: OwnedPanel(
               cardId: card.id,
               onFetchSlabPrice: (grading) => openEbaySold(context, ref, card, grading: grading),
+              onEdit: (entry) => _editOwned(context, ref, entry),
             ),
           ),
           CardmarketEditionTile(

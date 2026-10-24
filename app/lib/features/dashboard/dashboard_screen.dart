@@ -95,17 +95,21 @@ class DashboardScreen extends ConsumerWidget {
                 onRetry: () => invalidateCollection(ref),
                 builder: (data) => _ValueHero(summary: data),
               ),
-              const SizedBox(height: 16),
-              _ScanCallToAction(onTap: () => context.push('/scan')),
-              const SizedBox(height: 12),
-              const _QuickActions(),
-              const _TodayCard(),
-              if (summary.value case final data? when data.items == 0)
-                const _EmptyHint()
-              else ...[
+              // Reihenfolge: Wert → Heute → Bewegungen → Schnellzugriffe → Karten. Scannen
+              // steckt im runden Knopf unten; die große Kachel nur bei leerer Kiste.
+              if (summary.value case final data? when data.items == 0) ...[
+                const SizedBox(height: 16),
+                _ScanCallToAction(onTap: () => context.push('/scan')),
+                const SizedBox(height: 12),
+                const _QuickActions(),
+                const _EmptyHint(),
+              ] else ...[
+                const _TodayCard(),
+                const _MoversSection(),
+                const SizedBox(height: 20),
+                const _QuickActions(),
                 if (summary.value case final data? when data.hasProfit)
                   _ProfitSection(summary: data),
-                const _MoversSection(),
                 const _Showcase(title: 'Wertvollste Karten', sort: 'value_desc'),
                 const _Showcase(title: 'Zuletzt hinzugefügt', sort: 'added_desc'),
               ],
@@ -170,7 +174,8 @@ class _ValueHero extends ConsumerWidget {
                   ),
                 Flexible(
                   child: Text(
-                    '${summary.items} Karten · ${summary.sets} Sets',
+                    '${summary.items} ${summary.items == 1 ? 'Karte' : 'Karten'} · '
+                    '${summary.sets} ${summary.sets == 1 ? 'Set' : 'Sets'}',
                     style: TextStyle(color: Colors.white.withValues(alpha: 0.85)),
                   ),
                 ),
@@ -253,12 +258,11 @@ class _ScanCallToAction extends StatelessWidget {
   );
 }
 
-/// Schnellzugriffe unter dem Scan-Knopf (wie Collectr): die häufigsten Wege mit einem Tipp.
+/// Schnellzugriffe (wie Collectr): Wege, die nicht schon in der unteren Leiste stecken.
 class _QuickActions extends StatelessWidget {
   const _QuickActions();
 
   static const _actions = [
-    (key: 'quick-search', icon: Icons.search, label: 'Suchen', path: '/search'),
     (
       key: 'quick-sealed',
       icon: Icons.inventory_2_outlined,
@@ -267,6 +271,7 @@ class _QuickActions extends StatelessWidget {
     ),
     (key: 'quick-sets', icon: Icons.layers_outlined, label: 'Sets', path: '/sets'),
     (key: 'quick-trade', icon: Icons.swap_horiz, label: 'Tausch', path: '/trade'),
+    (key: 'quick-alerts', icon: Icons.notifications_outlined, label: 'Alarme', path: '/alerts'),
   ];
 
   @override
@@ -281,9 +286,7 @@ class _QuickActions extends StatelessWidget {
             child: InkWell(
               key: Key(action.key),
               borderRadius: BorderRadius.circular(16),
-              // Suchen ist ein Reiter (go), der Rest liegt darüber (push, mit Zurück).
-              onTap: () =>
-                  action.path == '/search' ? context.go(action.path) : context.push(action.path),
+              onTap: () => context.push(action.path),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Column(
@@ -523,22 +526,18 @@ class _ProfitSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final entries = [?summary.bestProfit, ?summary.worstProfit];
+    if (entries.isEmpty) return const SizedBox.shrink();
     return Column(
       key: const Key('profit-section'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Die Gesamtsumme steht schon oben im Wert-Kasten – hier nur die Ausreißer.
         Padding(
           padding: const EdgeInsets.only(top: 20, bottom: 4),
           child: Text(
-            'Seit dem Kauf',
+            'Bester und schlechtester Kauf',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
-        ),
-        Text(
-          '${summary.profitPositions} Positionen mit Kaufpreis: '
-          '${money(summary.profitCost)} bezahlt, heute '
-          '${profitText(summary.profit, summary.profitPercent)}',
-          style: const TextStyle(color: AppColors.textMuted),
         ),
         for (final item in entries) _ProfitTile(item: item),
       ],

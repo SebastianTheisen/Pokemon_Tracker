@@ -42,7 +42,7 @@ class OwnedLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     '✓ In deiner Sammlung: ${ownedShort(entries)}',
-    maxLines: 1,
+    maxLines: 2,
     overflow: TextOverflow.ellipsis,
     style: const TextStyle(color: AppColors.gain, fontSize: 12, fontWeight: FontWeight.w600),
   );
@@ -51,9 +51,12 @@ class OwnedLine extends StatelessWidget {
 /// Kartenseite: Bestand je Ordner und Fassung – mit dem Wert, mit dem die Position in der
 /// Sammlung zählt. Slabs zählen mit dem Preis ihrer Note, nicht mit dem Rohpreis oben.
 class OwnedPanel extends ConsumerWidget {
-  const OwnedPanel({required this.cardId, this.onFetchSlabPrice, super.key});
+  const OwnedPanel({required this.cardId, this.onFetchSlabPrice, this.onEdit, super.key});
 
   final String cardId;
+
+  /// Zeile antippen: diese Position bearbeiten, verschieben, entfernen …
+  final void Function(OwnedEntry entry)? onEdit;
 
   /// „eBay-Verkäufe holen“ für einen Slab ohne Preis (Firma und Note, z. B. „PSA 10“).
   final void Function(String grading)? onFetchSlabPrice;
@@ -81,55 +84,73 @@ class OwnedPanel extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           for (final entry in entries)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    entry.isSlab ? Icons.workspace_premium_outlined : Icons.folder_outlined,
-                    size: 18,
-                    color: AppColors.textMuted,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+            InkWell(
+              key: Key('owned-edit-${entry.folderId}-${entry.version}'),
+              borderRadius: BorderRadius.circular(8),
+              onTap: onEdit == null || entry.itemIds.isEmpty ? null : () => onEdit!(entry),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6, bottom: 2),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      entry.isSlab ? Icons.workspace_premium_outlined : Icons.folder_outlined,
+                      size: 18,
+                      color: AppColors.textMuted,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            [entry.folderName, ?entry.version].join(' · '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            entry.unitValue == null
+                                ? (entry.isSlab
+                                      ? 'Noch kein Preis für ${entry.version} – wird gesucht'
+                                      : 'Kein Preis bekannt')
+                                : _valueLabel(entry),
+                            key: Key('owned-value-${entry.folderId}-${entry.version}'),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: entry.unitValue == null
+                                  ? AppColors.warning
+                                  : AppColors.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          [entry.folderName, ?entry.version].join(' · '),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          '${entry.quantity}×',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
-                        Text(
-                          entry.unitValue == null
-                              ? (entry.isSlab
-                                    ? 'Noch kein Preis für ${entry.version} – wird gesucht'
-                                    : 'Kein Preis bekannt')
-                              : _valueLabel(entry),
-                          key: Key('owned-value-${entry.folderId}-${entry.version}'),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: entry.unitValue == null
-                                ? AppColors.warning
-                                : AppColors.textMuted,
-                          ),
-                        ),
+                        if (entry.unitValue case final value?)
+                          Text(money(value), style: const TextStyle(fontWeight: FontWeight.w700)),
                       ],
                     ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '${entry.quantity}×',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                    if (onEdit != null)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 4, top: 2),
+                        child: Icon(Icons.chevron_right, color: AppColors.textMuted),
                       ),
-                      if (entry.unitValue case final value?)
-                        Text(money(value), style: const TextStyle(fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                ],
+                  ],
+                ),
+              ),
+            ),
+          if (onEdit != null)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text(
+                'Zeile antippen zum Bearbeiten, Verschieben oder Entfernen.',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 11),
               ),
             ),
           if (missing.isNotEmpty && onFetchSlabPrice != null)
@@ -154,15 +175,16 @@ class OwnedPanel extends ConsumerWidget {
     );
   }
 
-  /// „Wert in der Sammlung · PriceCharting PSA 10 (US-Preis umgerechnet)“
+  /// Klartext statt Rechenweg: „Wert in der Sammlung · Cardmarket, Zustand NM“. Bei Slabs die
+  /// Grundlage der Note („PriceCharting PSA 10 (US-Preis umgerechnet)“).
   static String _valueLabel(OwnedEntry entry) {
-    final source =
-        entry.valueBasis ??
-        switch (entry.valueKind) {
-          'manual' => 'dein Eigenpreis',
-          'estimated' => 'Schätzung',
-          _ => entry.valueSource ?? 'Beleg',
-        };
+    final condition = 'Zustand ${entry.condition ?? 'NM'}';
+    final source = switch (entry.valueKind) {
+      'manual' => 'dein Eigenpreis',
+      _ when entry.isSlab => entry.valueBasis ?? entry.valueSource ?? 'Beleg',
+      'estimated' => 'Schätzung aus Cardmarket, $condition',
+      _ => 'Cardmarket, $condition',
+    };
     return 'Wert in der Sammlung · $source';
   }
 }

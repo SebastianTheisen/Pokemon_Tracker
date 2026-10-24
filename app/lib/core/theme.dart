@@ -31,6 +31,11 @@ ThemeData buildTheme() {
   final base = ThemeData(useMaterial3: true, colorScheme: scheme);
   return base.copyWith(
     scaffoldBackgroundColor: AppColors.background,
+    // Schwebende Hinweise über der unteren Leiste statt auf ihr.
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
     appBarTheme: const AppBarTheme(
       backgroundColor: AppColors.background,
       elevation: 0,

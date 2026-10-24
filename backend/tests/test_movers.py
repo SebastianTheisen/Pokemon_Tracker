@@ -91,3 +91,30 @@ async def test_gainers_and_losers_of_own_cards(
     assert (
         await client.get(f"{API}/collection/movers?days=0", headers=user.headers)
     ).status_code == 422
+
+
+async def test_wishlist_shows_trend_of_last_week(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Merkliste wie die Watchlist bei Collectr: Stückpreis-Veränderung der letzten 7 Tage."""
+    user = await register_user("max@example.com")
+    riser = await make_card(session_factory, external_id="a-1", name="Glurak", number="1")
+    fresh = await make_card(session_factory, external_id="e-5", name="Mew", number="5")
+    await _trend(session_factory, riser, 10, "10.00")
+    await _trend(session_factory, riser, 1, "12.50")
+    await _trend(session_factory, fresh, 1, "50.00")  # kein Vergleichswert → keine Angabe
+    for card in (riser, fresh):
+        added = await client.post(
+            f"{API}/wishlist", json={"card_id": str(card.id)}, headers=user.headers
+        )
+        assert added.status_code == 201, added.text
+
+    entries = (await client.get(f"{API}/wishlist", headers=user.headers)).json()
+
+    assert {e["card"]["name"]: (e["change"], e["change_pct"]) for e in entries} == {
+        "Glurak": ("2.50", "25.0"),
+        "Mew": (None, None),
+    }
+    assert {e["change_days"] for e in entries} == {7}

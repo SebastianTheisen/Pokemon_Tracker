@@ -771,6 +771,8 @@ async def test_owned_cards_by_folder_and_version(
         ("Sammlung", "normal", None, None, 3),
     }
     assert {o["card_id"] for o in owned} == {str(card_a.id)}  # Bobs Karte zählt nicht
+    # Jede Zeile nennt ihre Positionen – die Kartenseite bearbeitet sie direkt.
+    assert sorted(len(o["item_ids"]) for o in owned) == [1, 1, 2]
 
 
 async def test_owned_shows_collection_value_and_slab_switch_fetches_grade_prices(

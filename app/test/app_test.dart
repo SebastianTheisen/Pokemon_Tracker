@@ -441,7 +441,7 @@ void profitTests() {
     expect(find.text('Investiert 275,00\u00a0€ · Gewinn +50,00\u00a0€ (+20,0 %)'), findsOneWidget);
     final section = find.byKey(const Key('profit-section'));
     await tester.scrollUntilVisible(section, 200, scrollable: find.byType(Scrollable).first);
-    expect(find.text('Seit dem Kauf'), findsOneWidget);
+    expect(find.text('Bester und schlechtester Kauf'), findsOneWidget);
     expect(find.text('+80,00\u00a0€'), findsWidgets);
     expect(find.text('+66,7 %'), findsOneWidget);
     expect(find.text('−30,00\u00a0€'), findsWidgets);
@@ -786,11 +786,11 @@ void setTests() {
 
     await tester.tap(find.byKey(const Key('wish-missing')));
     await tester.pumpAndSettle();
-    expect(find.text('1 Karten auf die Merkliste?'), findsOneWidget); // k3 ist schon gemerkt
+    expect(find.text('1 Karte auf die Merkliste?'), findsOneWidget); // k3 ist schon gemerkt
     await tester.tap(find.byKey(const Key('wish-missing-confirm')));
     await tester.pumpAndSettle();
     expect(api.lastWishedIds, ['k4']);
-    expect(find.text('1 Karten auf die Merkliste gesetzt.'), findsOneWidget);
+    expect(find.text('1 Karte auf die Merkliste gesetzt.'), findsOneWidget);
   });
 }
 
@@ -800,7 +800,9 @@ void friendTests() {
     await pumpApp(tester, api);
     await tester.tap(find.text('Sammlung').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Ordner verwalten'));
+    await tester.tap(find.byKey(const Key('collection-more')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ordner verwalten'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('share-f1')));
     await tester.pumpAndSettle();
@@ -849,13 +851,31 @@ void friendTests() {
     expect(find.byKey(const Key('trade-summary')), findsNothing); // Entwurf geleert
   });
 
-  testWidgets('Sammlung: „Zum Tausch geben“ legt die Position auf „Ich gebe“', (tester) async {
-    final api = FakeApi(loggedIn: true);
+  testWidgets('Sammlung → Kartenseite → eigene Zeile → „Zum Tausch geben“', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..ownedJson = [
+        {
+          'card_id': 'c1',
+          'folder_id': 'f1',
+          'folder_name': 'Sammlung',
+          'variant': 'normal',
+          'grading_company': null,
+          'grade': null,
+          'quantity': 1,
+          'item_ids': ['i1'],
+        },
+      ];
     await pumpApp(tester, api);
     await tester.tap(find.text('Sammlung').last);
     await tester.pumpAndSettle();
+    // Antippen öffnet die Kartenseite (wie Collectr), nicht mehr ein Menü.
     await tester.tap(find.text('Nachtara VMAX').first);
     await tester.pumpAndSettle();
+    expect(find.text('✓ In deiner Sammlung: 1×'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('owned-edit-f1-null')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('item:i1'));
+    expect(find.text('Nachtara VMAX ansehen'), findsNothing); // wir sind schon auf der Karte
     await tester.tap(find.byKey(const Key('item-trade')));
     await tester.pumpAndSettle();
     expect(find.textContaining('→ „Ich gebe“'), findsOneWidget);
@@ -1169,5 +1189,62 @@ void usabilityTests() {
     router.go('/');
     await tester.pumpAndSettle();
     expect(router.state.matchedLocation, '/home');
+  });
+
+  testWidgets('Merkliste: Bild, Preis, Veränderung in 7 Tagen und Summe', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..wishlistJson = [
+        {
+          'id': 'w1',
+          'created_at': '2026-10-20T10:00:00Z',
+          'card': cardJson(),
+          'product': null,
+          'nm_value': '125.00',
+          'nm_value_kind': 'external',
+          'change': '25.00',
+          'change_pct': '25.0',
+          'change_days': 7,
+        },
+        {
+          'id': 'w2',
+          'created_at': '2026-10-21T10:00:00Z',
+          'card': null,
+          'product': {'id': 'p1', 'kind': 'booster', 'language': 'de', 'name': 'Booster 151'},
+          'nm_value': null,
+          'nm_value_kind': null,
+        },
+      ];
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('tab-Listen')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 Einträge · zusammen 125,00\u00a0€'), findsOneWidget);
+    expect(find.text('+25,0 % in 7 Tagen'), findsOneWidget);
+    expect(find.text('noch kein Preis'), findsOneWidget);
+    expect(find.text('Booster 151'), findsOneWidget);
+  });
+
+  testWidgets('Sammlung: Kurve erst auf Tipp, Auswahl über das Menü', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('tab-Sammlung')));
+    await tester.pumpAndSettle();
+    expect(find.text('Verlauf'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('toggle-curve')));
+    await tester.pumpAndSettle();
+    expect(find.text('Zuklappen'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('collection-more')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('collection-select')));
+    await tester.pumpAndSettle();
+    expect(find.text('0 ausgewählt'), findsOneWidget);
+    await tester.tap(find.text('Nachtara VMAX').first);
+    await tester.pumpAndSettle();
+    expect(find.text('1 ausgewählt'), findsOneWidget); // im Auswahlmodus kein Seitenwechsel
+    await tester.tap(find.byTooltip('Auswahl beenden'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sammlung'), findsWidgets);
+    expect(find.byKey(const Key('selection-count')), findsNothing);
   });
 }

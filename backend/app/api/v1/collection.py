@@ -141,6 +141,7 @@ class OwnedOut(BaseModel):
     value_kind: str
     value_source: str | None
     value_basis: str | None
+    item_ids: list[uuid.UUID] = Field(description="Zusammengefasste Positionen (Bearbeiten)")
 
 
 @router.get("/collection/owned")
@@ -149,12 +150,16 @@ async def owned_cards(
     card_id: Annotated[list[uuid.UUID], Query(max_length=100)],
 ) -> list[OwnedOut]:
     """Bestand je Karte, Ordner und Fassung – „schon in deiner Sammlung“ in Suche und Karte."""
-    return [OwnedOut(**entry.__dict__) for entry in await collection.owned_cards(card_id)]
+    return [
+        OwnedOut.model_validate(entry, from_attributes=True)
+        for entry in await collection.owned_cards(card_id)
+    ]
 
 
-async def refresh_slab_prices(app_state: Any, card_id: uuid.UUID) -> None:
-    """Nach dem Speichern eines Slabs: Notenpreise (PriceCharting) gleich holen statt erst in der
-    nächsten Tagesrunde. Läuft nach der Antwort; Fehler landen nur im Log."""
+async def refresh_card_prices(app_state: Any, card_id: uuid.UUID) -> None:
+    """Preise einer Karte gleich holen statt erst in der nächsten Tagesrunde (Slab gespeichert:
+    Notenpreise; Karte gemerkt: Cardmarket). Läuft nach der Antwort; veraltete Preise holt
+    ``refresh`` nur, wenn nötig. Fehler landen nur im Log."""
     try:
         async with app_state.session_factory() as session:
             card = await session.get(Card, card_id)
@@ -166,12 +171,12 @@ async def refresh_slab_prices(app_state: Any, card_id: uuid.UUID) -> None:
             await prices.refresh(card)
             await session.commit()
     except Exception:
-        log.exception("collection.slab_refresh_failed", card=str(card_id))
+        log.exception("collection.price_refresh_failed", card=str(card_id))
 
 
 def _schedule_slab_refresh(request: Request, background: BackgroundTasks, item: ItemOut) -> None:
     if item.kind == "graded" and item.card is not None and item.value.unit_value is None:
-        background.add_task(refresh_slab_prices, request.app.state, item.card.id)
+        background.add_task(refresh_card_prices, request.app.state, item.card.id)
 
 
 @router.post("/collection/items", status_code=status.HTTP_201_CREATED)
@@ -354,10 +359,10 @@ async def export_csv(collection: Collection) -> Response:
 
 @router.get("/wishlist")
 async def wishlist(collection: Collection) -> list[WishlistEntryOut]:
-    entries, prices = await collection.wishlist()
+    view = await collection.wishlist()
     result: list[WishlistEntryOut] = []
-    for entry in entries:
-        card_prices = prices.get(entry.card_id) if entry.card_id else None
+    for entry in view.entries:
+        card_prices = view.prices.get(entry.card_id) if entry.card_id else None
         nm = next(
             (
                 c
@@ -366,22 +371,35 @@ async def wishlist(collection: Collection) -> list[WishlistEntryOut]:
             ),
             None,
         )
+        sealed = view.sealed.get(entry.product_id) if entry.product_id else None
+        change = view.changes.get(entry.card_id) if entry.card_id else None
+        value, kind = (
+            (nm.value, nm.kind) if nm else (sealed.value, "external") if sealed else (None, None)
+        )
         result.append(
             WishlistEntryOut(
                 id=entry.id,
                 created_at=entry.created_at,
                 card=CardOut.model_validate(entry.card) if entry.card else None,
                 product=ProductOut.model_validate(entry.product) if entry.product else None,
-                nm_value=nm.value if nm else None,
-                nm_value_kind=nm.kind if nm else None,
+                nm_value=value,
+                nm_value_kind=kind,
+                change=change.change if change else None,
+                change_pct=change.change_pct if change else None,
+                change_days=view.days,
             )
         )
     return result
 
 
 @router.post("/wishlist", status_code=status.HTTP_201_CREATED)
-async def add_to_wishlist(body: WishlistAdd, collection: Collection) -> dict[str, uuid.UUID]:
+async def add_to_wishlist(
+    body: WishlistAdd, collection: Collection, request: Request, background: BackgroundTasks
+) -> dict[str, uuid.UUID]:
+    """Merken – und den Preis gleich holen (sonst stünde bis zur Tagesrunde „–“ da)."""
     entry = await collection.add_to_wishlist(card_id=body.card_id, product_id=body.product_id)
+    if body.card_id is not None:
+        background.add_task(refresh_card_prices, request.app.state, body.card_id)
     return {"id": entry.id}
 
 

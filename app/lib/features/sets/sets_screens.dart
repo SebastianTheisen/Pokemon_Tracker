@@ -114,7 +114,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('${ids.length} Karten auf die Merkliste?'),
+        title: Text('${ids.length} ${ids.length == 1 ? 'Karte' : 'Karten'} auf die Merkliste?'),
         content: const Text('Alle fehlenden Karten dieses Sets, die noch nicht gemerkt sind.'),
         actions: [
           TextButton(
@@ -139,7 +139,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     ref
       ..invalidate(setProgressProvider(widget.setId))
       ..invalidate(wishlistProvider);
-    showMessage(context, '$added Karten auf die Merkliste gesetzt.');
+    showMessage(context, '$added ${added == 1 ? 'Karte' : 'Karten'} auf die Merkliste gesetzt.');
   }
 
   @override

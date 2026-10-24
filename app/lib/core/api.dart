@@ -525,6 +525,9 @@ class Api {
     ),
   );
 
+  Future<CollectionItem> item(String id) async =>
+      CollectionItem.fromJson(await _get('/collection/items/$id'));
+
   Future<CollectionItem> addItem(Map<String, Object?> body) async =>
       CollectionItem.fromJson((await _send('POST', '/collection/items', body: body))! as Json);
 

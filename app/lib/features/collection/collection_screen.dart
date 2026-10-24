@@ -66,10 +66,21 @@ class CollectionScreen extends ConsumerStatefulWidget {
 class _CollectionScreenState extends ConsumerState<CollectionScreen> {
   ItemFilter _filter = const ItemFilter();
 
-  /// Mehrfachauswahl (IDs); leer = normaler Modus.
+  /// Mehrfachauswahl (IDs); leer und ohne [_selectMode] = normaler Modus.
   final Set<String> _selected = {};
 
-  bool get _selecting => _selected.isNotEmpty;
+  /// Auswahl über das Menü gestartet (noch nichts angetippt).
+  bool _selectMode = false;
+
+  /// Wertkurve aufgeklappt – zu Beginn zu, damit die Karten sofort sichtbar sind.
+  bool _curveOpen = false;
+
+  bool get _selecting => _selectMode || _selected.isNotEmpty;
+
+  void _endSelection() => setState(() {
+    _selected.clear();
+    _selectMode = false;
+  });
 
   void _reload() {
     ref
@@ -129,7 +140,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       _ => 'entfernt',
     };
     showMessage(context, '$count ${count == 1 ? 'Position' : 'Positionen'} $verb');
-    setState(_selected.clear);
+    _endSelection();
     _reload();
   }
 
@@ -142,92 +153,27 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     return PopScope(
       canPop: !_selecting,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) setState(_selected.clear);
+        if (!didPop) _endSelection();
       },
       child: Scaffold(
-        appBar: _selecting
-            ? AppBar(
-                leading: IconButton(
-                  tooltip: 'Auswahl beenden',
-                  onPressed: () => setState(_selected.clear),
-                  icon: const Icon(Icons.close),
-                ),
-                title: Text('${_selected.length} ausgewählt', key: const Key('selection-count')),
-                actions: [
-                  IconButton(
-                    key: const Key('select-all'),
-                    tooltip: 'Alle auswählen',
-                    onPressed: () => setState(() => _selected.addAll(pageItems.map((i) => i.id))),
-                    icon: const Icon(Icons.select_all),
-                  ),
-                  IconButton(
-                    key: const Key('bulk-move'),
-                    tooltip: 'In Ordner verschieben',
-                    onPressed: () => _bulk('move', folders),
-                    icon: const Icon(Icons.drive_file_move_outline),
-                  ),
-                  IconButton(
-                    key: const Key('bulk-copy'),
-                    tooltip: 'In Ordner kopieren',
-                    onPressed: () => _bulk('copy', folders),
-                    icon: const Icon(Icons.copy_all_outlined),
-                  ),
-                  IconButton(
-                    key: const Key('bulk-delete'),
-                    tooltip: 'Entfernen',
-                    onPressed: () => _bulk('delete', folders),
-                    icon: const Icon(Icons.delete_outline),
-                  ),
-                ],
-              )
-            : AppBar(
-                title: const Text('Sammlung'),
-                actions: [
-                  IconButton(
-                    tooltip: 'Sets',
-                    onPressed: () => context.push('/sets'),
-                    icon: const Icon(Icons.layers_outlined),
-                  ),
-                  IconButton(
-                    tooltip: 'Ordner verwalten',
-                    onPressed: () => _manageFolders(context, folders),
-                    icon: const Icon(Icons.folder_outlined),
-                  ),
-                  PopupMenuButton<String>(
-                    tooltip: 'Sortieren',
-                    icon: const Icon(Icons.sort),
-                    initialValue: _filter.sort,
-                    onSelected: (sort) => setState(() => _filter = _filter.copyWith(sort: sort)),
-                    itemBuilder: (_) => [
-                      for (final entry in sortLabels.entries)
-                        PopupMenuItem(value: entry.key, child: Text(entry.value)),
-                    ],
-                  ),
-                ],
-              ),
-        // Gut sichtbar statt Symbol in der Kopfzeile: Karten kommen über „Scannen“, Versiegeltes hier.
-        floatingActionButton: _selecting
-            ? null
-            : FloatingActionButton.extended(
-                key: const Key('add-sealed'),
-                heroTag: 'add-sealed',
-                tooltip: 'Versiegeltes hinzufügen (Booster, Display, ETB …)',
-                onPressed: () => context.push('/sealed/add'),
-                icon: const Icon(Icons.inventory_2_outlined),
-                label: const Text('Versiegelt'),
-              ),
+        appBar: _selecting ? _selectionBar(pageItems, folders) : _mainBar(folders),
         body: RefreshIndicator(
           onRefresh: () async => _reload(),
           child: CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
                 child: summary.maybeWhen(
-                  data: (data) => _SummaryHeader(summary: data),
+                  data: (data) => _SummaryHeader(
+                    summary: data,
+                    curveOpen: _curveOpen,
+                    onToggleCurve: () => setState(() => _curveOpen = !_curveOpen),
+                  ),
                   orElse: () => const SizedBox(height: 8),
                 ),
               ),
-              SliverToBoxAdapter(child: _FolderCurve(folderId: _filter.folderId)),
-              SliverToBoxAdapter(child: _filters(folders)),
+              if (_curveOpen) SliverToBoxAdapter(child: _FolderCurve(folderId: _filter.folderId)),
+              // Suche und Filter bleiben beim Scrollen oben stehen.
+              SliverPersistentHeader(pinned: true, delegate: _PinnedBar(child: _filters(folders))),
               ...items.when(
                 loading: () => [
                   const SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
@@ -238,26 +184,10 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                   ),
                 ],
                 data: (page) => page.items.isEmpty
-                    ? [
-                        SliverFillRemaining(
-                          hasScrollBody: false,
-                          child: EmptyView(
-                            icon: Icons.collections_bookmark_outlined,
-                            message:
-                                'Noch nichts hier. Scanne eine Karte, füge sie über die Suche '
-                                'hinzu oder lege Versiegeltes an (Knopf unten rechts).',
-                            action: FilledButton.icon(
-                              onPressed: () => context.push('/scan'),
-                              icon: const Icon(Icons.document_scanner),
-                              label: const Text('Karte scannen'),
-                            ),
-                          ),
-                        ),
-                      ]
+                    ? [SliverFillRemaining(hasScrollBody: false, child: _empty())]
                     : [
                         SliverPadding(
-                          // unten Platz für den Knopf „Versiegelt“
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                           sliver: SliverGrid(
                             gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                               maxCrossAxisExtent: 130,
@@ -275,15 +205,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                                     width: constraints.maxWidth,
                                     selected: _selecting ? _selected.contains(item.id) : null,
                                     onLongPress: () => _toggle(item),
-                                    onTap: _selecting
-                                        ? () => _toggle(item)
-                                        : () => showItemActions(
-                                            context,
-                                            ref,
-                                            item,
-                                            _reload,
-                                            onSelect: () => _toggle(item),
-                                          ),
+                                    onTap: _selecting ? () => _toggle(item) : () => _open(item),
                                   );
                                 },
                               ),
@@ -311,68 +233,249 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     );
   }
 
+  /// Wie bei Collectr: Antippen öffnet die Kartenseite (dort bearbeiten, verschieben …).
+  /// Versiegeltes hat keine eigene Seite – dort gleich die Aktionen.
+  Future<void> _open(CollectionItem item) async {
+    if (item.card case final card?) {
+      await context.push('/card/${card.id}');
+      if (mounted) _reload();
+    } else {
+      await showItemActions(context, ref, item, _reload, onSelect: () => _toggle(item));
+    }
+  }
+
+  PreferredSizeWidget _mainBar(List<Folder> folders) => AppBar(
+    title: const Text('Sammlung'),
+    actions: [
+      Tooltip(
+        message: 'Sets',
+        child: TextButton.icon(
+          onPressed: () => context.push('/sets'),
+          icon: const Icon(Icons.layers_outlined),
+          label: const Text('Sets'),
+        ),
+      ),
+      PopupMenuButton<String>(
+        key: const Key('collection-add'),
+        tooltip: 'Hinzufügen',
+        icon: const Icon(Icons.add),
+        onSelected: (path) => path == '/search' ? context.go(path) : context.push(path),
+        itemBuilder: (_) => const [
+          PopupMenuItem(
+            value: '/scan',
+            child: ListTile(
+              leading: Icon(Icons.document_scanner_outlined),
+              title: Text('Karte scannen'),
+            ),
+          ),
+          PopupMenuItem(
+            value: '/search',
+            child: ListTile(leading: Icon(Icons.search), title: Text('Karte suchen')),
+          ),
+          PopupMenuItem(
+            key: Key('add-sealed'),
+            value: '/sealed/add',
+            child: ListTile(
+              leading: Icon(Icons.inventory_2_outlined),
+              title: Text('Versiegeltes'),
+              subtitle: Text('Booster, Display, ETB …'),
+            ),
+          ),
+        ],
+      ),
+      PopupMenuButton<String>(
+        key: const Key('collection-more'),
+        tooltip: 'Mehr Optionen',
+        onSelected: (action) => action == 'folders'
+            ? _manageFolders(context, folders)
+            : setState(() => _selectMode = true),
+        itemBuilder: (_) => const [
+          PopupMenuItem(
+            value: 'folders',
+            child: ListTile(leading: Icon(Icons.folder_outlined), title: Text('Ordner verwalten')),
+          ),
+          PopupMenuItem(
+            key: Key('collection-select'),
+            value: 'select',
+            child: ListTile(
+              leading: Icon(Icons.checklist),
+              title: Text('Mehrere auswählen'),
+              subtitle: Text('auch per langem Druck auf eine Karte'),
+            ),
+          ),
+        ],
+      ),
+    ],
+  );
+
+  PreferredSizeWidget _selectionBar(List<CollectionItem> pageItems, List<Folder> folders) => AppBar(
+    leading: IconButton(
+      tooltip: 'Auswahl beenden',
+      onPressed: _endSelection,
+      icon: const Icon(Icons.close),
+    ),
+    title: Text('${_selected.length} ausgewählt', key: const Key('selection-count')),
+    actions: [
+      IconButton(
+        key: const Key('select-all'),
+        tooltip: 'Alle auswählen',
+        onPressed: () => setState(() => _selected.addAll(pageItems.map((i) => i.id))),
+        icon: const Icon(Icons.select_all),
+      ),
+      IconButton(
+        key: const Key('bulk-move'),
+        tooltip: 'In Ordner verschieben',
+        onPressed: _selected.isEmpty ? null : () => _bulk('move', folders),
+        icon: const Icon(Icons.drive_file_move_outline),
+      ),
+      IconButton(
+        key: const Key('bulk-copy'),
+        tooltip: 'In Ordner kopieren',
+        onPressed: _selected.isEmpty ? null : () => _bulk('copy', folders),
+        icon: const Icon(Icons.copy_all_outlined),
+      ),
+      IconButton(
+        key: const Key('bulk-delete'),
+        tooltip: 'Entfernen',
+        onPressed: _selected.isEmpty ? null : () => _bulk('delete', folders),
+        icon: const Icon(Icons.delete_outline),
+      ),
+    ],
+  );
+
+  Widget _empty() {
+    final filtered = _filter.query.isNotEmpty || _filter.kind != null || _filter.extraCount > 0;
+    if (filtered) {
+      return EmptyView(
+        icon: Icons.search_off,
+        message: 'Nichts gefunden – Suche oder Filter lockern.',
+        action: OutlinedButton(
+          key: const Key('collection-clear-filter'),
+          onPressed: () => setState(() => _filter = ItemFilter(folderId: _filter.folderId)),
+          child: const Text('Filter zurücksetzen'),
+        ),
+      );
+    }
+    return EmptyView(
+      icon: Icons.collections_bookmark_outlined,
+      message:
+          'Noch nichts hier. Scanne eine Karte, füge sie über die Suche hinzu oder lege '
+          'Versiegeltes über „+“ oben an.',
+      action: FilledButton.icon(
+        onPressed: () => context.push('/scan'),
+        icon: const Icon(Icons.document_scanner),
+        label: const Text('Karte scannen'),
+      ),
+    );
+  }
+
   Future<void> _openFilter() async {
     final filter = await showItemFilterSheet(context, _filter);
     if (filter != null && mounted) setState(() => _filter = filter);
   }
 
-  Widget _filters(List<Folder> folders) => Column(
-    children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-        child: TextField(
-          decoration: InputDecoration(
-            prefixIcon: const Icon(Icons.search),
-            hintText: 'In der Sammlung suchen',
-            isDense: true,
-            suffixIcon: IconButton(
-              key: const Key('collection-filter'),
-              tooltip: 'Filter (Sprache, Zustand, Wert, Kaufpreis)',
-              onPressed: _openFilter,
-              icon: Badge(
-                isLabelVisible: _filter.extraCount > 0,
-                label: Text('${_filter.extraCount}'),
-                child: const Icon(Icons.tune),
-              ),
+  /// Suche plus eine Zeile beschrifteter Schalter: Filter, Sortierung, Ordner, Art.
+  Widget _filters(List<Folder> folders) {
+    final folderName = folders.where((f) => f.id == _filter.folderId).firstOrNull?.name;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
+          child: TextField(
+            key: const Key('collection-search'),
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              hintText: 'In der Sammlung suchen',
+              isDense: true,
             ),
+            textInputAction: TextInputAction.search,
+            onSubmitted: (query) => setState(() => _filter = _filter.copyWith(query: query.trim())),
           ),
-          onSubmitted: (query) => setState(() => _filter = _filter.copyWith(query: query.trim())),
         ),
-      ),
-      SizedBox(
-        height: 44,
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          children: [
-            for (final kind in [null, ...kindLabels.keys])
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: ChoiceChip(
-                  label: Text(kind == null ? 'Alle' : kindLabels[kind]!),
-                  selected: _filter.kind == kind,
-                  onSelected: (_) => setState(() => _filter = _filter.copyWith(kind: kind)),
+        SizedBox(
+          height: 48,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            children: [
+              _gap(
+                Badge(
+                  isLabelVisible: _filter.extraCount > 0,
+                  label: Text('${_filter.extraCount}'),
+                  child: ActionChip(
+                    key: const Key('collection-filter'),
+                    tooltip: 'Filter (Sprache, Zustand, Wert, Kaufpreis)',
+                    avatar: const Icon(Icons.tune, size: 18),
+                    label: const Text('Filter'),
+                    onPressed: _openFilter,
+                  ),
                 ),
               ),
-            if (folders.length > 1) ...[
-              const VerticalDivider(indent: 8, endIndent: 8),
-              for (final folder in [null, ...folders])
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: ChoiceChip(
-                    avatar: const Icon(Icons.folder, size: 16),
-                    label: Text(folder?.name ?? 'Alle Ordner'),
-                    selected: _filter.folderId == folder?.id,
-                    onSelected: (_) =>
-                        setState(() => _filter = _filter.copyWith(folderId: folder?.id)),
+              _gap(
+                PopupMenuButton<String>(
+                  key: const Key('collection-sort'),
+                  tooltip: 'Sortieren',
+                  initialValue: _filter.sort,
+                  onSelected: (sort) => setState(() => _filter = _filter.copyWith(sort: sort)),
+                  itemBuilder: (_) => [
+                    for (final entry in sortLabels.entries)
+                      PopupMenuItem(value: entry.key, child: Text(entry.value)),
+                  ],
+                  child: Chip(
+                    avatar: const Icon(Icons.swap_vert, size: 18),
+                    label: Text('${sortLabels[_filter.sort] ?? 'Sortieren'} ▾'),
+                  ),
+                ),
+              ),
+              if (folders.length > 1)
+                _gap(
+                  PopupMenuButton<String>(
+                    key: const Key('collection-folder'),
+                    tooltip: 'Ordner',
+                    onSelected: (id) => id == '_manage'
+                        ? _manageFolders(context, folders)
+                        : setState(
+                            () => _filter = _filter.copyWith(folderId: id.isEmpty ? null : id),
+                          ),
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(value: '', child: Text('Alle Ordner')),
+                      for (final folder in folders)
+                        PopupMenuItem(
+                          key: Key('collection-folder-${folder.id}'),
+                          value: folder.id,
+                          child: Text(folder.name),
+                        ),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(value: '_manage', child: Text('Ordner verwalten …')),
+                    ],
+                    child: Chip(
+                      avatar: const Icon(Icons.folder_outlined, size: 18),
+                      backgroundColor: folderName == null
+                          ? null
+                          : AppColors.accent.withValues(alpha: 0.2),
+                      label: Text('${folderName ?? 'Alle Ordner'} ▾'),
+                    ),
+                  ),
+                ),
+              const VerticalDivider(indent: 6, endIndent: 6),
+              for (final kind in [null, ...kindLabels.keys])
+                _gap(
+                  ChoiceChip(
+                    label: Text(kind == null ? 'Alle' : kindLabels[kind]!),
+                    selected: _filter.kind == kind,
+                    onSelected: (_) => setState(() => _filter = _filter.copyWith(kind: kind)),
                   ),
                 ),
             ],
-          ],
+          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
+
+  static Widget _gap(Widget child) =>
+      Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: child);
 
   Future<void> _manageFolders(BuildContext context, List<Folder> folders) async {
     await showModalBottomSheet<void>(
@@ -384,63 +487,108 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
   }
 }
 
+/// Feste Leiste (Suche + Schalter), die beim Scrollen oben stehen bleibt.
+class _PinnedBar extends SliverPersistentHeaderDelegate {
+  _PinnedBar({required this.child});
+
+  final Widget child;
+
+  static const _height = 106.0;
+
+  @override
+  double get minExtent => _height;
+
+  @override
+  double get maxExtent => _height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => Material(
+    color: Theme.of(context).scaffoldBackgroundColor,
+    elevation: overlapsContent || shrinkOffset > 0 ? 2 : 0,
+    // Muss die feste Höhe ganz ausfüllen (sonst ungültige Sliver-Geometrie).
+    child: SizedBox.expand(
+      child: ClipRect(child: Center(child: child)),
+    ),
+  );
+
+  @override
+  bool shouldRebuild(_PinnedBar oldDelegate) => true;
+}
+
+/// Eine Zeile: Wert, Veränderung, Anzahl – antippen klappt die Wertkurve auf.
 class _SummaryHeader extends StatelessWidget {
-  const _SummaryHeader({required this.summary});
+  const _SummaryHeader({
+    required this.summary,
+    required this.curveOpen,
+    required this.onToggleCurve,
+  });
 
   final CollectionSummary summary;
+  final bool curveOpen;
+  final VoidCallback onToggleCurve;
 
   @override
   Widget build(BuildContext context) {
     final change = parseAmount(summary.changeSinceAdded) ?? 0;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _valueRow(context, change),
-          if (summary.hasProfit)
-            Text(
-              'Investiert ${money(summary.invested)} · Gewinn '
-              '${profitText(summary.profit, summary.profitPercent)}',
-              key: const Key('collection-profit'),
-              style: TextStyle(color: profitColor(summary.profit), fontSize: 13),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _valueRow(BuildContext context, double change) => Row(
-    crossAxisAlignment: CrossAxisAlignment.end,
-    children: [
-      // Wert und Veränderung brechen um statt über den Rand zu laufen (schmale Handys).
-      Expanded(
-        child: Wrap(
-          spacing: 10,
-          crossAxisAlignment: WrapCrossAlignment.end,
+    return InkWell(
+      key: const Key('toggle-curve'),
+      onTap: onToggleCurve,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+        child: Row(
           children: [
-            Text(
-              money(summary.totalValue),
-              style: Theme.of(context).textTheme.headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            if (change != 0)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  signedMoney(summary.changeSinceAdded),
-                  style: TextStyle(color: change > 0 ? AppColors.gain : AppColors.loss),
-                ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 10,
+                    crossAxisAlignment: WrapCrossAlignment.end,
+                    children: [
+                      Text(
+                        money(summary.totalValue),
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      if (change != 0)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            signedMoney(summary.changeSinceAdded),
+                            style: TextStyle(color: change > 0 ? AppColors.gain : AppColors.loss),
+                          ),
+                        ),
+                    ],
+                  ),
+                  Text(
+                    [
+                      '${summary.items} ${summary.items == 1 ? 'Karte' : 'Karten'}',
+                      if (summary.hasProfit)
+                        'Gewinn ${profitText(summary.profit, summary.profitPercent)}',
+                    ].join(' · '),
+                    key: const Key('collection-profit'),
+                    style: TextStyle(
+                      color: summary.hasProfit ? profitColor(summary.profit) : AppColors.textMuted,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
               ),
+            ),
+            Column(
+              children: [
+                Icon(curveOpen ? Icons.expand_less : Icons.show_chart, color: AppColors.textMuted),
+                Text(
+                  curveOpen ? 'Zuklappen' : 'Verlauf',
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                ),
+              ],
+            ),
           ],
         ),
       ),
-      Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: Text('${summary.items} Karten', style: const TextStyle(color: AppColors.textMuted)),
-      ),
-    ],
-  );
+    );
+  }
 }
 
 class _ItemTile extends ConsumerWidget {
@@ -519,6 +667,7 @@ Future<void> showItemActions(
   CollectionItem item,
   VoidCallback onChanged, {
   VoidCallback? onSelect,
+  bool showOpen = true,
 }) async {
   final action = await showModalBottomSheet<String>(
     context: context,
@@ -526,7 +675,7 @@ Future<void> showItemActions(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (item.card != null)
+          if (showOpen && item.card != null)
             ListTile(
               leading: const Icon(Icons.style),
               title: Text('${item.title} ansehen'),

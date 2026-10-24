@@ -36,9 +36,9 @@ from app.models import (
 )
 from app.providers.pricing import CONDITIONS
 from app.services.errors import ConflictError, InvalidInputError, NotFoundError
-from app.services.movers import Movers, price_movers
+from app.services.movers import Movers, TrendChange, price_movers, trend_changes
 from app.services.pricing import CardPrices, PriceService
-from app.services.sealed import sealed_prices
+from app.services.sealed import SealedPrice, sealed_prices
 from app.services.valuation import CENT, ItemKind, ItemValue, item_kind, unit_value, value_item
 
 DEFAULT_FOLDER_NAME = "Sammlung"
@@ -165,6 +165,17 @@ class OwnedEntry:
     value_kind: str = "none"
     value_source: str | None = None
     value_basis: str | None = None
+    item_ids: tuple[uuid.UUID, ...] = ()
+    """Die zusammengefassten Positionen (zum Bearbeiten direkt von der Kartenseite)."""
+
+
+@dataclass(frozen=True)
+class WishlistView:
+    entries: list[WishlistItem]
+    prices: dict[uuid.UUID, CardPrices]
+    sealed: dict[uuid.UUID, SealedPrice]
+    changes: dict[uuid.UUID, TrendChange]
+    days: int
 
 
 @dataclass(frozen=True)
@@ -666,6 +677,7 @@ class CollectionService:
                 value_kind=value.kind,
                 value_source=value.source,
                 value_basis=value.basis,
+                item_ids=(*(previous.item_ids if previous else ()), item.id),
             )
         return list(grouped.values())
 
@@ -836,7 +848,8 @@ class CollectionService:
 
     # ----------------------------------------------------------- Merkliste
 
-    async def wishlist(self) -> tuple[list[WishlistItem], dict[uuid.UUID, CardPrices]]:
+    async def wishlist(self, *, days: int = 7) -> WishlistView:
+        """Merkliste mit Kartenpreisen, Preisen für Versiegeltes und Trend der letzten Tage."""
         entries = list(
             (
                 await self._session.scalars(
@@ -848,10 +861,16 @@ class CollectionService:
             .unique()
             .all()
         )
-        prices = await self._prices.prices_for_cards(
-            [e.card_id for e in entries if e.card_id is not None], self._owner
+        card_ids = [e.card_id for e in entries if e.card_id is not None]
+        return WishlistView(
+            entries=entries,
+            prices=await self._prices.prices_for_cards(card_ids, self._owner),
+            sealed=await sealed_prices(
+                self._session, [e.product_id for e in entries if e.product_id is not None]
+            ),
+            changes=await trend_changes(self._session, card_ids, now=self._now(), days=days),
+            days=days,
         )
-        return entries, prices
 
     async def add_to_wishlist(
         self, *, card_id: uuid.UUID | None, product_id: uuid.UUID | None

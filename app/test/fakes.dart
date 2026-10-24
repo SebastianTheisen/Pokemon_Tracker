@@ -515,6 +515,12 @@ class FakeApi extends Api {
   }
 
   @override
+  Future<CollectionItem> item(String id) async {
+    calls.add('item:$id');
+    return CollectionItem.fromJson(itemJson(id: id));
+  }
+
+  @override
   Future<CollectionItem> addItem(Map<String, Object?> body) async {
     calls.add('addItem');
     lastItemBody = body;
@@ -868,7 +874,9 @@ class FakeApi extends Api {
   }
 
   @override
-  Future<List<WishlistEntry>> wishlist() async => [];
+  Future<List<WishlistEntry>> wishlist() async => wishlistJson.map(WishlistEntry.fromJson).toList();
+
+  List<Json> wishlistJson = [];
 
   @override
   Future<ScanResult> scan(UploadImage image, {String? language}) async {
