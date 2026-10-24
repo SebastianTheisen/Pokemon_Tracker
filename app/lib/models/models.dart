@@ -619,7 +619,7 @@ class Product {
 const productKindLabels = {
   'booster': 'Booster',
   'booster_bundle': 'Booster-Bundle',
-  'elite_trainer_box': 'Elite Trainer Box',
+  'elite_trainer_box': 'Top-Trainer-Box',
   'display': 'Display',
   'tin': 'Tin',
   'collection_box': 'Kollektion/Box',
@@ -640,6 +640,8 @@ class SealedOffer {
     this.low,
     this.value,
     this.imageUrl,
+    this.expansionId,
+    this.setName,
   });
 
   factory SealedOffer.fromJson(Json json) => SealedOffer(
@@ -652,6 +654,8 @@ class SealedOffer {
     value: json.strOrNull('value'),
     url: json.str('url'),
     imageUrl: json.strOrNull('image_url'),
+    expansionId: json.intOrNull('expansion_id'),
+    setName: json.strOrNull('set_name'),
   );
 
   final int cardmarketProductId;
@@ -666,6 +670,40 @@ class SealedOffer {
   final String url;
 
   /// Bild aus dem TCGplayer-Katalog (englische bzw. japanische Verpackung).
+  final String? imageUrl;
+
+  /// Cardmarket-Ausgabe (Set) und deren Name (deutsch, sonst englisch).
+  final int? expansionId;
+  final String? setName;
+}
+
+/// Set mit versiegelten Produkten (zum Durchblättern, neueste zuerst).
+class SealedSet {
+  const SealedSet({
+    required this.expansionId,
+    required this.name,
+    required this.products,
+    this.releaseDate,
+    this.logoUrl,
+    this.imageUrl,
+  });
+
+  factory SealedSet.fromJson(Json json) => SealedSet(
+    expansionId: json.integer('expansion_id'),
+    name: json.str('name'),
+    products: json.integer('products'),
+    releaseDate: json.timeOrNull('release_date'),
+    logoUrl: json.strOrNull('logo_url'),
+    imageUrl: json.strOrNull('image_url'),
+  );
+
+  final int expansionId;
+  final String name;
+  final int products;
+  final DateTime? releaseDate;
+  final String? logoUrl;
+
+  /// Bild eines Produkts aus dem Set (Display bevorzugt).
   final String? imageUrl;
 }
 

@@ -418,8 +418,23 @@ class FakeApi extends Api {
   });
 
   @override
-  Future<List<SealedOffer>> searchSealed(String query) async {
-    calls.add('searchSealed:$query');
+  Future<List<SealedSet>> sealedSets() async {
+    calls.add('sealedSets');
+    return [
+      SealedSet.fromJson({
+        'expansion_id': 6100,
+        'name': 'Prismatische Entwicklungen',
+        'products': 12,
+        'release_date': '2025-01-17',
+        'logo_url': null,
+        'image_url': null,
+      }),
+    ];
+  }
+
+  @override
+  Future<List<SealedOffer>> searchSealed(String query, {String? kind, int? expansion}) async {
+    calls.add('searchSealed:$query:${kind ?? ''}:${expansion ?? ''}');
     return [
       SealedOffer.fromJson({
         'cardmarket_product_id': 700001,
@@ -430,6 +445,8 @@ class FakeApi extends Api {
         'low': '89.00',
         'value': '99.00',
         'url': 'https://www.cardmarket.com/de/Pokemon/Products?idProduct=700001',
+        'expansion_id': 6100,
+        'set_name': 'Prismatische Entwicklungen',
       }),
     ];
   }

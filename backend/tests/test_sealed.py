@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import func, select
@@ -80,6 +82,8 @@ async def test_search_create_and_value_in_collection(
             "value": "99.00",  # Median aus 95, 99, 110
             "url": f"https://www.cardmarket.com/de/Pokemon/Products?idProduct={ETB}",
             "image_url": None,
+            "expansion_id": 6100,
+            "set_name": None,
         }
     ]
     created = await client.post(
@@ -164,7 +168,7 @@ async def test_link_existing_product_and_reject_singles(
     async with session_factory() as session:
         assert await session.scalar(select(func.count()).select_from(Product)) == 1
     short = await client.get(f"{API}/cardmarket/sealed", params={"q": "x"}, headers=user.headers)
-    assert short.status_code == 422
+    assert short.status_code == 400  # zu kurz und kein Set
 
 
 async def test_german_search_terms_and_set_names(
@@ -224,3 +228,46 @@ def test_partial_german_set_names() -> None:
     assert partial_set_queries("entwick", names) == ["prismatic evolutions"]  # Wortanfang reicht
     assert partial_set_queries("wick", names) == []  # nur am Wortanfang
     assert partial_set_queries("kar", names) == []  # zu kurz
+
+
+async def test_browse_sets_and_filter_by_kind(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    session_factory: async_sessionmaker[AsyncSession],
+    imported: None,
+) -> None:
+    """Durchblättern wie bei Collectr: Sets mit Versiegeltem, dann Produkte je Set und Art."""
+    async with session_factory() as session:
+        session.add_all(
+            [
+                CardSet(external_id="sv08.5", language="de", name="Prismatische Entwicklungen",
+                        release_date=date(2025, 1, 17), cardmarket_expansion_id=6100),
+                CardSet(external_id="sv08.5", language="en", name="Prismatic Evolutions",
+                        release_date=date(2025, 1, 17), cardmarket_expansion_id=6100,
+                        logo_url="https://logo/sv08.5"),
+            ]
+        )  # fmt: skip
+        await session.commit()
+    user = await register_user("browse@example.com")
+
+    sets = await client.get(f"{API}/cardmarket/sealed/sets", headers=user.headers)
+    in_set = await client.get(
+        f"{API}/cardmarket/sealed", params={"expansion": 6100}, headers=user.headers
+    )
+    only_etb = await client.get(
+        f"{API}/cardmarket/sealed",
+        params={"expansion": 6100, "kind": "elite_trainer_box"},
+        headers=user.headers,
+    )
+
+    assert sets.status_code == 200, sets.text
+    first = sets.json()[0]
+    assert (first["expansion_id"], first["name"], first["logo_url"]) == (
+        6100,
+        "Prismatische Entwicklungen",  # Deutsch vor Englisch
+        "https://logo/sv08.5",
+    )
+    assert first["products"] >= 2
+    assert {o["cardmarket_product_id"] for o in in_set.json()} >= {ETB, BUNDLE}
+    assert {o["set_name"] for o in in_set.json()} == {"Prismatische Entwicklungen"}
+    assert [o["cardmarket_product_id"] for o in only_etb.json()] == [ETB]

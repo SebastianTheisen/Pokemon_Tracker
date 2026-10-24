@@ -337,6 +337,21 @@ class SealedOfferOut(BaseModel):
     value: Decimal | None = Field(description="Median aus Trend, Ø 7 und Ø 30 Tagen")
     url: str
     image_url: str | None = Field(default=None, description="Bild aus dem TCGplayer-Katalog")
+    expansion_id: int | None = Field(default=None, description="Cardmarket-Ausgabe (Set)")
+    set_name: str | None = Field(
+        default=None, description="Name des Sets (deutsch, sonst englisch)"
+    )
+
+
+class SealedSetOut(BaseModel):
+    """Set mit versiegelten Produkten (zum Durchblättern)."""
+
+    expansion_id: int
+    name: str
+    release_date: date | None
+    logo_url: str | None
+    products: int
+    image_url: str | None
 
 
 class ProductFromCardmarket(BaseModel):

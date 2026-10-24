@@ -316,6 +316,13 @@ Ausgangslage (23.10.2026): Compose läuft, API nur auf `127.0.0.1:8000`, erreich
 - [x] Android-APK: vorerst nicht nötig (Entscheidung 24.10.; PWA reicht, APK-Build bleibt verfügbar)
 - [x] Anleitung für Freunde: [`docs/ANLEITUNG_FREUNDE.md`](docs/ANLEITUNG_FREUNDE.md)
 
+### Phase 7 – Aufgaben
+
+Leitbild (Entscheidung 24.10.2026): Ideen von Collectr übernehmen (Katalog mit Bildern, Sealed gleichwertig neben Raw/Graded, Kaufpreis → Gewinn/Verlust, größte Gewinner/Verlierer).
+
+- [x] Versiegeltes hinzufügen neu: Start mit „Neueste Sets“ (Bild, Anzahl, Datum) statt leerem Bildschirm; Filter nach Art; Treffer als Raster mit großen Bildern und Wert; Produktblatt mit Preisen, Sprache als Auswahl, Anzahl, Kaufpreis und Kaufdatum (optional). API: `GET /cardmarket/sealed/sets`, `GET /cardmarket/sealed?q=&kind=&expansion=`
+- [ ] Weitere Collectr-Ideen (Vorschlag an Nutzer): Gewinn/Verlust je Position und gesamt, größte Gewinner/Verlierer, Kaufpreis auch beim Scan, Set-Fortschritt mit „Master-Set“ (Reverse Holo)
+
 ### Änderungsprotokoll
 
 | Datum | Änderung |

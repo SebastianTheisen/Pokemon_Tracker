@@ -305,7 +305,9 @@ void ebayFetchTests() {
 }
 
 void sealedTests() {
-  testWidgets('Versiegeltes aus dem Cardmarket-Katalog hinzufügen', (tester) async {
+  testWidgets('Versiegeltes: Sets durchblättern, nach Art filtern, mit Kaufpreis hinzufügen', (
+    tester,
+  ) async {
     final api = FakeApi(loggedIn: true);
     await pumpApp(tester, api);
     await tester.tap(find.byKey(const Key('tab-Sammlung')));
@@ -313,21 +315,56 @@ void sealedTests() {
     await tester.tap(find.byKey(const Key('add-sealed')));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byKey(const Key('sealed-search')), 'prismatic etb');
-    await tester.pump(const Duration(milliseconds: 400));
+    // Start: neueste Sets statt leerem Bildschirm
+    expect(api.calls, contains('sealedSets'));
+    expect(find.text('Neueste Sets'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('sealed-set-6100')));
     await tester.pumpAndSettle();
-    expect(api.calls, contains('searchSealed:prismatic etb'));
-    expect(find.textContaining('Wert 99,00 €'), findsOneWidget);
+    expect(
+      api.calls,
+      contains(
+        'searchSealed::'
+        ':6100',
+      ),
+    );
+    expect(find.text('Prismatische Entwicklungen'), findsWidgets); // Titel
+
+    await tester.ensureVisible(find.byKey(const Key('sealed-kind-elite_trainer_box')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sealed-kind-elite_trainer_box')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('searchSealed::elite_trainer_box:6100'));
+    expect(find.textContaining('99,00'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('sealed-700001')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('sealed-more')));
+    await tester.enterText(find.byKey(const Key('sealed-price')), '54,90');
+    await tester.ensureVisible(find.byKey(const Key('sealed-add')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('sealed-add')));
     await tester.pumpAndSettle();
 
     expect(api.calls, containsAllInOrder(['productFromCardmarket:700001:de', 'addItem']));
-    expect(api.lastItemBody, {'product_id': 'p1', 'quantity': 2});
+    expect(api.lastItemBody, {'product_id': 'p1', 'quantity': 2, 'purchase_price': '54.90'});
     expect(find.textContaining('Hinzugefügt: 2× Prismatic'), findsOneWidget);
+  });
+
+  testWidgets('Versiegeltes: Suche (deutsch) zeigt Treffer als Raster', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('tab-Sammlung')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('add-sealed')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('sealed-search')), 'prismatische ttb');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+
+    expect(api.calls, contains('searchSealed:prismatische ttb::'));
+    expect(find.byKey(const Key('sealed-700001')), findsOneWidget);
+    expect(find.text('Top-Trainer-Box'), findsWidgets);
   });
 }
 

@@ -18,7 +18,7 @@ import re
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -33,6 +33,7 @@ from app.services.pricing import nm_basis
 
 CENT = Decimal("0.01")
 SEARCH_LIMIT = 40
+KIND_OVERFETCH = 5
 MIN_PARTIAL = 4  # kürzere Anfänge passen auf zu viele Set-Namen
 MAX_PARTIAL_SETS = 5
 # Reihenfolge zählt: „Elite Trainer Box“ ist auch eine „Box“, „Booster Box“ ein Display.
@@ -160,6 +161,20 @@ class SealedOffer:
     value: Decimal | None
     url: str
     image_url: str | None = None
+    expansion_id: int | None = None
+    set_name: str | None = None  # deutscher (sonst englischer) Name des Sets
+
+
+@dataclass(frozen=True)
+class SealedSet:
+    """Ein Set mit versiegelten Produkten (zum Durchblättern, neueste zuerst)."""
+
+    expansion_id: int
+    name: str
+    release_date: date | None
+    logo_url: str | None
+    products: int
+    image_url: str | None  # Bild eines Produkts (Display bevorzugt)
 
 
 @dataclass(frozen=True)
@@ -173,59 +188,171 @@ class SealedPrice:
 
 
 async def search_sealed(
-    session: AsyncSession, query: str, *, limit: int = SEARCH_LIMIT
+    session: AsyncSession,
+    query: str = "",
+    *,
+    limit: int = SEARCH_LIMIT,
+    kind: ProductKind | None = None,
+    expansion_id: int | None = None,
 ) -> list[SealedOffer]:
     """Versiegelte Produkte, deren Name alle Suchwörter enthält (kurze Namen zuerst).
 
     Deutsche Begriffe werden übersetzt; angefangene deutsche Set-Namen ergänzt
     (:func:`partial_set_queries`). Findet keine Übersetzung etwas, zählt die Eingabe.
+    ``expansion_id`` (Set) und ``kind`` (Produktart) grenzen ein; mit Set darf die Suche leer
+    sein – dann kommen alle Produkte des Sets.
     """
+    names = await _expansion_names(session)
+
+    async def words(text: str) -> list[SealedOffer]:
+        return await _search_words(
+            session, text.split(), limit, kind=kind, expansion_id=expansion_id, names=names
+        )
+
+    if not query.strip():
+        return await words("") if expansion_id is not None else []
     set_names = await _set_names_de_en(session)
     translated = _translate(query, set_names)
-    offers = await _search_words(session, translated.split(), limit)
+    offers = await words(translated)
     if offers:
         return offers
     seen: set[int] = set()
     for alternative in partial_set_queries(query, set_names):
-        for offer in await _search_words(session, alternative.split(), limit):
+        for offer in await words(alternative):
             if offer.cardmarket_product_id not in seen and len(offers) < limit:
                 seen.add(offer.cardmarket_product_id)
                 offers.append(offer)
     if offers or translated == " ".join(query.casefold().split()):
         return offers
-    return await _search_words(session, query.casefold().split(), limit)
+    return await words(query.casefold())
 
 
-async def _search_words(session: AsyncSession, words: list[str], limit: int) -> list[SealedOffer]:
-    if not words:
+ExpansionNames = dict[int, tuple[str, date | None, str | None]]
+
+
+async def _expansion_names(session: AsyncSession) -> ExpansionNames:
+    """Cardmarket-Ausgabe → (Set-Name, Erscheinungsdatum, Logo); Deutsch vor Englisch."""
+    rows = await session.execute(
+        select(
+            CardSet.cardmarket_expansion_id,
+            CardSet.language,
+            CardSet.name,
+            CardSet.release_date,
+            CardSet.logo_url,
+        ).where(CardSet.cardmarket_expansion_id.is_not(None), CardSet.language.in_(("de", "en")))
+    )
+    names: ExpansionNames = {}
+    for expansion_id, language, name, released, logo in rows:
+        if expansion_id is None:
+            continue
+        known = names.get(expansion_id)
+        # Name: Deutsch gewinnt; Datum und Logo: was die andere Fassung hat, ergänzt.
+        names[expansion_id] = (
+            name if known is None or language == "de" else known[0],
+            (known[1] if known else None) or released,
+            (known[2] if known else None) or logo,
+        )
+    return names
+
+
+_IMAGE_PREFERENCE = (
+    ProductKind.DISPLAY,
+    ProductKind.ELITE_TRAINER_BOX,
+    ProductKind.BOOSTER_BUNDLE,
+    ProductKind.BOOSTER,
+)
+
+
+async def sealed_sets(session: AsyncSession, *, limit: int = 40) -> list[SealedSet]:
+    """Sets mit versiegelten Produkten, neueste zuerst (nur Sets, die wir kennen)."""
+    names = await _expansion_names(session)
+    if not names:
+        return []
+    rows = await session.execute(
+        select(CmProduct.id_expansion, CmProduct.name, CmProduct.category_name, CmProduct.image_url)
+        .where(
+            CmProduct.id_category.is_not(None),
+            CmProduct.id_category != SINGLE_CATEGORY,
+            CmProduct.id_expansion.in_(list(names)),
+        )
+        .order_by(CmProduct.id_product)
+    )
+    counts: dict[int, int] = {}
+    images: dict[int, tuple[int, str]] = {}  # Ausgabe → (Rang der Produktart, Bild)
+    for expansion_id, name, category, image in rows:
+        product_kind = kind_for(category, name)
+        if product_kind == ProductKind.OTHER:
+            continue  # Code-Karten, Zubehör
+        counts[expansion_id] = counts.get(expansion_id, 0) + 1
+        rank = (
+            _IMAGE_PREFERENCE.index(product_kind)
+            if product_kind in _IMAGE_PREFERENCE
+            else len(_IMAGE_PREFERENCE)
+        )
+        if image and (expansion_id not in images or rank < images[expansion_id][0]):
+            images[expansion_id] = (rank, image)
+    sets = [
+        SealedSet(
+            expansion_id=expansion_id,
+            name=names[expansion_id][0],
+            release_date=names[expansion_id][1],
+            logo_url=names[expansion_id][2],
+            products=count,
+            image_url=images[expansion_id][1] if expansion_id in images else None,
+        )
+        for expansion_id, count in counts.items()
+    ]
+    sets.sort(key=lambda s: (s.release_date or date.min, s.expansion_id), reverse=True)
+    return sets[:limit]
+
+
+async def _search_words(
+    session: AsyncSession,
+    words: list[str],
+    limit: int,
+    *,
+    kind: ProductKind | None = None,
+    expansion_id: int | None = None,
+    names: ExpansionNames | None = None,
+) -> list[SealedOffer]:
+    if not words and expansion_id is None:
         return []
     statement = (
         select(CmProduct, CmPrice)
         .outerjoin(CmPrice, CmPrice.id_product == CmProduct.id_product)
         .where(CmProduct.id_category.is_not(None), CmProduct.id_category != SINGLE_CATEGORY)
         .order_by(func.length(CmProduct.name), CmProduct.name)
-        .limit(limit)
+        # Die Art kommt aus dem Namen (nicht aus SQL) – mit Filter mehr laden, danach filtern.
+        .limit(limit if kind is None else limit * KIND_OVERFETCH)
     )
+    if expansion_id is not None:
+        statement = statement.where(CmProduct.id_expansion == expansion_id)
     for word in words:
         statement = statement.where(func.lower(CmProduct.name).contains(word, autoescape=True))
     offers = []
     for product, price in (await session.execute(statement)).all():
+        product_kind = kind_for(product.category_name, product.name)
+        if kind is not None and product_kind != kind:
+            continue
         metrics = _metrics(price.metrics) if price is not None else {}
         basis = nm_basis(metrics)
+        known = (names or {}).get(product.id_expansion)
         offers.append(
             SealedOffer(
                 cardmarket_product_id=product.id_product,
                 name=product.name,
                 category=product.category_name,
-                kind=kind_for(product.category_name, product.name),
+                kind=product_kind,
                 trend=metrics.get("trend"),
                 low=metrics.get("low"),
                 value=basis[1] if basis else None,
                 url=product_url(product.id_product),
                 image_url=product.image_url,
+                expansion_id=product.id_expansion,
+                set_name=known[0] if known else None,
             )
         )
-    return offers
+    return offers[:limit]
 
 
 async def sealed_prices(

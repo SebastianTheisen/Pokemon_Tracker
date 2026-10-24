@@ -9,6 +9,7 @@ from fastapi import APIRouter, Query, status
 
 from app.api.deps import AdminUser, CurrentUser, SessionDep
 from app.core.config import CatalogLanguage
+from app.models import ProductKind
 from app.schemas.catalog import CardOut
 from app.schemas.collection import (
     CardCreate,
@@ -18,10 +19,13 @@ from app.schemas.collection import (
     ProductOut,
     ProductUpdate,
     SealedOfferOut,
+    SealedSetOut,
 )
 from app.services import contributions, sealed
+from app.services.errors import InvalidInputError
 
 router = APIRouter(tags=["catalog"])
+MIN_SEALED_QUERY = 2
 
 
 def _url(value: object) -> str | None:
@@ -93,11 +97,24 @@ async def create_product(body: ProductCreate, session: SessionDep, user: Current
 async def search_cardmarket_sealed(
     session: SessionDep,
     _user: CurrentUser,
-    q: Annotated[str, Query(min_length=2, max_length=100)],
+    q: Annotated[str, Query(max_length=100)] = "",
+    kind: ProductKind | None = None,
+    expansion: Annotated[int | None, Query(gt=0)] = None,
 ) -> list[SealedOfferOut]:
-    """Versiegelte Produkte im Cardmarket-Katalog (englische Namen) mit aktuellem Preis."""
-    offers = await sealed.search_sealed(session, q)
+    """Versiegelte Produkte im Cardmarket-Katalog mit aktuellem Preis.
+
+    Suche (deutsch oder englisch, ab 2 Zeichen) und/oder ein Set (``expansion``), optional nur
+    eine Produktart (``kind``)."""
+    if expansion is None and len(q.strip()) < MIN_SEALED_QUERY:
+        raise InvalidInputError("Mindestens 2 Zeichen oder ein Set wählen.")
+    offers = await sealed.search_sealed(session, q, kind=kind, expansion_id=expansion)
     return [SealedOfferOut(**offer.__dict__) for offer in offers]
+
+
+@router.get("/cardmarket/sealed/sets")
+async def sealed_sets(session: SessionDep, _user: CurrentUser) -> list[SealedSetOut]:
+    """Sets mit versiegelten Produkten, neueste zuerst."""
+    return [SealedSetOut(**item.__dict__) for item in await sealed.sealed_sets(session)]
 
 
 @router.post("/products/from-cardmarket")
