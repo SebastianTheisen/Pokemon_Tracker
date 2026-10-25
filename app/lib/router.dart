@@ -15,6 +15,7 @@ import 'features/collection/collection_screen.dart';
 import 'features/friends/friends_screens.dart';
 import 'features/more/help_screen.dart';
 import 'features/reports/reports.dart';
+import 'features/sets/set_browser.dart';
 import 'features/sets/sets_screens.dart';
 import 'features/trade/trade_screen.dart';
 import 'features/collection/sealed_screen.dart';
@@ -130,6 +131,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/settings/bookmarklet', builder: (_, _) => const BookmarkletSetupScreen()),
       GoRoute(path: '/sets', builder: (_, _) => const SetOverviewScreen()),
+      // vor '/sets/:id', sonst hielte go_router „browse“ für eine Set-ID
+      GoRoute(path: '/sets/browse', builder: (_, _) => const SetBrowserScreen()),
       GoRoute(
         path: '/sets/:id',
         builder: (_, state) => SetDetailScreen(setId: state.pathParameters['id']!),

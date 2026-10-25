@@ -525,6 +525,10 @@ class Api {
     ),
   );
 
+  /// Alle Sets des Katalogs (neueste zuerst), optional nur einer Sprache.
+  Future<List<CardSet>> catalogSets({String? language}) async =>
+      parseList(await _getList('/sets', query: {'language': language}), CardSet.fromJson);
+
   Future<CollectionItem> item(String id) async =>
       CollectionItem.fromJson(await _get('/collection/items/$id'));
 

@@ -456,6 +456,25 @@ class FakeApi extends Api {
       if (cardIds.contains(json['card_id'])) OwnedEntry.fromJson(json),
   ];
 
+  @override
+  Future<List<CardSet>> catalogSets({String? language}) async {
+    calls.add('catalogSets:$language');
+    Json set(String id, String name, String series, int year) => {
+      'id': id,
+      'external_id': id,
+      'language': language ?? 'de',
+      'name': name,
+      'series_name': series,
+      'release_date': '$year-01-01',
+      'card_count_official': 165,
+      'logo_url': 'https://assets.tcgdex.net/de/sv/$id/logo',
+    };
+    return [
+      CardSet.fromJson(set('sv3pt5', 'Karmesin & Purpur 151', 'Karmesin & Purpur', 2023)),
+      CardSet.fromJson(set('swsh7', 'Drachenwandel', 'Schwert & Schild', 2021)),
+    ];
+  }
+
   /// Positionen der Sammlung (Standard: zwei).
   List<Json>? itemsOverride;
 

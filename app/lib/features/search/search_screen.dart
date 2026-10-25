@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
+import '../../core/prefs.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
@@ -78,7 +79,10 @@ class _CardSearchState extends ConsumerState<CardSearch> {
             controller: _controller,
             autofocus: widget.autofocus,
             onChanged: _onChanged,
-            onSubmitted: (text) => setState(() => _query = (text: text, language: _query.language)),
+            onSubmitted: (text) {
+              ref.read(uiPrefsProvider.notifier).rememberSearch(text);
+              setState(() => _query = (text: text, language: _query.language));
+            },
             textInputAction: TextInputAction.search,
             decoration: const InputDecoration(
               prefixIcon: Icon(Icons.search),
@@ -159,9 +163,13 @@ class _CardSearchState extends ConsumerState<CardSearch> {
                                     null => null,
                                   },
                                   card: card,
-                                  onTap: () => widget.onSelect != null
-                                      ? widget.onSelect!(card)
-                                      : context.push('/card/${card.id}'),
+                                  onTap: () {
+                                    // Wer einen Treffer öffnet, hat gefunden, was er suchte.
+                                    ref.read(uiPrefsProvider.notifier).rememberSearch(_query.text);
+                                    widget.onSelect != null
+                                        ? widget.onSelect!(card)
+                                        : context.push('/card/${card.id}');
+                                  },
                                   trailing: widget.onSelect == null
                                       ? Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -213,7 +221,7 @@ class _HitPrice extends StatelessWidget {
 }
 
 /// Leere Suche: Beispiele zum Antippen statt einer leeren Fläche – und der Weg zum Scanner.
-class _StartHint extends StatelessWidget {
+class _StartHint extends ConsumerWidget {
   const _StartHint({required this.onExample, required this.showScan});
 
   final ValueChanged<String> onExample;
@@ -222,51 +230,89 @@ class _StartHint extends StatelessWidget {
   static const _examples = ['Glurak', 'Pikachu', 'Mew', 'Nachtara 215', 'Evoli'];
 
   @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-    children: [
-      Icon(Icons.search, size: 48, color: AppColors.textMuted),
-      const SizedBox(height: 12),
-      Text(
-        'Tippe den Namen der Karte – Deutsch oder Englisch. Mit Nummer findest du '
-        'genau die richtige.',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: AppColors.textMuted),
-      ),
-      const SizedBox(height: 16),
-      Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final example in _examples)
-            ActionChip(
-              key: Key('search-example-$example'),
-              avatar: const Icon(Icons.north_west, size: 16),
-              label: Text(example),
-              onPressed: () => onExample(example),
-            ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final recent = ref.watch(uiPrefsProvider.select((prefs) => prefs.recentSearches));
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+      children: [
+        if (recent.isNotEmpty) ...[
+          Row(
+            children: [
+              const Expanded(
+                child: Text('Zuletzt gesucht', style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+              TextButton(
+                key: const Key('recent-clear'),
+                onPressed: () => ref.read(uiPrefsProvider.notifier).clearSearches(),
+                child: const Text('Leeren'),
+              ),
+            ],
+          ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final query in recent)
+                ActionChip(
+                  key: Key('recent-$query'),
+                  avatar: const Icon(Icons.history, size: 16),
+                  label: Text(query),
+                  onPressed: () => onExample(query),
+                ),
+            ],
+          ),
+          const SizedBox(height: 24),
+        ] else ...[
+          const SizedBox(height: 16),
+          Icon(Icons.search, size: 48, color: AppColors.textMuted),
+          const SizedBox(height: 12),
         ],
-      ),
-      if (showScan) ...[
-        const SizedBox(height: 32),
         Text(
-          'Karte liegt vor dir? Scannen ist schneller:',
+          'Tippe den Namen der Karte – Deutsch oder Englisch. Mit Nummer findest du '
+          'genau die richtige.',
           textAlign: TextAlign.center,
           style: TextStyle(color: AppColors.textMuted),
         ),
-        const SizedBox(height: 8),
-        Center(
-          child: FilledButton.icon(
-            key: const Key('search-scan'),
-            onPressed: () => context.push('/scan'),
-            icon: const Icon(Icons.document_scanner),
-            label: const Text('Karte scannen'),
-          ),
+        const SizedBox(height: 16),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final example in _examples)
+              ActionChip(
+                key: Key('search-example-$example'),
+                avatar: const Icon(Icons.north_west, size: 16),
+                label: Text(example),
+                onPressed: () => onExample(example),
+              ),
+          ],
         ),
+        if (showScan) ...[
+          const SizedBox(height: 24),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                key: const Key('search-scan'),
+                onPressed: () => context.push('/scan'),
+                icon: const Icon(Icons.document_scanner),
+                label: const Text('Karte scannen'),
+              ),
+              OutlinedButton.icon(
+                key: const Key('search-browse-sets'),
+                onPressed: () => context.push('/sets/browse'),
+                icon: const Icon(Icons.layers_outlined),
+                label: const Text('Sets durchblättern'),
+              ),
+            ],
+          ),
+        ],
       ],
-    ],
-  );
+    );
+  }
 }
 
 class SearchScreen extends StatelessWidget {

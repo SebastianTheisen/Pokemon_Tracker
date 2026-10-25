@@ -1,4 +1,6 @@
 // Einstellungen dieses Geräts (nicht im Konto): Ansicht der Sammlung, Design, Anleitung gesehen.
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -48,6 +50,7 @@ class UiPrefs {
     this.onboarded = false,
     this.firstStepsHidden = false,
     this.installHintHidden = false,
+    this.recentSearches = const [],
   });
 
   /// Erst nach dem Laden entscheiden (sonst blitzt z. B. die Anleitung kurz auf).
@@ -66,6 +69,9 @@ class UiPrefs {
   /// Hinweis „Als App installieren“ weggeklickt.
   final bool installHintHidden;
 
+  /// Zuletzt gesuchte Begriffe (neueste zuerst, höchstens [maxRecentSearches]).
+  final List<String> recentSearches;
+
   UiPrefs copyWith({
     bool? loaded,
     bool? listView,
@@ -73,6 +79,7 @@ class UiPrefs {
     bool? onboarded,
     bool? firstStepsHidden,
     bool? installHintHidden,
+    List<String>? recentSearches,
   }) => UiPrefs(
     loaded: loaded ?? this.loaded,
     listView: listView ?? this.listView,
@@ -80,6 +87,7 @@ class UiPrefs {
     onboarded: onboarded ?? this.onboarded,
     firstStepsHidden: firstStepsHidden ?? this.firstStepsHidden,
     installHintHidden: installHintHidden ?? this.installHintHidden,
+    recentSearches: recentSearches ?? this.recentSearches,
   );
 }
 
@@ -106,6 +114,7 @@ class UiPrefsController extends Notifier<UiPrefs> {
       onboarded: values['onboarded'] == 'true',
       firstStepsHidden: values['first_steps_hidden'] == 'true',
       installHintHidden: values['install_hint_hidden'] == 'true',
+      recentSearches: _decodeList(values['recent_searches']),
     );
   }
 
@@ -127,6 +136,23 @@ class UiPrefsController extends Notifier<UiPrefs> {
     _save('theme', mode.name);
   }
 
+  /// Suchbegriff merken (oben einsortiert, ohne Doppelte, Groß-/Kleinschreibung egal).
+  void rememberSearch(String query) {
+    final text = query.trim();
+    if (text.length < 2) return;
+    final list = [
+      text,
+      ...state.recentSearches.where((entry) => entry.toLowerCase() != text.toLowerCase()),
+    ].take(maxRecentSearches).toList();
+    state = state.copyWith(recentSearches: list);
+    _save('recent_searches', jsonEncode(list));
+  }
+
+  void clearSearches() {
+    state = state.copyWith(recentSearches: const []);
+    _save('recent_searches', '[]');
+  }
+
   void hideInstallHint() {
     state = state.copyWith(installHintHidden: true);
     _save('install_hint_hidden', 'true');
@@ -140,6 +166,17 @@ class UiPrefsController extends Notifier<UiPrefs> {
   void finishOnboarding() {
     state = state.copyWith(onboarded: true);
     _save('onboarded', 'true');
+  }
+}
+
+const maxRecentSearches = 8;
+
+List<String> _decodeList(String? raw) {
+  if (raw == null) return const [];
+  try {
+    return [for (final entry in jsonDecode(raw) as List<Object?>) ?entry as String?];
+  } on Object {
+    return const []; // beschädigter Eintrag: einfach neu beginnen
   }
 }
 

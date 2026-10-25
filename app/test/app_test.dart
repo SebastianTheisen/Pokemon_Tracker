@@ -1559,4 +1559,34 @@ void usabilityTests() {
     expect(find.byKey(const Key('install-hint')), findsNothing);
     expect(prefs.values['install_hint_hidden'], 'true');
   });
+
+  testWidgets('Suche merkt sich Begriffe; Sets durchblättern nach Serie mit Filter', (
+    tester,
+  ) async {
+    final prefs = MemoryPrefsStore({'onboarded': 'true', 'first_steps_hidden': 'true'});
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api, prefs: prefs);
+    await tester.tap(find.byKey(const Key('tab-Suche')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('search-field')), 'nachtara');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(prefs.values['recent_searches'], '["nachtara"]');
+
+    await tester.enterText(find.byKey(const Key('search-field')), '');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('recent-nachtara')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('search-browse-sets')));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('catalogSets:de'));
+    expect(find.text('Schwert & Schild'), findsOneWidget); // Serie als Überschrift
+    await tester.enterText(find.byKey(const Key('set-filter')), '151');
+    await tester.pumpAndSettle();
+    expect(find.text('Drachenwandel'), findsNothing);
+    await tester.tap(find.text('Karmesin & Purpur 151'));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('setProgress:sv3pt5'));
+  });
 }

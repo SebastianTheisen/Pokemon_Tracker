@@ -18,3 +18,10 @@ String? proxiedImageUrl(String url, {required double logicalWidth, required doub
   final width = (logicalWidth * ratio).ceil().clamp(16, 2000);
   return '$base/api/v1/images?url=${Uri.encodeQueryComponent(url)}&w=$width';
 }
+
+/// Set-Logo als Bilddatei: TCGdex liefert Adressen ohne Endung (`…/logo` → `…/logo.webp`).
+String setLogoUrl(String url) {
+  final uri = Uri.tryParse(url);
+  final last = uri?.pathSegments.lastOrNull ?? '';
+  return uri?.host == 'assets.tcgdex.net' && !last.contains('.') ? '$url.webp' : url;
+}

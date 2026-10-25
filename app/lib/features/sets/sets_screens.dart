@@ -31,7 +31,17 @@ class SetOverviewScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sets = ref.watch(collectionSetsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Sets')),
+      appBar: AppBar(
+        title: const Text('Sets'),
+        actions: [
+          TextButton.icon(
+            key: const Key('sets-browse'),
+            onPressed: () => context.push('/sets/browse'),
+            icon: const Icon(Icons.travel_explore),
+            label: const Text('Alle Sets'),
+          ),
+        ],
+      ),
       body: AsyncBody(
         value: sets,
         onRetry: () => ref.invalidate(collectionSetsProvider),
