@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kartenkiste/app.dart';
+import 'package:kartenkiste/core/camera/live_camera.dart';
 import 'package:kartenkiste/core/device/device.dart';
 import 'package:kartenkiste/core/prefs.dart';
 import 'package:kartenkiste/core/push/push_bridge.dart';
@@ -1588,5 +1589,76 @@ void usabilityTests() {
     await tester.tap(find.text('Karmesin & Purpur 151'));
     await tester.pumpAndSettle();
     expect(api.calls, contains('setProgress:sv3pt5'));
+  });
+
+  testWidgets('Live-Scanner: löst nur bei ruhigem, neuem Bild aus; Fertig fügt alle hinzu', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true);
+    final camera = FakeLiveCamera()
+      ..measurements.addAll([
+        (motion: 30, change: 40), // Hand bewegt sich
+        (motion: 2, change: 40), // ruhig (1)
+        (motion: 2, change: 40), // ruhig (2) und neu → Foto
+      ]);
+    await pumpApp(tester, api, camera: camera);
+    final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
+        .read(routerProvider);
+    unawaited(router.push('/scan/live'));
+    await tester.pump();
+    await tester.pump();
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    expect(camera.frames, 1); // genau ein Foto, nicht bei jeder Messung
+    expect(api.calls.where((c) => c.startsWith('scan:')).length, 1);
+    expect(find.text('Fertig (1)'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('live-done')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500)); // Blatt ist hochgefahren
+    expect(find.byKey(const Key('live-review')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('live-add-all')));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(api.calls, contains('confirm:scan1:c1'));
+    expect(api.lastItemBody?['card_id'], 'c1');
+    await tester.pump(const Duration(seconds: 3));
+    expect(camera.stopped, isTrue); // Kamera aus nach dem Schließen
+  });
+
+  testWidgets('Live-Scanner ohne Kamerazugriff: Erklärung und Weg zum Foto-Scan', (tester) async {
+    await pumpApp(
+      tester,
+      FakeApi(loggedIn: true),
+      camera: FakeLiveCamera(result: CameraStart.denied),
+    );
+    await tester.tap(find.byKey(const Key('scan-button')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('scan-live')));
+    await tester.tap(find.byKey(const Key('scan-live')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('live-unavailable')), findsOneWidget);
+    expect(find.textContaining('Kein Kamerazugriff'), findsOneWidget);
+  });
+
+  testWidgets('Live-Scanner: unsicherer Treffer als Tipp – „Ja“ übernimmt ihn', (tester) async {
+    final api = FakeApi(loggedIn: true)..scanResult = scanJson(confident: false);
+    final camera = FakeLiveCamera()
+      ..measurements.addAll([(motion: 2, change: 40), (motion: 2, change: 40)]);
+    await pumpApp(tester, api, camera: camera);
+    final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
+        .read(routerProvider);
+    unawaited(router.push('/scan/live'));
+    await tester.pump();
+    await tester.pump();
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    expect(find.text('Ist es Nachtara VMAX?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('live-guess-yes')));
+    await tester.pump();
+    expect(find.text('Fertig (1)'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
   });
 }

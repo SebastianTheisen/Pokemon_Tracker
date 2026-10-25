@@ -21,6 +21,7 @@ import 'features/trade/trade_screen.dart';
 import 'features/collection/sealed_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/more/more_screen.dart';
+import 'features/scan/live_scan.dart';
 import 'features/scan/scan_screens.dart';
 import 'features/search/search_screen.dart';
 import 'features/shell/home_shell.dart';
@@ -110,6 +111,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) => CardDetailScreen(cardId: state.pathParameters['id']!),
       ),
       GoRoute(path: '/scan', builder: (_, _) => const ScanScreen()),
+      GoRoute(path: '/scan/live', builder: (_, _) => const LiveScanScreen()),
       GoRoute(path: '/scan/batch', builder: (_, _) => const BatchScanScreen()),
       GoRoute(path: '/scan/binder', builder: (_, _) => const BinderScanScreen()),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),

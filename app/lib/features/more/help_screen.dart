@@ -24,6 +24,7 @@ const List<_Topic> _topics = [
       'Die App erkennt Karte, Sprache und Set und zeigt den Preis. Stimmt etwas nicht: „Andere Karte?“.',
       'Über dem „Hinzufügen“-Knopf wählst du den Ordner. Danach kannst du den Kaufpreis eintragen.',
       'Slabs (PSA, BGS, CGC …) einfach scannen – Firma und Note werden vom Etikett gelesen.',
+      'Viele Karten? Scannen → „Live-Scanner“: Karte in den Rahmen legen, kurz ruhig halten – sie wird von selbst erkannt. Am Ende „Fertig“ und alle auf einmal hinzufügen.',
     ],
   ),
   (

@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:kartenkiste/app.dart';
 import 'package:kartenkiste/core/api.dart';
+import 'package:kartenkiste/core/camera/live_camera.dart';
 import 'package:kartenkiste/core/device/device.dart';
 import 'package:kartenkiste/core/prefs.dart';
 import 'package:kartenkiste/core/providers.dart';
@@ -1035,6 +1036,7 @@ Future<void> pumpApp(
   PushBridge? push,
   PrefsStore? prefs,
   DeviceBridge? device,
+  LiveCamera? camera,
 }) async {
   await initializeDateFormatting('de_DE');
   tester.view.physicalSize = const Size(1170, 2532);
@@ -1048,6 +1050,7 @@ Future<void> pumpApp(
         imageSourceProvider.overrideWithValue(images ?? FakeImageSource()),
         pushBridgeProvider.overrideWithValue(push ?? FakePushBridge()),
         deviceProvider.overrideWithValue(device ?? FakeDevice()),
+        liveCameraProvider.overrideWithValue(camera ?? FakeLiveCamera()),
         // Standard: Anleitung gesehen, Erste Schritte aus – verdecken sonst die übrigen Tests.
         prefsStoreProvider.overrideWithValue(
           prefs ?? MemoryPrefsStore({'onboarded': 'true', 'first_steps_hidden': 'true'}),
@@ -1088,4 +1091,33 @@ class FakeDevice implements DeviceBridge {
     state = InstallState.installed;
     return true;
   }
+}
+
+/// Steuerbare Live-Kamera: Messwerte der Reihe nach, Fotos als Platzhalter-Bytes.
+class FakeLiveCamera implements LiveCamera {
+  FakeLiveCamera({this.result = CameraStart.ok});
+
+  final CameraStart result;
+  final measurements = <({double motion, double change})>[];
+  int frames = 0;
+  bool stopped = false;
+
+  @override
+  Future<CameraStart> start() async => result;
+
+  @override
+  void stop() => stopped = true;
+
+  @override
+  ({double motion, double change}) measure() =>
+      measurements.isEmpty ? (motion: 50, change: 0) : measurements.removeAt(0);
+
+  @override
+  Future<Uint8List?> frame() async {
+    frames++;
+    return Uint8List.fromList([1, 2, 3]);
+  }
+
+  @override
+  Widget preview() => const ColoredBox(color: Color(0xFF000000));
 }

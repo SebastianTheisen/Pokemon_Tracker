@@ -873,7 +873,15 @@ class _StartView extends StatelessWidget {
         icon: const Icon(Icons.photo_library),
         label: const Text('Aus der Galerie wählen'),
       ),
-      const SizedBox(height: 24),
+      const SizedBox(height: 16),
+      // Viele Karten nacheinander: Kamera läuft, Erkennung von selbst (wie Collectr).
+      OutlinedButton.icon(
+        key: const Key('scan-live'),
+        onPressed: () => context.push('/scan/live'),
+        icon: const Icon(Icons.videocam),
+        label: const Text('Live-Scanner: viele Karten nacheinander'),
+      ),
+      const SizedBox(height: 16),
       Wrap(
         alignment: WrapAlignment.center,
         spacing: 8,

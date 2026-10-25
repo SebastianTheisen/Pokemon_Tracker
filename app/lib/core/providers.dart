@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
 import 'api.dart';
+import 'camera/live_camera.dart';
 import 'config.dart';
 import 'device/device.dart';
 import 'push/push_bridge.dart';
@@ -12,6 +13,9 @@ final tokenStoreProvider = Provider<TokenStore>((ref) => SecureTokenStore());
 
 /// Benachrichtigungen dieses Geräts (Web-Push); in Tests ersetzbar.
 final pushBridgeProvider = Provider<PushBridge>((ref) => createPushBridge());
+
+/// Live-Kamera des Scanners (Web); in Tests ersetzbar.
+final liveCameraProvider = Provider<LiveCamera>((ref) => createLiveCamera());
 
 /// Neigung, Teilen, Installieren (Web); in Tests ersetzbar.
 final deviceProvider = Provider<DeviceBridge>((ref) => createDeviceBridge());
