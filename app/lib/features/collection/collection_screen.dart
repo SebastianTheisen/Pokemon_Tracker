@@ -21,30 +21,35 @@ import 'item_filter.dart';
 import 'item_sheet.dart';
 
 final itemsProvider = FutureProvider.autoDispose.family<ItemPage, ItemFilter>(
-  (ref, filter) => ref
-      .watch(apiProvider)
-      .items(
-        folderId: filter.folderId,
-        kind: filter.kind,
-        query: filter.query,
-        sort: filter.sort,
-        language: filter.language,
-        condition: filter.condition,
-        minValue: filter.minValue,
-        maxValue: filter.maxValue,
-        withPurchase: filter.withPurchase,
-      ),
+  (ref, filter) => cached(
+    ref,
+    ref
+        .watch(apiProvider)
+        .items(
+          folderId: filter.folderId,
+          kind: filter.kind,
+          query: filter.query,
+          sort: filter.sort,
+          language: filter.language,
+          condition: filter.condition,
+          minValue: filter.minValue,
+          maxValue: filter.maxValue,
+          withPurchase: filter.withPurchase,
+        ),
+  ),
 );
 
 /// Wertkurve der ganzen Sammlung (`null`) oder eines Ordners.
 final folderHistoryProvider = FutureProvider.autoDispose
     .family<CollectionHistory, ({String? folderId, int days})>(
-      (ref, key) =>
-          ref.watch(apiProvider).collectionHistory(folderId: key.folderId, days: key.days),
+      (ref, key) => cached(
+        ref,
+        ref.watch(apiProvider).collectionHistory(folderId: key.folderId, days: key.days),
+      ),
     );
 
 final collectionSetsProvider = FutureProvider.autoDispose<List<SetOverview>>(
-  (ref) => ref.watch(apiProvider).collectionSets(),
+  (ref) => cached(ref, ref.watch(apiProvider).collectionSets()),
 );
 
 const sortLabels = {

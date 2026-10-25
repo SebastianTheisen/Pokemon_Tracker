@@ -16,7 +16,7 @@ import '../collection/collection_screen.dart';
 import '../wishlist/wishlist_screen.dart';
 
 final setProgressProvider = FutureProvider.autoDispose.family<SetProgress, String>(
-  (ref, setId) => ref.watch(apiProvider).setProgress(setId),
+  (ref, setId) => cached(ref, ref.watch(apiProvider).setProgress(setId)),
 );
 
 /// „12 / 191“ und Anteil (0…1); ohne Gesamtzahl nur die besessene Anzahl.

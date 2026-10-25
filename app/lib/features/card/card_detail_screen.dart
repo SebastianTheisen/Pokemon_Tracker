@@ -27,21 +27,23 @@ import '../dashboard/dashboard_screen.dart';
 import '../wishlist/wishlist_screen.dart';
 
 final cardProvider = FutureProvider.autoDispose.family<CardInfo, String>(
-  (ref, id) => ref.watch(apiProvider).card(id),
+  (ref, id) => cached(ref, ref.watch(apiProvider).card(id)),
 );
 
 final pricesProvider = FutureProvider.autoDispose.family<CardPrices, String>(
-  (ref, id) => ref.watch(apiProvider).prices(id),
+  (ref, id) => cached(ref, ref.watch(apiProvider).prices(id)),
 );
 
 final pricechartingProvider = FutureProvider.autoDispose.family<PriceChartingDetails, String>(
-  (ref, id) => ref.watch(apiProvider).pricecharting(id),
+  (ref, id) => cached(ref, ref.watch(apiProvider).pricecharting(id)),
 );
 
 final priceHistoryProvider = FutureProvider.autoDispose
     .family<PriceHistory, ({String cardId, String variant, int days})>(
-      (ref, key) =>
-          ref.watch(apiProvider).priceHistory(key.cardId, variant: key.variant, days: key.days),
+      (ref, key) => cached(
+        ref,
+        ref.watch(apiProvider).priceHistory(key.cardId, variant: key.variant, days: key.days),
+      ),
     );
 
 const metricLabels = {
@@ -293,185 +295,190 @@ class _CardBodyState extends ConsumerState<_CardBody> {
           ref.invalidate(pricesProvider(card.id));
           await ref.read(pricesProvider(card.id).future);
         },
-        child: ListView(
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.only(bottom: 24),
-          children: [
-            _SwipeHeader(
-              neighbors: neighbors,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Antippen: Vollbild mit Zoom und Holo-Effekt
-                  GestureDetector(
-                    key: const Key('card-image'),
-                    onTap: () => openCardViewer(context, card),
-                    child: Hero(
-                      tag: 'card-image-${card.id}',
-                      child: CardImage(url: card.image(high: true), width: 130),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          card.displayName,
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        if (card.originalName != null)
-                          Text(card.originalName!, style: const TextStyle(fontSize: 16)),
-                        const SizedBox(height: 4),
-                        // Antippen → Set-Seite (Fortschritt, fehlende Karten)
-                        InkWell(
-                          key: const Key('card-set-link'),
-                          onTap: () => context.push('/sets/${card.cardSet.id}'),
-                          child: Text(
-                            '${[card.cardSet.displayName, ?card.cardSet.originalName].join(' · ')} ›',
-                            style: const TextStyle(
-                              color: AppColors.primary,
-                              decoration: TextDecoration.underline,
-                              decorationColor: AppColors.primary,
-                            ),
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                'Nr. ${card.number}',
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(color: AppColors.textMuted),
-                              ),
-                            ),
-                            if (neighbors != null) ...[
-                              const Spacer(),
-                              _StepButton(
-                                key: const Key('card-previous'),
-                                icon: Icons.chevron_left,
-                                tooltip: 'Vorige Karte im Set',
-                                target: neighbors.previous,
-                              ),
-                              Text(
-                                '${neighbors.index + 1}/${neighbors.total}',
-                                key: const Key('card-position'),
-                                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-                              ),
-                              _StepButton(
-                                key: const Key('card-next'),
-                                icon: Icons.chevron_right,
-                                tooltip: 'Nächste Karte im Set',
-                                target: neighbors.next,
-                              ),
-                            ],
-                          ],
-                        ),
-                        if (card.variantText case final variants?)
-                          Text(
-                            variants,
-                            key: const Key('card-variants'),
-                            style: TextStyle(color: AppColors.textMuted),
-                          ),
-                        if (card.illustrator case final illustrator?)
-                          Text(
-                            'Illustration: $illustrator',
-                            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-                          ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: [
-                            Tag(languageLabels[card.language] ?? card.language),
-                            if (card.imageLanguage != null)
-                              Tag(
-                                'Bild ${languageLabels[card.imageLanguage] ?? card.imageLanguage}',
-                                color: AppColors.textMuted,
-                              ),
-                            if (card.rarity != null) Tag(card.rarity!, color: AppColors.accent),
-                            if (card.source == 'user')
-                              Tag('selbst angelegt', color: AppColors.warning),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: OwnedPanel(
-                cardId: card.id,
-                onFetchSlabPrice: (grading) => openEbaySold(context, ref, card, grading: grading),
-                onEdit: (entry) => _editOwned(context, ref, entry),
-              ),
-            ),
-            CardmarketEditionTile(
-              cardId: card.id,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-            ),
-            AsyncBody(
-              value: prices,
-              onRetry: () => ref.invalidate(pricesProvider(card.id)),
-              builder: _priceSection,
-            ),
-            const SizedBox(height: 16),
-            // Weiteres aufklappbar – die Seite bleibt kurz, nichts geht verloren.
-            FoldSection(
-              id: 'history',
-              title: 'Preisverlauf (Cardmarket-Trend)',
-              initiallyOpen: true,
-              child: _History(cardId: card.id, variant: _variant),
-            ),
-            if (prices.value case final data?) _GradeComparison(card: card, prices: data),
-            _UsMarket(cardId: card.id),
-            if (prices.value case final data? when data.offers.isNotEmpty)
-              FoldSection(
-                id: 'sources',
-                title: 'Quellen und Belege',
-                summary: '${data.offers.length}',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _SwipeHeader(
+                neighbors: neighbors,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (final offer in data.offers) _OfferTile(offer: offer),
-                    if (data.lastCheckedAt != null)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                        child: Text(
-                          'Zuletzt geprüft: ${dateTime(data.lastCheckedAt)}',
-                          style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-                        ),
+                    // Antippen: Vollbild mit Zoom und Holo-Effekt
+                    GestureDetector(
+                      key: const Key('card-image'),
+                      onTap: () => openCardViewer(context, card),
+                      child: Hero(
+                        tag: 'card-image-${card.id}',
+                        child: CardImage(url: card.image(high: true), width: 130),
                       ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            card.displayName,
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          if (card.originalName != null)
+                            Text(card.originalName!, style: const TextStyle(fontSize: 16)),
+                          const SizedBox(height: 4),
+                          // Antippen → Set-Seite (Fortschritt, fehlende Karten)
+                          InkWell(
+                            key: const Key('card-set-link'),
+                            onTap: () => context.push('/sets/${card.cardSet.id}'),
+                            child: Text(
+                              '${[card.cardSet.displayName, ?card.cardSet.originalName].join(' · ')} ›',
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                decoration: TextDecoration.underline,
+                                decorationColor: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  'Nr. ${card.number}',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: AppColors.textMuted),
+                                ),
+                              ),
+                              if (neighbors != null) ...[
+                                const Spacer(),
+                                _StepButton(
+                                  key: const Key('card-previous'),
+                                  icon: Icons.chevron_left,
+                                  tooltip: 'Vorige Karte im Set',
+                                  target: neighbors.previous,
+                                ),
+                                Text(
+                                  '${neighbors.index + 1}/${neighbors.total}',
+                                  key: const Key('card-position'),
+                                  style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                                ),
+                                _StepButton(
+                                  key: const Key('card-next'),
+                                  icon: Icons.chevron_right,
+                                  tooltip: 'Nächste Karte im Set',
+                                  target: neighbors.next,
+                                ),
+                              ],
+                            ],
+                          ),
+                          if (card.variantText case final variants?)
+                            Text(
+                              variants,
+                              key: const Key('card-variants'),
+                              style: TextStyle(color: AppColors.textMuted),
+                            ),
+                          if (card.illustrator case final illustrator?)
+                            Text(
+                              'Illustration: $illustrator',
+                              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                            ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              Tag(languageLabels[card.language] ?? card.language),
+                              if (card.imageLanguage != null)
+                                Tag(
+                                  'Bild ${languageLabels[card.imageLanguage] ?? card.imageLanguage}',
+                                  color: AppColors.textMuted,
+                                ),
+                              if (card.rarity != null) Tag(card.rarity!, color: AppColors.accent),
+                              if (card.source == 'user')
+                                Tag('selbst angelegt', color: AppColors.warning),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
-            const Divider(height: 1, indent: 16, endIndent: 16),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: OutlinedButton.icon(
-                key: const Key('card-ebay'),
-                onPressed: () => openEbaySold(context, ref, card),
-                icon: const Icon(Icons.sell_outlined),
-                label: const Text('Verkaufte Angebote bei eBay'),
-              ),
-            ),
-            Center(
-              child: TextButton.icon(
-                key: const Key('card-report'),
-                onPressed: () => showReportDialog(
-                  context,
-                  ref,
-                  kind: 'wrong',
-                  reportContext: 'Karte ${card.id} (${card.displayName} · ${card.subtitle})',
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: OwnedPanel(
+                  cardId: card.id,
+                  onFetchSlabPrice: (grading) => openEbaySold(context, ref, card, grading: grading),
+                  onEdit: (entry) => _editOwned(context, ref, entry),
                 ),
-                icon: const Icon(Icons.flag_outlined, size: 18),
-                label: const Text('Bild, Name oder Preis falsch? Melden'),
               ),
-            ),
-          ],
+              CardmarketEditionTile(
+                cardId: card.id,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+              ),
+              AsyncBody(
+                value: prices,
+                onRetry: () => ref.invalidate(pricesProvider(card.id)),
+                builder: _priceSection,
+              ),
+              const SizedBox(height: 16),
+              // Weiteres aufklappbar – die Seite bleibt kurz, nichts geht verloren.
+              FoldSection(
+                id: 'history',
+                title: 'Preisverlauf (Cardmarket-Trend)',
+                initiallyOpen: true,
+                child: _History(cardId: card.id, variant: _variant),
+              ),
+              if (prices.value case final data?) _GradeComparison(card: card, prices: data),
+              _UsMarket(cardId: card.id),
+              if (prices.value case final data? when data.offers.isNotEmpty)
+                FoldSection(
+                  id: 'sources',
+                  title: 'Quellen und Belege',
+                  summary: '${data.offers.length}',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final offer in data.offers) _OfferTile(offer: offer),
+                      if (data.lastCheckedAt != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                          child: Text(
+                            'Zuletzt geprüft: ${dateTime(data.lastCheckedAt)}',
+                            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              const Divider(height: 1, indent: 16, endIndent: 16),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: OutlinedButton.icon(
+                  key: const Key('card-ebay'),
+                  onPressed: () => openEbaySold(context, ref, card),
+                  icon: const Icon(Icons.sell_outlined),
+                  label: const Text('Verkaufte Angebote bei eBay'),
+                ),
+              ),
+              Center(
+                child: TextButton.icon(
+                  key: const Key('card-report'),
+                  onPressed: () => showReportDialog(
+                    context,
+                    ref,
+                    kind: 'wrong',
+                    reportContext: 'Karte ${card.id} (${card.displayName} · ${card.subtitle})',
+                  ),
+                  icon: const Icon(Icons.flag_outlined, size: 18),
+                  label: const Text('Bild, Name oder Preis falsch? Melden'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

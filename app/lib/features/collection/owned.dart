@@ -13,6 +13,7 @@ final ownedProvider = FutureProvider.autoDispose.family<Map<String, List<OwnedEn
   ref,
   key,
 ) async {
+  ref.cacheFor(providerCache);
   final ids = key.isEmpty ? const <String>[] : key.split(',');
   final entries = await ref.watch(apiProvider).owned(ids);
   final grouped = <String, List<OwnedEntry>>{};

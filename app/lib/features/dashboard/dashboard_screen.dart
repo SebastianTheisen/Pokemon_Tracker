@@ -12,39 +12,53 @@ import '../../widgets/skeleton.dart';
 import '../../widgets/value_chart.dart';
 import '../alerts/alerts_screen.dart';
 import '../../core/prefs.dart';
+import '../collection/collection_screen.dart';
 import '../collection/owned.dart';
+import '../sets/sets_screens.dart';
 import 'first_steps.dart';
 import 'install_hint.dart';
 
 final dashboardProvider = FutureProvider.autoDispose<CollectionSummary>(
-  (ref) => ref.watch(apiProvider).dashboard(),
+  (ref) => cached(ref, ref.watch(apiProvider).dashboard()),
 );
 
 final collectionHistoryProvider = FutureProvider.autoDispose<CollectionHistory>(
-  (ref) => ref.watch(apiProvider).collectionHistory(),
+  (ref) => cached(ref, ref.watch(apiProvider).collectionHistory()),
 );
 
 /// Wertvollste bzw. zuletzt hinzugefügte Positionen für die Bilder-Reihen.
-final showcaseProvider = FutureProvider.autoDispose.family<List<CollectionItem>, String>(
-  (ref, sort) async => (await ref.watch(apiProvider).items(sort: sort, limit: 12)).items,
-);
+final showcaseProvider = FutureProvider.autoDispose.family<List<CollectionItem>, String>((
+  ref,
+  sort,
+) async {
+  ref.cacheFor(providerCache);
+  return (await ref.watch(apiProvider).items(sort: sort, limit: 12)).items;
+});
 
 /// Gewinner und Verlierer der letzten 7 Tage (eigene Rohkarten, Cardmarket-Trend).
-final moversProvider = FutureProvider.autoDispose<Movers>((ref) => ref.watch(apiProvider).movers());
+final moversProvider = FutureProvider.autoDispose<Movers>(
+  (ref) => cached(ref, ref.watch(apiProvider).movers()),
+);
 
 /// Kennzahlen eines Ordners (`null` = ganze Sammlung) – für den Kopf der Sammlung.
 final folderSummaryProvider = FutureProvider.autoDispose.family<CollectionSummary, String?>(
-  (ref, folderId) => ref.watch(apiProvider).dashboard(folderId: folderId),
+  (ref, folderId) => cached(ref, ref.watch(apiProvider).dashboard(folderId: folderId)),
 );
 
 /// Alle Ordner als Portfolios (Wert, Kaufpreise, Gewinn).
 final folderSummariesProvider = FutureProvider.autoDispose<List<FolderSummary>>(
-  (ref) => ref.watch(apiProvider).folderSummaries(),
+  (ref) => cached(ref, ref.watch(apiProvider).folderSummaries()),
 );
 
 /// Nach Änderungen an der Sammlung alle abhängigen Anzeigen neu laden.
+/// Alles, was sich ändert, sobald eine Position dazukommt, sich ändert oder wegfällt.
+/// Die Daten bleiben ein paar Minuten zwischengespeichert (`cached`) – darum hier vollständig.
 void invalidateCollection(WidgetRef ref) => ref
   ..invalidate(dashboardProvider)
+  ..invalidate(itemsProvider)
+  ..invalidate(folderHistoryProvider)
+  ..invalidate(collectionSetsProvider)
+  ..invalidate(setProgressProvider)
   ..invalidate(folderSummaryProvider)
   ..invalidate(folderSummariesProvider)
   ..invalidate(collectionHistoryProvider)
@@ -84,45 +98,50 @@ class DashboardScreen extends ConsumerWidget {
             invalidateCollection(ref);
             await ref.read(dashboardProvider.future);
           },
-          child: ListView(
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            children: [
-              // Suchen steckt in der unteren Leiste und in den Schnellzugriffen – kein dritter Knopf.
-              Text(
-                'Hallo ${user?.displayName ?? ''} 👋',
-                style: Theme.of(context).textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              AsyncBody(
-                value: summary,
-                onRetry: () => invalidateCollection(ref),
-                loading: const Shimmer(child: SkeletonBox(height: 220, radius: 24)),
-                builder: (data) =>
-                    data.items == 0 ? const _WelcomeHero() : _ValueHero(summary: data),
-              ),
-              // Für Neue: Checkliste mit dem jeweils nächsten Schritt (ausblendbar).
-              if (summary.value case final data?) FirstSteps(summary: data),
-              const InstallHint(),
-              // Reihenfolge: Wert → Heute → Bewegungen → Schnellzugriffe → Karten. Scannen
-              // steckt im runden Knopf unten; die große Kachel nur bei leerer Kiste ohne Checkliste.
-              if (summary.value case final data? when data.items == 0) ...[
-                if (ref.watch(uiPrefsProvider).firstStepsHidden) ...[
-                  const SizedBox(height: 16),
-                  _ScanCallToAction(onTap: () => context.push('/scan')),
-                  const _EmptyHint(),
+
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Suchen steckt in der unteren Leiste und in den Schnellzugriffen – kein dritter Knopf.
+                Text(
+                  'Hallo ${user?.displayName ?? ''} 👋',
+                  style: Theme.of(context).textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                AsyncBody(
+                  value: summary,
+                  onRetry: () => invalidateCollection(ref),
+                  loading: const Shimmer(child: SkeletonBox(height: 220, radius: 24)),
+                  builder: (data) =>
+                      data.items == 0 ? const _WelcomeHero() : _ValueHero(summary: data),
+                ),
+                // Für Neue: Checkliste mit dem jeweils nächsten Schritt (ausblendbar).
+                if (summary.value case final data?) FirstSteps(summary: data),
+                const InstallHint(),
+                // Reihenfolge: Wert → Heute → Bewegungen → Schnellzugriffe → Karten. Scannen
+                // steckt im runden Knopf unten; die große Kachel nur bei leerer Kiste ohne Checkliste.
+                if (summary.value case final data? when data.items == 0) ...[
+                  if (ref.watch(uiPrefsProvider).firstStepsHidden) ...[
+                    const SizedBox(height: 16),
+                    _ScanCallToAction(onTap: () => context.push('/scan')),
+                    const _EmptyHint(),
+                  ],
+                ] else ...[
+                  const _TodayCard(),
+                  const _MoversSection(),
+                  const SizedBox(height: 20),
+                  const _QuickActions(),
+                  if (summary.value case final data? when data.hasProfit)
+                    _ProfitSection(summary: data),
+                  const _Showcase(title: 'Wertvollste Karten', sort: 'value_desc'),
+                  const _Showcase(title: 'Zuletzt hinzugefügt', sort: 'added_desc'),
                 ],
-              ] else ...[
-                const _TodayCard(),
-                const _MoversSection(),
-                const SizedBox(height: 20),
-                const _QuickActions(),
-                if (summary.value case final data? when data.hasProfit)
-                  _ProfitSection(summary: data),
-                const _Showcase(title: 'Wertvollste Karten', sort: 'value_desc'),
-                const _Showcase(title: 'Zuletzt hinzugefügt', sort: 'added_desc'),
               ],
-            ],
+            ),
           ),
         ),
       ),

@@ -17,13 +17,14 @@ import '../dashboard/install_hint.dart';
 import '../../widgets/skeleton.dart';
 
 final alertsProvider = FutureProvider.autoDispose<List<PriceAlert>>(
-  (ref) => ref.watch(apiProvider).alerts(),
+  (ref) => cached(ref, ref.watch(apiProvider).alerts()),
 );
 
 /// Stand der Benachrichtigungen: Gerät (Browser) + Server.
 typedef PushState = ({PushStatus status, bool subscribed, PushConfig config});
 
 final pushStateProvider = FutureProvider.autoDispose<PushState>((ref) async {
+  ref.cacheFor(providerCache);
   final bridge = ref.watch(pushBridgeProvider);
   final config = await ref.watch(apiProvider).pushConfig();
   final status = await bridge.status();

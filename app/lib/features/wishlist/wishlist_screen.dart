@@ -11,7 +11,7 @@ import '../../models/models.dart';
 import '../../widgets/common.dart';
 
 final wishlistProvider = FutureProvider.autoDispose<List<WishlistEntry>>(
-  (ref) => ref.watch(apiProvider).wishlist(),
+  (ref) => cached(ref, ref.watch(apiProvider).wishlist()),
 );
 
 class WishlistScreen extends ConsumerWidget {

@@ -1,4 +1,6 @@
 // Zentrale Provider: API-Client und Sitzung.
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
@@ -67,3 +69,22 @@ class SessionController extends AsyncNotifier<User?> {
 }
 
 final sessionProvider = AsyncNotifierProvider<SessionController, User?>(SessionController.new);
+
+/// Wie lange geladene Daten nach dem letzten Zuschauer noch gelten. Verhindert, dass beim
+/// Scrollen oder Reiterwechsel ständig neu geladen wird (Abschnitt kurz leer → Inhalt springt).
+/// Änderungen laden trotzdem sofort neu – dort wird gezielt `invalidate` aufgerufen.
+const providerCache = Duration(minutes: 2);
+
+extension CacheFor on Ref {
+  void cacheFor(Duration duration) {
+    final link = keepAlive();
+    final timer = Timer(duration, link.close);
+    onDispose(timer.cancel);
+  }
+}
+
+/// Für Provider in Kurzform: `(ref) => cached(ref, ref.watch(apiProvider).x())`.
+T cached<T>(Ref ref, T value) {
+  ref.cacheFor(providerCache);
+  return value;
+}

@@ -581,12 +581,15 @@ void filterTests() {
     expect(api.calls, contains('items:ja|NM|10|1000.50|true'));
     expect(find.text('5'), findsOneWidget); // Abzeichen: 5 aktive Filter
 
+    final before = api.calls.where((c) => c == 'items:-|-|-|-|-').length;
     await tester.tap(find.byKey(const Key('collection-filter')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('filter-reset')));
     await tester.tap(find.byKey(const Key('filter-reset')));
     await tester.pumpAndSettle();
-    expect(api.calls.last, 'items:-|-|-|-|-');
+    // Die ungefilterte Liste kommt aus dem Zwischenspeicher – kein zweiter Abruf nötig.
+    expect(find.text('5'), findsNothing);
+    expect(api.calls.where((c) => c == 'items:-|-|-|-|-').length, before);
   });
 
   testWidgets('Filter: „von“ größer als „bis“ wird abgelehnt', (tester) async {

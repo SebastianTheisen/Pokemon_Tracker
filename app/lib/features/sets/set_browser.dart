@@ -12,7 +12,7 @@ import '../../models/models.dart';
 import '../../widgets/common.dart';
 
 final catalogSetsProvider = FutureProvider.autoDispose.family<List<CardSet>, String>(
-  (ref, language) => ref.watch(apiProvider).catalogSets(language: language),
+  (ref, language) => cached(ref, ref.watch(apiProvider).catalogSets(language: language)),
 );
 
 class SetBrowserScreen extends ConsumerStatefulWidget {

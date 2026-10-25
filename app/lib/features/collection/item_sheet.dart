@@ -13,7 +13,7 @@ import '../../widgets/common.dart';
 import 'owned.dart';
 
 final foldersProvider = FutureProvider.autoDispose<List<Folder>>(
-  (ref) => ref.watch(apiProvider).folders(),
+  (ref) => cached(ref, ref.watch(apiProvider).folders()),
 );
 
 const gradingCompanies = ['PSA', 'BGS', 'CGC', 'SGC', 'TAG', 'ACE', 'OTHER'];
