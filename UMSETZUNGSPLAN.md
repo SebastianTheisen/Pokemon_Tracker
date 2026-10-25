@@ -820,6 +820,17 @@ Alle Aufwandsangaben sind grobe Schätzungen für einen Entwickler mit KI-Unters
 
 ---
 
+### Phase 8: One Piece als zweites Spiel (Wunsch 26.10.)
+
+Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter oben** „Alle · Pokémon · One Piece“ (gemerkt, wirkt auf Übersicht, Sammlung, Sets, Suche; Gesamtwert über alles); **Sealed ja**; **Scanner in Schritt 2**.
+
+- [ ] 8.0 Erkundung der Quellen (`deploy/phase8_onepiece.sh` → `docs/phase5/onepiece.md`): Cardmarket-Spiel-ID, Namensschema, Ausgaben; tcgcsv-Kategorien (Nummer, Seltenheit, Bilder); offizielle Kartenlisten EN/JP; PriceCharting
+- [ ] 8.1 Datenmodell: Spalte `game` (`pokemon`/`onepiece`) an Sets und Cardmarket-Produkten, Migration, alle Bestandsdaten = `pokemon`
+- [ ] 8.2 Katalog-Import One Piece (Sets, Karten, Nummern, Seltenheit, Bilder, Varianten/Parallels) aus der Quelle, die 8.0 ergibt
+- [ ] 8.3 Preise + Sealed über den Cardmarket-Download des Spiels, Set-Verknüpfung, Bilder für Sealed über tcgcsv
+- [ ] 8.4 App: Spiel-Umschalter, Sets durchblättern je Spiel, Suche/Sammlung/Übersicht gefiltert, Set-Fortschritt
+- [ ] 8.5 Scanner für One Piece (Kartencode „OP01-001“ per Texterkennung, Bildabgleich)
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).
