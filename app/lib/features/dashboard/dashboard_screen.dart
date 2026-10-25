@@ -14,6 +14,7 @@ import '../alerts/alerts_screen.dart';
 import '../../core/prefs.dart';
 import '../collection/owned.dart';
 import 'first_steps.dart';
+import 'install_hint.dart';
 
 final dashboardProvider = FutureProvider.autoDispose<CollectionSummary>(
   (ref) => ref.watch(apiProvider).dashboard(),
@@ -102,6 +103,7 @@ class DashboardScreen extends ConsumerWidget {
               ),
               // Für Neue: Checkliste mit dem jeweils nächsten Schritt (ausblendbar).
               if (summary.value case final data?) FirstSteps(summary: data),
+              const InstallHint(),
               // Reihenfolge: Wert → Heute → Bewegungen → Schnellzugriffe → Karten. Scannen
               // steckt im runden Knopf unten; die große Kachel nur bei leerer Kiste ohne Checkliste.
               if (summary.value case final data? when data.items == 0) ...[

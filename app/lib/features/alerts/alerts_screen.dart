@@ -13,6 +13,7 @@ import '../../core/push/push_bridge.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
+import '../dashboard/install_hint.dart';
 import '../../widgets/skeleton.dart';
 
 final alertsProvider = FutureProvider.autoDispose<List<PriceAlert>>(
@@ -220,6 +221,13 @@ class _PushCardState extends ConsumerState<_PushCard> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
+                    if (data.status == PushStatus.install)
+                      FilledButton.icon(
+                        key: const Key('push-install-guide'),
+                        onPressed: () => showIosInstallGuide(context),
+                        icon: const Icon(Icons.add_to_home_screen),
+                        label: const Text('So geht’s'),
+                      ),
                     if (canEnable)
                       FilledButton.icon(
                         key: const Key('push-enable'),

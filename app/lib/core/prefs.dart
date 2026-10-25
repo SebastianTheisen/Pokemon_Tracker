@@ -47,6 +47,7 @@ class UiPrefs {
     this.themeMode = ThemeMode.system,
     this.onboarded = false,
     this.firstStepsHidden = false,
+    this.installHintHidden = false,
   });
 
   /// Erst nach dem Laden entscheiden (sonst blitzt z. B. die Anleitung kurz auf).
@@ -62,18 +63,23 @@ class UiPrefs {
   /// Karte „Erste Schritte“ auf der Startseite ausgeblendet.
   final bool firstStepsHidden;
 
+  /// Hinweis „Als App installieren“ weggeklickt.
+  final bool installHintHidden;
+
   UiPrefs copyWith({
     bool? loaded,
     bool? listView,
     ThemeMode? themeMode,
     bool? onboarded,
     bool? firstStepsHidden,
+    bool? installHintHidden,
   }) => UiPrefs(
     loaded: loaded ?? this.loaded,
     listView: listView ?? this.listView,
     themeMode: themeMode ?? this.themeMode,
     onboarded: onboarded ?? this.onboarded,
     firstStepsHidden: firstStepsHidden ?? this.firstStepsHidden,
+    installHintHidden: installHintHidden ?? this.installHintHidden,
   );
 }
 
@@ -99,6 +105,7 @@ class UiPrefsController extends Notifier<UiPrefs> {
       themeMode: ThemeMode.values.asNameMap()[values['theme']] ?? ThemeMode.system,
       onboarded: values['onboarded'] == 'true',
       firstStepsHidden: values['first_steps_hidden'] == 'true',
+      installHintHidden: values['install_hint_hidden'] == 'true',
     );
   }
 
@@ -118,6 +125,11 @@ class UiPrefsController extends Notifier<UiPrefs> {
   void setThemeMode(ThemeMode mode) {
     state = state.copyWith(themeMode: mode);
     _save('theme', mode.name);
+  }
+
+  void hideInstallHint() {
+    state = state.copyWith(installHintHidden: true);
+    _save('install_hint_hidden', 'true');
   }
 
   void hideFirstSteps() {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kartenkiste/app.dart';
+import 'package:kartenkiste/core/device/device.dart';
 import 'package:kartenkiste/core/prefs.dart';
 import 'package:kartenkiste/core/push/push_bridge.dart';
 import 'package:kartenkiste/core/theme.dart';
@@ -1526,5 +1527,36 @@ void usabilityTests() {
     await tester.pumpAndSettle();
     expect(device.shared.single.filename, 'kartenkiste-215.png');
     expect(device.shared.single.bytes, greaterThan(1000)); // echtes PNG
+  });
+
+  testWidgets('Installieren: Android-Knopf bzw. iPhone-Anleitung, ausblendbar', (tester) async {
+    final android = FakeDevice(state: InstallState.prompt);
+    await pumpApp(tester, FakeApi(loggedIn: true), device: android);
+    expect(find.byKey(const Key('install-hint')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('install-action')));
+    await tester.pumpAndSettle();
+    expect(android.installs, 1);
+    expect(find.byKey(const Key('install-hint')), findsNothing); // jetzt installiert
+  });
+
+  testWidgets('Installieren am iPhone: Anleitung in drei Schritten, Ausblenden bleibt', (
+    tester,
+  ) async {
+    final prefs = MemoryPrefsStore({'onboarded': 'true', 'first_steps_hidden': 'true'});
+    await pumpApp(
+      tester,
+      FakeApi(loggedIn: true),
+      device: FakeDevice(state: InstallState.ios),
+      prefs: prefs,
+    );
+    await tester.tap(find.byKey(const Key('install-action')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ios-install-guide')), findsOneWidget);
+    Navigator.of(tester.element(find.byKey(const Key('ios-install-guide')))).pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('install-hide')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('install-hint')), findsNothing);
+    expect(prefs.values['install_hint_hidden'], 'true');
   });
 }
