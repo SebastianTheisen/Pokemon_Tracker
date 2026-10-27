@@ -4,7 +4,7 @@ from app.models.alerts import AlertDirection, PriceAlert, PushSubscription
 from app.models.audit import AuditLog
 from app.models.auth import InviteCode, PasswordResetToken, RefreshToken
 from app.models.cardmarket import CmExpansion, CmImport, CmPrice, CmProduct, ExpansionLinkSource
-from app.models.catalog import Card, CardSet, CardSource, ImageSource
+from app.models.catalog import GAMES, Card, CardSet, CardSource, Game, ImageSource
 from app.models.collection import (
     CollectionEvent,
     CollectionEventType,
@@ -33,6 +33,7 @@ from app.models.trades import Trade
 from app.models.user import Role, User
 
 __all__ = [
+    "GAMES",
     "AlertDirection",
     "AuditLog",
     "Card",
@@ -51,6 +52,7 @@ __all__ = [
     "ExpansionLinkSource",
     "Folder",
     "FolderSnapshot",
+    "Game",
     "GradingCompany",
     "ImageImportRun",
     "ImageProbe",

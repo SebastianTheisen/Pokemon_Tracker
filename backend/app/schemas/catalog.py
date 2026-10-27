@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-from app.models import CardSource
+from app.models import CardSource, Game
 from app.services.card_names import translate_card_name
 from app.services.set_names import translated_set_name
 
@@ -19,6 +19,7 @@ class SetOut(BaseModel):
     id: uuid.UUID
     external_id: str
     language: str
+    game: str = Game.POKEMON.value
     name: str
     series_name: str | None
     release_date: date | None
@@ -30,7 +31,9 @@ class SetOut(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def translated_name(self) -> str | None:
-        """Englischer Name japanischer (koreanischer, taiwanischer) Sets."""
+        """Englischer Name japanischer (koreanischer, taiwanischer) Pokémon-Sets."""
+        if self.game != Game.POKEMON.value:
+            return None
         return translated_set_name(self.external_id, self.language, self.name)
 
 
@@ -41,11 +44,14 @@ class SetSummary(BaseModel):
     external_id: str
     language: str
     name: str
+    game: str = Game.POKEMON.value
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def translated_name(self) -> str | None:
-        """Englischer Name japanischer (koreanischer, taiwanischer) Sets."""
+        """Englischer Name japanischer (koreanischer, taiwanischer) Pokémon-Sets."""
+        if self.game != Game.POKEMON.value:
+            return None
         return translated_set_name(self.external_id, self.language, self.name)
 
 
@@ -70,7 +76,9 @@ class CardOut(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def translated_name(self) -> str | None:
-        """Deutscher Name bei japanischen, koreanischen und chinesischen Karten."""
+        """Deutscher Name bei japanischen, koreanischen und chinesischen Pokémon-Karten."""
+        if self.card_set.game != Game.POKEMON.value:
+            return None  # sucht Pokémon-Namen im Text – bei anderen Spielen Unsinn
         return translate_card_name(self.name, self.language)
 
 

@@ -29,7 +29,7 @@ import structlog
 from sqlalchemy import ColumnElement, delete, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Card, CardReferenceImage, CardSet, ScanLog, ScanMode, User
+from app.models import Card, CardReferenceImage, CardSet, Game, ScanLog, ScanMode, User
 from app.scanner.analysis import PhotoAnalysis, add_korean_pass, analyze_photo
 from app.scanner.binder import BinderLayout, binder_cells
 from app.scanner.imaging import (
@@ -66,6 +66,8 @@ from app.services.scan_scoring import (
 log = structlog.get_logger(__name__)
 
 MAX_ALTERNATIVES = 4
+# Der Scanner erkennt (noch) nur Pokémon – One Piece folgt in Phase 8.5.
+SCAN_GAME = Game.POKEMON.value
 NUMBER_QUERY_LIMIT = 300
 NAME_QUERY_LIMIT = 60
 NAME_QUERIES = 6
@@ -217,7 +219,7 @@ class ScanService:
             statement = (
                 select(Card)
                 .join(CardSet, Card.set_id == CardSet.id)
-                .where(Card.number_norm == number)
+                .where(Card.number_norm == number, CardSet.game == SCAN_GAME)
                 .order_by(CardSet.release_date.desc().nulls_last())
                 .limit(NUMBER_QUERY_LIMIT)
             )
@@ -242,7 +244,7 @@ class ScanService:
             statement = (
                 select(Card)
                 .join(CardSet, Card.set_id == CardSet.id)
-                .where(or_(*conditions))
+                .where(or_(*conditions), CardSet.game == SCAN_GAME)
                 .order_by(CardSet.release_date.desc().nulls_last())
                 .limit(NAME_QUERY_LIMIT)
             )

@@ -29,6 +29,16 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, TimestampMixin, UuidPrimaryKeyMixin
 
 
+class Game(enum.StrEnum):
+    """Sammelkartenspiel eines Sets (und damit seiner Karten)."""
+
+    POKEMON = "pokemon"
+    ONEPIECE = "onepiece"
+
+
+GAMES: tuple[str, ...] = tuple(game.value for game in Game)
+
+
 class CardSource(enum.StrEnum):
     """Herkunft eines Katalogeintrags."""
 
@@ -39,6 +49,7 @@ class CardSource(enum.StrEnum):
     PRICECHARTING = "pricecharting"  # Setliste von PriceCharting (Korea, China)
     POKEMONTCG = "pokemontcg"  # englischer Datensatz von pokemontcg.io (Lücken bei TCGdex)
     TRANSLATED = "translated"  # deutsche Fassung aus der englischen Karte abgeleitet
+    ONEPIECE = "onepiece"  # offizielle One-Piece-Kartenliste (onepiece-cardgame.com)
 
 
 class ImageSource(enum.StrEnum):
@@ -50,6 +61,7 @@ class ImageSource(enum.StrEnum):
     POKEMON_CARD_JP = "pokemon-card.com"  # offizielle japanische Kartendatenbank
     POKEMON_CARD_TW = "asia.pokemon-card.com/tw"  # offizielle Datenbank Taiwan
     PRICECHARTING = "pricecharting"  # Setliste von PriceCharting (Korea, China)
+    ONEPIECE = "onepiece-cardgame.com"  # offizielle One-Piece-Kartenliste (EN/JP)
 
 
 class CardSet(UuidPrimaryKeyMixin, Base):
@@ -60,6 +72,10 @@ class CardSet(UuidPrimaryKeyMixin, Base):
 
     external_id: Mapped[str] = mapped_column(String(64), nullable=False)
     language: Mapped[str] = mapped_column(String(8), nullable=False)
+    # Spiel (:class:`Game`); Karten erben es von ihrem Set.
+    game: Mapped[str] = mapped_column(
+        String(16), server_default=text("'pokemon'"), index=True, nullable=False
+    )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     series_name: Mapped[str | None] = mapped_column(String(200))
     # Offizielles Kürzel, wie es auf der Karte steht („PFL“, „SVI“) – für die Suche „PFL077“.

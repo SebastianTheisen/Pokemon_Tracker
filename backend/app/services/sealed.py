@@ -27,7 +27,7 @@ from sqlalchemy.orm import aliased
 
 from app.models import CardSet, CmPrice, CmProduct, Product, ProductKind, User
 from app.services.audit import record_audit
-from app.services.cardmarket_catalog import SINGLE_CATEGORY, product_url
+from app.services.cardmarket_catalog import SINGLE_CATEGORIES, product_url
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.pricing import nm_basis
 
@@ -194,6 +194,7 @@ async def search_sealed(
     limit: int = SEARCH_LIMIT,
     kind: ProductKind | None = None,
     expansion_id: int | None = None,
+    game: str | None = None,
 ) -> list[SealedOffer]:
     """Versiegelte Produkte, deren Name alle Suchwörter enthält (kurze Namen zuerst).
 
@@ -206,7 +207,13 @@ async def search_sealed(
 
     async def words(text: str) -> list[SealedOffer]:
         return await _search_words(
-            session, text.split(), limit, kind=kind, expansion_id=expansion_id, names=names
+            session,
+            text.split(),
+            limit,
+            kind=kind,
+            expansion_id=expansion_id,
+            names=names,
+            game=game,
         )
 
     if not query.strip():
@@ -263,20 +270,25 @@ _IMAGE_PREFERENCE = (
 )
 
 
-async def sealed_sets(session: AsyncSession, *, limit: int = 40) -> list[SealedSet]:
+async def sealed_sets(
+    session: AsyncSession, *, limit: int = 40, game: str | None = None
+) -> list[SealedSet]:
     """Sets mit versiegelten Produkten, neueste zuerst (nur Sets, die wir kennen)."""
     names = await _expansion_names(session)
     if not names:
         return []
-    rows = await session.execute(
+    statement = (
         select(CmProduct.id_expansion, CmProduct.name, CmProduct.category_name, CmProduct.image_url)
         .where(
             CmProduct.id_category.is_not(None),
-            CmProduct.id_category != SINGLE_CATEGORY,
+            CmProduct.id_category.not_in(SINGLE_CATEGORIES),
             CmProduct.id_expansion.in_(list(names)),
         )
         .order_by(CmProduct.id_product)
     )
+    if game is not None:
+        statement = statement.where(CmProduct.game == game)
+    rows = await session.execute(statement)
     counts: dict[int, int] = {}
     images: dict[int, tuple[int, str]] = {}  # Ausgabe → (Rang der Produktart, Bild)
     for expansion_id, name, category, image in rows:
@@ -314,19 +326,22 @@ async def _search_words(
     kind: ProductKind | None = None,
     expansion_id: int | None = None,
     names: ExpansionNames | None = None,
+    game: str | None = None,
 ) -> list[SealedOffer]:
     if not words and expansion_id is None:
         return []
     statement = (
         select(CmProduct, CmPrice)
         .outerjoin(CmPrice, CmPrice.id_product == CmProduct.id_product)
-        .where(CmProduct.id_category.is_not(None), CmProduct.id_category != SINGLE_CATEGORY)
+        .where(CmProduct.id_category.is_not(None), CmProduct.id_category.not_in(SINGLE_CATEGORIES))
         .order_by(func.length(CmProduct.name), CmProduct.name)
         # Die Art kommt aus dem Namen (nicht aus SQL) – mit Filter mehr laden, danach filtern.
         .limit(limit if kind is None else limit * KIND_OVERFETCH)
     )
     if expansion_id is not None:
         statement = statement.where(CmProduct.id_expansion == expansion_id)
+    if game is not None:
+        statement = statement.where(CmProduct.game == game)
     for word in words:
         statement = statement.where(func.lower(CmProduct.name).contains(word, autoescape=True))
     offers = []
@@ -346,7 +361,7 @@ async def _search_words(
                 trend=metrics.get("trend"),
                 low=metrics.get("low"),
                 value=basis[1] if basis else None,
-                url=product_url(product.id_product),
+                url=product_url(product.id_product, product.game),
                 image_url=product.image_url,
                 expansion_id=product.id_expansion,
                 set_name=known[0] if known else None,
@@ -377,7 +392,7 @@ async def sealed_prices(
             value=value,
             basis=f"Cardmarket {label}",
             updated_at=price.updated_at,
-            url=product_url(cardmarket_id),
+            url=product_url(cardmarket_id, price.game),
         )
     return result
 
@@ -392,7 +407,7 @@ async def product_from_cardmarket(
     source = await session.get(CmProduct, cardmarket_product_id)
     if source is None:
         raise NotFoundError("Produkt nicht im Cardmarket-Katalog.")
-    if source.id_category in (None, SINGLE_CATEGORY):
+    if source.id_category in (None, *SINGLE_CATEGORIES):
         raise InvalidInputError("Das ist eine Einzelkarte, kein versiegeltes Produkt.")
     existing = await session.scalar(
         select(Product).where(

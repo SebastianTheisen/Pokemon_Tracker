@@ -21,6 +21,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
+    GAMES,
     Card,
     CardSet,
     CollectionEvent,
@@ -36,6 +37,7 @@ from app.models import (
 )
 from app.providers.pricing import CONDITIONS
 from app.services.errors import ConflictError, InvalidInputError, NotFoundError
+from app.services.games import DEFAULT_GAME, item_game
 from app.services.movers import Movers, TrendChange, price_movers, trend_changes
 from app.services.pricing import CardPrices, PriceService
 from app.services.sealed import SealedPrice, sealed_prices
@@ -85,6 +87,8 @@ class ItemFilter:
     max_value: Decimal | None = None
     with_purchase: bool | None = None
     """``True`` nur mit Kaufpreis, ``False`` nur ohne."""
+    game: str | None = None
+    """Nur Positionen eines Spiels (``pokemon``, ``onepiece``)."""
 
     def matches_value(self, value: ItemValue) -> bool:
         """Filter, die erst nach der Bewertung greifen (Wertspanne)."""
@@ -146,6 +150,8 @@ class CollectionSummary:
     profit_positions: int = 0
     best_profit: ValuedItem | None = None
     worst_profit: ValuedItem | None = None
+    by_game: dict[str, Decimal] = field(default_factory=dict)
+    """Wert je Spiel (nur in der Gesamtübersicht gefüllt)."""
 
 
 @dataclass(frozen=True)
@@ -553,6 +559,8 @@ class CollectionService:
                 CollectionItem.grading_company.is_(None),
                 CollectionItem.card_id.is_not(None),
             )
+        if item_filter.game is not None:
+            statement = statement.where(item_game() == item_filter.game)
         if item_filter.with_purchase is not None:
             statement = statement.where(
                 CollectionItem.purchase_price.is_not(None)
@@ -702,17 +710,30 @@ class CollectionService:
             if card_id in changes
         }
 
-    async def price_movers(self, *, days: int = 7, limit: int = 5) -> Movers:
+    async def price_movers(
+        self, *, days: int = 7, limit: int = 5, game: str | None = None
+    ) -> Movers:
         """Gewinner und Verlierer der eigenen Rohkarten (Cardmarket-Trend) im Zeitraum."""
         return await price_movers(
-            self._session, self._owner.id, now=self._now(), days=days, limit=limit
+            self._session, self._owner.id, now=self._now(), days=days, limit=limit, game=game
         )
 
-    async def summary(self, folder_id: uuid.UUID | None = None) -> CollectionSummary:
-        """Kennzahlen für Übersicht und Dashboard (optional nur eines Ordners)."""
+    async def summary(
+        self, folder_id: uuid.UUID | None = None, *, game: str | None = None
+    ) -> CollectionSummary:
+        """Kennzahlen für Übersicht und Dashboard (optional nur eines Ordners bzw. Spiels)."""
         if folder_id is not None:
             await self._own_folder(folder_id)
-        return summarize(await self.valued_items(ItemFilter(folder_id=folder_id)))
+        valued = await self.valued_items(ItemFilter(folder_id=folder_id, game=game))
+        result = summarize(valued)
+        if folder_id is None and game is None:
+            games = await self._item_games()
+            for entry in valued:
+                key = games.get(entry.item.id, DEFAULT_GAME)
+                result.by_game[key] = result.by_game.get(key, ZERO) + (
+                    entry.value.total_value or ZERO
+                )
+        return result
 
     async def folder_summaries(self) -> list[FolderSummary]:
         """Jeder Ordner als eigenes Portfolio: Wert, Kaufpreise, Gewinn."""
@@ -722,10 +743,10 @@ class CollectionService:
             grouped.setdefault(entry.item.folder_id, []).append(entry)
         return [FolderSummary(folder=f, summary=summarize(grouped[f.id])) for f in folders]
 
-    async def sets_overview(self) -> list[SetOverview]:
+    async def sets_overview(self, *, game: str | None = None) -> list[SetOverview]:
         """Gruppierung nach Set mit Fortschritt („1 von 216 Karten“)."""
         grouped: dict[uuid.UUID, list[ValuedItem]] = {}
-        for entry in await self.valued_items(ItemFilter()):
+        for entry in await self.valued_items(ItemFilter(game=game)):
             if entry.item.card is not None:
                 grouped.setdefault(entry.item.card.set_id, []).append(entry)
         overview = [
@@ -743,14 +764,32 @@ class CollectionService:
     # ------------------------------------------------------------- Verlauf
 
     async def take_snapshot(self, day: date | None = None) -> PortfolioSnapshot:
-        """Speichert den Tageswert – gesamt und je Ordner (überschreibt denselben Tag)."""
+        """Speichert den Tageswert – gesamt, je Spiel und je Ordner (überschreibt den Tag)."""
         day = day or self._now().date()
         valued = await self.valued_items()
-        summary = summarize(valued)
         await self._snapshot_folders(valued, day)
+        games = await self._item_games()
+        for game in ("all", *GAMES):
+            entries = (
+                valued if game == "all" else [v for v in valued if games.get(v.item.id) == game]
+            )
+            await self._store_snapshot(summarize(entries), day, game)
+        snapshot = await self._session.get(PortfolioSnapshot, (self._owner.id, day, "all"))
+        assert snapshot is not None  # noqa: S101 – gerade geschrieben
+        await self._session.refresh(snapshot)
+        return snapshot
+
+    async def _item_games(self) -> dict[uuid.UUID, str]:
+        rows = await self._session.execute(
+            select(CollectionItem.id, item_game()).where(CollectionItem.user_id == self._owner.id)
+        )
+        return dict(rows.all())
+
+    async def _store_snapshot(self, summary: CollectionSummary, day: date, game: str) -> None:
         values = {
             "user_id": self._owner.id,
             "day": day,
+            "game": game,
             "total_value": summary.total_value,
             "raw_value": summary.by_kind["raw"].value,
             "graded_value": summary.by_kind["graded"].value,
@@ -762,14 +801,14 @@ class CollectionService:
         statement = insert(PortfolioSnapshot).values(values)
         await self._session.execute(
             statement.on_conflict_do_update(
-                index_elements=[PortfolioSnapshot.user_id, PortfolioSnapshot.day],
-                set_={k: v for k, v in values.items() if k not in ("user_id", "day")},
+                index_elements=[
+                    PortfolioSnapshot.user_id,
+                    PortfolioSnapshot.day,
+                    PortfolioSnapshot.game,
+                ],
+                set_={k: v for k, v in values.items() if k not in ("user_id", "day", "game")},
             )
         )
-        snapshot = await self._session.get(PortfolioSnapshot, (self._owner.id, values["day"]))
-        assert snapshot is not None  # noqa: S101 – gerade geschrieben
-        await self._session.refresh(snapshot)
-        return snapshot
 
     async def _snapshot_folders(self, valued: Sequence[ValuedItem], day: date) -> None:
         grouped: dict[uuid.UUID, list[ValuedItem]] = {f.id: [] for f in await self.list_folders()}
@@ -795,12 +834,13 @@ class CollectionService:
             )
 
     async def history(
-        self, days: int = 90, folder_id: uuid.UUID | None = None
+        self, days: int = 90, folder_id: uuid.UUID | None = None, *, game: str | None = None
     ) -> tuple[list[HistoryEntry], list[EventMarker]]:
         """Tageswerte plus heutiger Live-Wert und Bestandsänderungen als Markierungen.
 
         Mit ``folder_id`` die Kurve eines Ordners – ohne Markierungen, weil verschobene
-        Positionen ihre Ereignisse nicht eindeutig einem Ordner zuordnen.
+        Positionen ihre Ereignisse nicht eindeutig einem Ordner zuordnen. Mit ``game`` die
+        Kurve eines Spiels; Markierungen nur von Positionen, die es noch gibt.
         """
         today = self._now().date()
         since = today - timedelta(days=days)
@@ -825,7 +865,11 @@ class CollectionService:
         snapshots = (
             await self._session.scalars(
                 select(PortfolioSnapshot)
-                .where(PortfolioSnapshot.user_id == self._owner.id, PortfolioSnapshot.day >= since)
+                .where(
+                    PortfolioSnapshot.user_id == self._owner.id,
+                    PortfolioSnapshot.day >= since,
+                    PortfolioSnapshot.game == (game or "all"),
+                )
                 .order_by(PortfolioSnapshot.day)
             )
         ).all()
@@ -834,19 +878,19 @@ class CollectionService:
             for s in snapshots
             if s.day != today
         ]
-        live = await self.summary()
+        live = await self.summary(game=game)
         entries.append(HistoryEntry(today, live.total_value, live.estimated_value, is_live=True))
 
         day_col = func.date(func.timezone("UTC", CollectionEvent.created_at))
-        rows = await self._session.execute(
-            select(day_col, func.sum(CollectionEvent.delta_quantity))
-            .where(
-                CollectionEvent.user_id == self._owner.id,
-                CollectionEvent.created_at >= datetime.combine(since, datetime.min.time(), UTC),
-            )
-            .group_by(day_col)
-            .order_by(day_col)
+        events = select(day_col, func.sum(CollectionEvent.delta_quantity)).where(
+            CollectionEvent.user_id == self._owner.id,
+            CollectionEvent.created_at >= datetime.combine(since, datetime.min.time(), UTC),
         )
+        if game is not None:
+            events = events.join(
+                CollectionItem, CollectionItem.id == CollectionEvent.item_id
+            ).where(item_game() == game)
+        rows = await self._session.execute(events.group_by(day_col).order_by(day_col))
         markers = [EventMarker(day=row[0], delta_quantity=int(row[1])) for row in rows]
         return entries, markers
 

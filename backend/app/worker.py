@@ -35,12 +35,13 @@ from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import structlog
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import create_engine, create_session_factory
-from app.models import Card
+from app.models import Card, CardSet, Game
 from app.providers.pricing import PriceProvider
 from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
@@ -50,6 +51,7 @@ from app.services.card_details import sync_card_details
 from app.services.cardmarket_catalog import last_successful_import, run_catalog_import
 from app.services.collection import CollectionService, users_with_items
 from app.services.image_import import last_finished_run, last_run_incomplete, run_image_import
+from app.services.onepiece_catalog import OnePieceCatalog
 from app.services.price_health import SourceHealth
 from app.services.pricing import PriceService, tracked_card_ids
 from app.services.scan import prune_reference_files, purge_scan_logs
@@ -251,9 +253,54 @@ async def cardmarket_forever(
         log.info("worker.cardmarket_scheduled", next_run=due.isoformat())
         await asyncio.sleep(max((due - datetime.now(UTC)).total_seconds(), 0))
         summary = await run_catalog_import(session_factory, settings, tcgdex=client)
+        # One Piece: eigener Download (Spiel 18), eigener Lauf – Fehler stehen im Protokoll.
+        await run_catalog_import(session_factory, settings, tcgdex=None, game=Game.ONEPIECE.value)
         await refresh_sealed_images(session_factory, settings)  # wöchentlich, Fehler egal
         if summary.error:
             await asyncio.sleep(3600)  # nicht in einer Fehlerschleife hämmern
+
+
+ONEPIECE_START_DELAY = timedelta(minutes=20)
+ONEPIECE_RETRY = timedelta(hours=6)
+
+
+def next_onepiece_import(
+    now: datetime, last_sync: datetime | None, interval_days: int
+) -> datetime | None:
+    """Nächster Abgleich des One-Piece-Katalogs (``None`` = abgeschaltet)."""
+    if interval_days <= 0:
+        return None
+    earliest = now + ONEPIECE_START_DELAY
+    if last_sync is None:
+        return earliest
+    return max(earliest, last_sync + timedelta(days=interval_days))
+
+
+async def onepiece_forever(
+    session_factory: async_sessionmaker[AsyncSession], settings: Settings
+) -> None:
+    """Endlosschleife: One-Piece-Kartenlisten (EN/JP) wöchentlich abgleichen."""
+    while True:
+        try:
+            async with session_factory() as session:
+                last = await session.scalar(
+                    select(func.max(CardSet.synced_at)).where(CardSet.game == Game.ONEPIECE.value)
+                )
+        except Exception:  # z. B. Migration beim Start noch nicht durch
+            log.exception("worker.onepiece_status_failed")
+            await asyncio.sleep(ONEPIECE_START_DELAY.total_seconds())
+            continue
+        due = next_onepiece_import(datetime.now(UTC), last, settings.onepiece_catalog_interval_days)
+        if due is None:
+            log.info("worker.onepiece_disabled")
+            return
+        log.info("worker.onepiece_scheduled", next_run=due.isoformat())
+        await asyncio.sleep(max((due - datetime.now(UTC)).total_seconds(), 0))
+        try:
+            await OnePieceCatalog(session_factory, settings).run()
+        except Exception:
+            log.exception("worker.onepiece_failed")
+            await asyncio.sleep(ONEPIECE_RETRY.total_seconds())
 
 
 HEARTBEAT_FILE = "worker_heartbeat"
@@ -310,6 +357,7 @@ async def run_forever(settings: Settings) -> None:
             cardmarket = asyncio.create_task(cardmarket_forever(session_factory, settings, client))
             details = asyncio.create_task(card_details_forever(session_factory, settings, client))
             heartbeat = asyncio.create_task(heartbeat_forever(settings))
+            onepiece = asyncio.create_task(onepiece_forever(session_factory, settings))
             try:
                 while True:
                     next_run = next_run_after(
@@ -335,6 +383,7 @@ async def run_forever(settings: Settings) -> None:
                 cardmarket.cancel()
                 details.cancel()
                 heartbeat.cancel()
+                onepiece.cancel()
     finally:
         await engine.dispose()
 

@@ -40,6 +40,7 @@ from app.schemas.collection import (
 )
 from app.services.collection import CollectionService, ItemFilter, ItemInput, SortKey
 from app.services.errors import InvalidInputError
+from app.services.games import GameName
 from app.services.pricing import PriceService
 from app.services.set_analytics import CardMarket, SetAnalytics, set_analytics
 from app.services.set_progress import SetProgressService
@@ -108,6 +109,7 @@ async def list_items(
     min_value: Annotated[Decimal | None, Query(ge=0, le=10_000_000)] = None,
     max_value: Annotated[Decimal | None, Query(ge=0, le=10_000_000)] = None,
     with_purchase: bool | None = None,
+    game: GameName | None = None,
     sort: SortKey = "added_desc",
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -123,6 +125,7 @@ async def list_items(
         min_value=min_value,
         max_value=max_value,
         with_purchase=with_purchase,
+        game=game,
     )
     items, total = await collection.list_items(item_filter, sort=sort, limit=limit, offset=offset)
     trends = await collection.item_trends([valued.item for valued in items])
@@ -241,20 +244,29 @@ async def _item_out(collection: CollectionService, item_id: uuid.UUID) -> ItemOu
 
 
 @router.get("/collection/movers")
-async def movers(collection: Collection, days: Annotated[int, Query(ge=1, le=90)] = 7) -> MoversOut:
+async def movers(
+    collection: Collection,
+    days: Annotated[int, Query(ge=1, le=90)] = 7,
+    game: GameName | None = None,
+) -> MoversOut:
     """Größte Gewinner und Verlierer der eigenen Rohkarten (Cardmarket-Trend, ab 1 € und 5 %)."""
-    return MoversOut.build(await collection.price_movers(days=days))
+    return MoversOut.build(await collection.price_movers(days=days, game=game))
 
 
 @router.get("/collection/summary")
-async def summary(collection: Collection, folder_id: uuid.UUID | None = None) -> SummaryOut:
-    return SummaryOut.build(await collection.summary(folder_id))
+async def summary(
+    collection: Collection, folder_id: uuid.UUID | None = None, game: GameName | None = None
+) -> SummaryOut:
+    return SummaryOut.build(await collection.summary(folder_id, game=game))
 
 
 @router.get("/dashboard")
-async def dashboard(collection: Collection, folder_id: uuid.UUID | None = None) -> SummaryOut:
-    """Kennzahlen für die Übersicht (Wert, Veränderung, Gewinn, Highlights) – optional je Ordner."""
-    return SummaryOut.build(await collection.summary(folder_id))
+async def dashboard(
+    collection: Collection, folder_id: uuid.UUID | None = None, game: GameName | None = None
+) -> SummaryOut:
+    """Kennzahlen für die Übersicht (Wert, Veränderung, Gewinn, Highlights) – optional je Ordner
+    bzw. Spiel."""
+    return SummaryOut.build(await collection.summary(folder_id, game=game))
 
 
 @router.get("/collection/folders")
@@ -273,9 +285,11 @@ SetProgressDep = Annotated[SetProgressService, Depends(get_set_progress)]
 
 
 @router.get("/collection/sets")
-async def sets_overview(collection: Collection, progress: SetProgressDep) -> list[SetOverviewOut]:
+async def sets_overview(
+    collection: Collection, progress: SetProgressDep, game: GameName | None = None
+) -> list[SetOverviewOut]:
     """Sets der Sammlung mit Fortschritt (Set und Master-Set inkl. Reverse Holo)."""
-    overview = await collection.sets_overview()
+    overview = await collection.sets_overview(game=game)
     counts = await progress.counts([o.card_set.id for o in overview])
     return [SetOverviewOut.build(o, counts.get(o.card_set.id)) for o in overview]
 
@@ -342,9 +356,10 @@ async def history(
     collection: Collection,
     days: Annotated[int, Query(ge=1, le=3650)] = 90,
     folder_id: uuid.UUID | None = None,
+    game: GameName | None = None,
 ) -> CollectionHistoryOut:
-    """Wertkurve der Sammlung oder eines Ordners (dann ohne Bestandsmarkierungen)."""
-    points, markers = await collection.history(days, folder_id)
+    """Wertkurve der Sammlung, eines Spiels oder eines Ordners (dann ohne Markierungen)."""
+    points, markers = await collection.history(days, folder_id, game=game)
     return CollectionHistoryOut(
         points=[HistoryPointOut.build(p) for p in points],
         markers=[MarkerOut.build(m) for m in markers],

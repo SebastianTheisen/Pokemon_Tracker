@@ -182,7 +182,7 @@ def test_unknown_kind_needs_nearly_identical_name() -> None:
 def tcgcsv_transport(fail: bool = False) -> httpx.MockTransport:
     """Simuliertes tcgcsv.com plus Cardmarket-Downloads (ein Transport für beide)."""
     catalog = catalog_transport()
-    groups = {3: [{"groupId": 10}], 85: [{"groupId": 20}]}
+    groups = {3: [{"groupId": 10}], 85: [{"groupId": 20}], 68: []}  # 68: One Piece
     products: dict[int, list[dict[str, Any]]] = {
         10: [
             {

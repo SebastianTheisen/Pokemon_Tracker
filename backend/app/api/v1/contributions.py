@@ -23,6 +23,7 @@ from app.schemas.collection import (
 )
 from app.services import contributions, sealed
 from app.services.errors import InvalidInputError
+from app.services.games import GameName
 
 router = APIRouter(tags=["catalog"])
 MIN_SEALED_QUERY = 2
@@ -100,6 +101,7 @@ async def search_cardmarket_sealed(
     q: Annotated[str, Query(max_length=100)] = "",
     kind: ProductKind | None = None,
     expansion: Annotated[int | None, Query(gt=0)] = None,
+    game: GameName | None = None,
 ) -> list[SealedOfferOut]:
     """Versiegelte Produkte im Cardmarket-Katalog mit aktuellem Preis.
 
@@ -107,14 +109,16 @@ async def search_cardmarket_sealed(
     eine Produktart (``kind``)."""
     if expansion is None and len(q.strip()) < MIN_SEALED_QUERY:
         raise InvalidInputError("Mindestens 2 Zeichen oder ein Set wählen.")
-    offers = await sealed.search_sealed(session, q, kind=kind, expansion_id=expansion)
+    offers = await sealed.search_sealed(session, q, kind=kind, expansion_id=expansion, game=game)
     return [SealedOfferOut(**offer.__dict__) for offer in offers]
 
 
 @router.get("/cardmarket/sealed/sets")
-async def sealed_sets(session: SessionDep, _user: CurrentUser) -> list[SealedSetOut]:
+async def sealed_sets(
+    session: SessionDep, _user: CurrentUser, game: GameName | None = None
+) -> list[SealedSetOut]:
     """Sets mit versiegelten Produkten, neueste zuerst."""
-    return [SealedSetOut(**item.__dict__) for item in await sealed.sealed_sets(session)]
+    return [SealedSetOut(**item.__dict__) for item in await sealed.sealed_sets(session, game=game)]
 
 
 @router.post("/products/from-cardmarket")

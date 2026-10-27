@@ -32,7 +32,7 @@ import structlog
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Card, CardSet, CmExpansion, CmProduct, ExpansionLinkSource
+from app.models import Card, CardSet, CmExpansion, CmProduct, ExpansionLinkSource, Game
 from app.services.card_names import translate_card_name
 from app.services.cardmarket_catalog import SINGLE_CATEGORY, link_set
 
@@ -190,7 +190,14 @@ async def match_cardmarket(  # noqa: PLR0912, PLR0915 – ein Durchgang über al
             )
         ).all()
     )
-    sets = (await session.scalars(select(CardSet).where(CardSet.language.in_(languages)))).all()
+    # Nur Pokémon: Andere Spiele haben eigene Kategorien und eine eigene Verknüpfung.
+    sets = (
+        await session.scalars(
+            select(CardSet).where(
+                CardSet.language.in_(languages), CardSet.game == Game.POKEMON.value
+            )
+        )
+    ).all()
     rows = await session.execute(
         select(
             Card.id,
@@ -201,7 +208,9 @@ async def match_cardmarket(  # noqa: PLR0912, PLR0915 – ein Durchgang über al
             Card.number_norm,
             Card.cardmarket_product_id,
             Card.cardmarket_product_override,
-        ).where(Card.language.in_(languages))
+        )
+        .join(CardSet, CardSet.id == Card.set_id)
+        .where(Card.language.in_(languages), CardSet.game == Game.POKEMON.value)
     )
     cards: defaultdict[uuid.UUID, list[_Card]] = defaultdict(list)
     for row in rows:
@@ -217,7 +226,7 @@ async def match_cardmarket(  # noqa: PLR0912, PLR0915 – ein Durchgang über al
     owners: defaultdict[int, set[str]] = defaultdict(set)
     for external_id, expansion_id in await session.execute(
         select(CardSet.external_id, CardSet.cardmarket_expansion_id).where(
-            CardSet.cardmarket_expansion_id.is_not(None)
+            CardSet.cardmarket_expansion_id.is_not(None), CardSet.game == Game.POKEMON.value
         )
     ):
         if expansion_id is not None:

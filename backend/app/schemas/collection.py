@@ -294,6 +294,9 @@ class SummaryOut(BaseModel):
     profit_positions: int
     best_profit: ItemOut | None
     worst_profit: ItemOut | None
+    by_game: dict[str, Decimal] = Field(
+        default_factory=dict, description="Wert je Spiel (nur ohne Spiel- und Ordnerfilter)."
+    )
 
     @classmethod
     def build(cls, summary: CollectionSummary) -> SummaryOut:
@@ -322,6 +325,7 @@ class SummaryOut(BaseModel):
             profit_positions=summary.profit_positions,
             best_profit=item(summary.best_profit),
             worst_profit=item(summary.worst_profit),
+            by_game=summary.by_game,
         )
 
 

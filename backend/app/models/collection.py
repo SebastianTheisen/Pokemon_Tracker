@@ -25,6 +25,7 @@ from sqlalchemy import (
     UniqueConstraint,
     false,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -184,6 +185,8 @@ class PortfolioSnapshot(Base):
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     day: Mapped[date] = mapped_column(Date, primary_key=True)
+    # ``all`` = ganze Sammlung, sonst nur die Positionen eines Spiels (Wertkurve je Spiel).
+    game: Mapped[str] = mapped_column(String(16), primary_key=True, server_default=text("'all'"))
     total_value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     raw_value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     graded_value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)

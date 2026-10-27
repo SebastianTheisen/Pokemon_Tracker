@@ -10,6 +10,10 @@ Ablauf für ``"nachtara 215"``:
 
 Setkürzel + Nummer wie auf der Karte („PFL077“, „pfl 77“, „SV8a-217“): Kürzel (offiziell,
 :attr:`CardSet.code`) oder Set-ID, dann genau diese Nummer – in allen Sprachen.
+
+One Piece druckt die ganze Kartennummer auf („OP01-001“, „ST10-005“, „P-001“): Steht sie in
+der Anfrage, zählt genau diese Nummer (alle Fassungen, alle Sprachen). ``game`` grenzt alle
+Wege auf ein Spiel ein.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ from dataclasses import dataclass
 from sqlalchemy import ColumnElement, Select, Subquery, func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Card, CardSet
+from app.models import Card, CardSet, Game
 from app.services.card_names import foreign_search_terms, translate_card_name
 from app.services.catalog_numbers import ParsedQuery, normalize_number, parse_query
 from app.services.errors import NotFoundError
@@ -32,6 +36,8 @@ MAX_LIMIT = 100
 _CODE_REST = re.compile(r"^\d{1,3}[a-z]?$")
 _MAX_CODE = 8
 MAX_CODE_QUERY_WORDS = 4
+# One-Piece-Kartennummer als eigenes Wort: „OP01-001“, „op01 001“ (zwei Wörter), „P-001“.
+_ONEPIECE_NUMBER = re.compile(r"^(?:[a-z]{1,5}\d{1,2}-?\d{3}|[a-z]{1,2}-\d{3})$", re.I)
 
 
 @dataclass(frozen=True)
@@ -66,23 +72,36 @@ def _ordered(statement: Select[Card], limit: int) -> Select[Card]:
     )
 
 
+def _game_filter(game: str | None) -> list[ColumnElement[bool]]:
+    if game is None:
+        return []
+    return [Card.set_id.in_(select(CardSet.id).where(CardSet.game == game).scalar_subquery())]
+
+
 async def search_cards(
     session: AsyncSession,
     query: str,
     *,
     language: str | None = None,
+    game: str | None = None,
     limit: int = DEFAULT_LIMIT,
 ) -> list[SearchHit]:
-    """Sucht Karten. ``language`` filtert die Ergebnisse auf eine Sprache."""
+    """Sucht Karten. ``language`` filtert die Ergebnisse auf eine Sprache, ``game`` auf ein
+    Spiel."""
     limit = max(1, min(limit, MAX_LIMIT))
-    by_code = await _search_set_code(session, query, language=language, limit=limit)
-    if by_code:
-        return by_code
+    if game in (None, Game.ONEPIECE.value):
+        by_number = await _search_onepiece_number(session, query, language=language, limit=limit)
+        if by_number:
+            return by_number
+    if game in (None, Game.POKEMON.value):
+        by_code = await _search_set_code(session, query, language=language, limit=limit)
+        if by_code:
+            return by_code
     parsed: ParsedQuery = parse_query(query)
     if parsed.is_empty:
         return []
 
-    filters: list[ColumnElement[bool]] = []
+    filters: list[ColumnElement[bool]] = _game_filter(game)
     if parsed.number is not None:
         filters.append(Card.number_norm == parsed.number)
     if language is not None:
@@ -142,6 +161,41 @@ def code_parts(query: str) -> list[tuple[list[tuple[str, str]], str]]:
                 rest = " ".join(tokens[:start] + tokens[start + size :])
                 readings.append((candidates, rest))
     return readings
+
+
+def onepiece_number(query: str) -> tuple[str, str] | None:
+    """(Nummer, restlicher Name) für „zoro OP01-001“ bzw. „op01 001“ – sonst ``None``."""
+    tokens = query.split()
+    for start in range(len(tokens)):
+        for size in (2, 1):
+            part = tokens[start : start + size]
+            if len(part) != size:
+                continue
+            joined = "".join(part) if size == 2 else part[0]  # noqa: PLR2004
+            if size == 2 and not (part[0][-1:].isdigit() and part[1].isdigit()):  # noqa: PLR2004
+                continue  # „op01 001“ ja, „zoro 001“ nein
+            if _ONEPIECE_NUMBER.match(joined):
+                rest = " ".join(tokens[:start] + tokens[start + size :])
+                return joined.upper(), rest
+    return None
+
+
+async def _search_onepiece_number(
+    session: AsyncSession, query: str, *, language: str | None, limit: int
+) -> list[SearchHit]:
+    if len(query.split()) > MAX_CODE_QUERY_WORDS or (found := onepiece_number(query)) is None:
+        return []
+    number, name = found
+    statement = select(Card).where(
+        Card.number_norm == normalize_number(number), *_game_filter(Game.ONEPIECE.value)
+    )
+    if language is not None:
+        statement = statement.where(Card.language == language)
+    cards = list((await session.scalars(_ordered(statement, limit))).unique())
+    if name:
+        cards = [card for card in cards if name.casefold() in card.name.casefold()] or cards
+    cards.sort(key=lambda card: (card.language, card.external_id or ""))
+    return [SearchHit(card=card, score=1.0) for card in cards]
 
 
 def _name_matches(card: Card, name: str) -> bool:
@@ -250,9 +304,13 @@ async def get_card(session: AsyncSession, card_id: uuid.UUID) -> Card:
     return card
 
 
-async def list_sets(session: AsyncSession, language: str | None = None) -> Sequence[CardSet]:
+async def list_sets(
+    session: AsyncSession, language: str | None = None, *, game: str | None = None
+) -> Sequence[CardSet]:
     statement = select(CardSet).order_by(CardSet.release_date.desc().nulls_last(), CardSet.name)
     if language is not None:
         statement = statement.where(CardSet.language == language)
+    if game is not None:
+        statement = statement.where(CardSet.game == game)
     result = await session.scalars(statement)
     return result.all()

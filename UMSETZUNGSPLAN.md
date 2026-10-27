@@ -824,10 +824,10 @@ Alle Aufwandsangaben sind grobe Schätzungen für einen Entwickler mit KI-Unters
 
 Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter oben** „Alle · Pokémon · One Piece“ (gemerkt, wirkt auf Übersicht, Sammlung, Sets, Suche; Gesamtwert über alles); **Sealed ja**; **Scanner in Schritt 2**.
 
-- [ ] 8.0 Erkundung der Quellen (`deploy/phase8_onepiece.sh` → `docs/phase5/onepiece.md`): Cardmarket-Spiel-ID, Namensschema, Ausgaben; tcgcsv-Kategorien (Nummer, Seltenheit, Bilder); offizielle Kartenlisten EN/JP; PriceCharting
-- [ ] 8.1 Datenmodell: Spalte `game` (`pokemon`/`onepiece`) an Sets und Cardmarket-Produkten, Migration, alle Bestandsdaten = `pokemon`
-- [ ] 8.2 Katalog-Import One Piece (Sets, Karten, Nummern, Seltenheit, Bilder, Varianten/Parallels) aus der Quelle, die 8.0 ergibt
-- [ ] 8.3 Preise + Sealed über den Cardmarket-Download des Spiels, Set-Verknüpfung, Bilder für Sealed über tcgcsv
+- [x] 8.0 Erkundung der Quellen (`deploy/phase8_onepiece.sh` → `docs/phase5/onepiece.md`): Cardmarket = Spiel 18 (12 651 Einzelkarten, 150 Ausgaben, Nummer „(OP01-001)“ im Namen bei 90 %, 799 Sealed, Preisführer mit `-foil`); offizielle Kartenlisten EN (61 Sets) / JP (63 Sets) serverseitig gerendert, Parallel-Fassungen als `_p1`; tcgcsv Kategorie 68 (87 Sets); PriceCharting 403 → nicht genutzt
+- [x] 8.1 Datenmodell: Spalte `game` (`pokemon`/`onepiece`) an Sets und Cardmarket-Produkten, Migration 0022, alle Bestandsdaten = `pokemon`; Wertkurve je Spiel (`portfolio_snapshots.game`, bisheriger Verlauf als `all` und `pokemon`)
+- [x] 8.2 Katalog-Import One Piece (`app/services/onepiece_catalog.py`, CLI `onepiece-import [--dry-run]`, Worker wöchentlich): Sets (Name, Gruppe Booster/Extra/Premium/Starter/Promos, Kürzel), Karten je Fassung (`op-OP01-001_p1`, „(Parallel)“), Seltenheit, offizielle Bilder; eine Karte gehört zum ältesten Set, das sie listet. **Erstlauf auf dem VPS:** `deploy/phase8_onepiece_import.sh`
+- [x] 8.3 Preise + Sealed über den Cardmarket-Download je Spiel (`run_catalog_import(game=…)`, Preise werden nur im eigenen Spiel aufgeräumt); Set ↔ Ausgabe über die Kartennummern, Fassungen in Produkt-ID-Reihenfolge (nur bei gleicher Anzahl, sonst nur die normale Karte); One-Piece-Preise allein aus dem Preisführer (TCGdex/PriceCharting/Plug-ins werden nicht gefragt); Cardmarket-Links `/OnePiece/`; Filter `game` für Suche (auch „OP01-001“), Sets, Sammlung, Übersicht (`by_game`), Kurve, Gewinner/Verlierer, Sealed; Scanner bleibt bis 8.5 bei Pokémon. Sealed-Bilder über tcgcsv Kategorie 68 (nie spielübergreifend; Einzelkarten anderer Spiele gelten nicht als Sealed)
 - [ ] 8.4 App: Spiel-Umschalter, Sets durchblättern je Spiel, Suche/Sammlung/Übersicht gefiltert, Set-Fortschritt
 - [ ] 8.5 Scanner für One Piece (Kartencode „OP01-001“ per Texterkennung, Bildabgleich)
 

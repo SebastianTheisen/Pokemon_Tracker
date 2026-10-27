@@ -38,13 +38,18 @@ TCGPLAYER_VARIANTS = {
 }
 
 
+# Pfad je Spiel auf cardmarket.com (``/de/OnePiece/Products?idProduct=…``).
+CARDMARKET_URL_NAMES = {"pokemon": "Pokemon", "onepiece": "OnePiece"}
+
+
 def cardmarket_url(card: CardRef, product_id: object) -> str:
     """Beleglink: direkt per Produkt-ID, sonst Cardmarket-Suche (beide vom Nutzer geprüft)."""
+    base = f"https://www.cardmarket.com/de/{CARDMARKET_URL_NAMES.get(card.game, 'Pokemon')}"
     # bool ist in Python ein int – ein fehlerhaftes ``true`` darf keinen Link ergeben.
     if isinstance(product_id, int) and not isinstance(product_id, bool) and product_id > 0:
-        return f"https://www.cardmarket.com/de/Pokemon/Products?idProduct={product_id}"
+        return f"{base}/Products?idProduct={product_id}"
     query = quote_plus(f"{card.name} {card.number}")
-    return f"https://www.cardmarket.com/de/Pokemon/Products/Search?searchString={query}"
+    return f"{base}/Products/Search?searchString={query}"
 
 
 def product_id_from_url(url: str | None) -> int | None:
@@ -131,6 +136,8 @@ class TcgdexPriceProvider:
         self._client = client
 
     async def fetch(self, card: CardRef) -> list[PriceQuote]:
+        if card.game != "pokemon":
+            raise PriceNotAvailableError("TCGdex kennt nur Pokémon")
         if card.external_id is None:
             return []  # selbst angelegte Karte – TCGdex kennt sie nicht
         try:

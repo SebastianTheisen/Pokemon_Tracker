@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Card, CollectionItem, PricePoint
 from app.providers.pricing.tcgdex_prices import CARDMARKET
+from app.services.games import item_game
 
 MIN_VALUE = Decimal("1.00")
 MIN_CHANGE_PCT = Decimal("5")
@@ -113,19 +114,26 @@ async def trend_changes(
 
 
 async def price_movers(
-    session: AsyncSession, owner_id: uuid.UUID, *, now: datetime, days: int = 7, limit: int = 5
+    session: AsyncSession,
+    owner_id: uuid.UUID,
+    *,
+    now: datetime,
+    days: int = 7,
+    limit: int = 5,
+    game: str | None = None,
 ) -> Movers:
     """Größte Gewinner und Verlierer (nach Veränderung des Gesamtwerts) im Zeitraum."""
     holdings: defaultdict[tuple[uuid.UUID, str], int] = defaultdict(int)
-    rows = await session.execute(
-        select(CollectionItem.card_id, CollectionItem.variant, func.sum(CollectionItem.quantity))
-        .where(
-            CollectionItem.user_id == owner_id,
-            CollectionItem.card_id.is_not(None),
-            CollectionItem.grading_company.is_(None),
-        )
-        .group_by(CollectionItem.card_id, CollectionItem.variant)
+    statement = select(
+        CollectionItem.card_id, CollectionItem.variant, func.sum(CollectionItem.quantity)
+    ).where(
+        CollectionItem.user_id == owner_id,
+        CollectionItem.card_id.is_not(None),
+        CollectionItem.grading_company.is_(None),
     )
+    if game is not None:
+        statement = statement.where(item_game() == game)
+    rows = await session.execute(statement.group_by(CollectionItem.card_id, CollectionItem.variant))
     for card_id, variant, quantity in rows:
         if card_id is not None:
             holdings[(card_id, variant)] = int(quantity or 0)

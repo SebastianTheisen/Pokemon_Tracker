@@ -18,6 +18,12 @@ Preis als ein falscher.
 
 Ein Set mit Zwillingen, dessen Ausgabe nur von TCGdex stammt, gilt als **unsicher** – die
 App zeigt dann einen Hinweis und die Auswahl der Sprachfassung.
+
+**Mehrere Spiele:** Cardmarket bietet die Downloads je Spiel an (``…_6.json`` Pokémon,
+``…_18.json`` One Piece, :data:`CARDMARKET_GAMES`). Jedes Spiel wird in einem eigenen Lauf
+importiert; Preise werden nur innerhalb desselben Spiels aufgeräumt. Pokémon verknüpft
+seine Sets über TCGdex und die Kartennamen, One Piece über die aufgedruckte Kartennummer
+(:mod:`app.services.onepiece_catalog`).
 """
 
 from __future__ import annotations
@@ -48,12 +54,14 @@ from app.models import (
     CmPrice,
     CmProduct,
     ExpansionLinkSource,
+    Game,
     PriceCheck,
     PricePoint,
 )
 from app.providers.pricing import CardRef, PriceQuote
 from app.providers.pricing.tcgdex_prices import (
     CARDMARKET,
+    CARDMARKET_URL_NAMES,
     parse_pricing,
     product_id_from_url,
 )
@@ -63,10 +71,41 @@ from app.services.errors import NotFoundError
 
 log = structlog.get_logger(__name__)
 
-PRODUCTS_PATH = "productList/products_singles_6.json"
-SEALED_PATH = "productList/products_nonsingles_6.json"
-SINGLE_CATEGORY = 51  # „Pokémon Single“; alles andere ist versiegelt
-GUIDE_PATH = "priceGuide/price_guide_6.json"
+
+@dataclass(frozen=True)
+class CardmarketGame:
+    """Ein Spiel bei Cardmarket: Nummer der Downloads, Kategorie der Einzelkarten, URL-Teil."""
+
+    game: str
+    id_game: int
+    single_category: int
+    url_name: str
+
+    @property
+    def products_path(self) -> str:
+        return f"productList/products_singles_{self.id_game}.json"
+
+    @property
+    def sealed_path(self) -> str:
+        return f"productList/products_nonsingles_{self.id_game}.json"
+
+    @property
+    def guide_path(self) -> str:
+        return f"priceGuide/price_guide_{self.id_game}.json"
+
+
+# Spike ``docs/phase5/onepiece.md`` (25.10.2026): One Piece = Spiel 18, Einzelkarten 1621.
+CARDMARKET_GAMES: dict[str, CardmarketGame] = {
+    Game.POKEMON.value: CardmarketGame(
+        Game.POKEMON.value, 6, 51, CARDMARKET_URL_NAMES[Game.POKEMON.value]
+    ),
+    Game.ONEPIECE.value: CardmarketGame(
+        Game.ONEPIECE.value, 18, 1621, CARDMARKET_URL_NAMES[Game.ONEPIECE.value]
+    ),
+}
+SINGLE_CATEGORY = CARDMARKET_GAMES[Game.POKEMON.value].single_category  # „Pokémon Single“
+# Kategorien der Einzelkarten aller Spiele; alles andere ist versiegelt.
+SINGLE_CATEGORIES: tuple[int, ...] = tuple(g.single_category for g in CARDMARKET_GAMES.values())
 GUIDE_METRICS = ("trend", "low", "avg", "avg1", "avg7", "avg30")
 GUIDE_KEYS = (*GUIDE_METRICS, *(f"{metric}-holo" for metric in GUIDE_METRICS))
 # Zwillinge: höchstens so viele Tage zwischen den ersten Einträgen beider Ausgaben und
@@ -119,6 +158,7 @@ class ProductRow:
     date_added: date | None
     id_category: int | None = SINGLE_CATEGORY
     category_name: str | None = None
+    game: str = Game.POKEMON.value
 
 
 @dataclass(frozen=True)
@@ -173,7 +213,9 @@ def _rows(data: object, key: str) -> tuple[datetime | None, list[dict[str, Any]]
     return parse_created_at(data.get("createdAt")), rows
 
 
-def parse_products(data: object) -> tuple[datetime | None, list[ProductRow]]:
+def parse_products(
+    data: object, *, game: str = Game.POKEMON.value
+) -> tuple[datetime | None, list[ProductRow]]:
     """Produktkatalog einlesen; unvollständige Einträge werden übersprungen."""
     created_at, rows = _rows(data, "products")
     products: list[ProductRow] = []
@@ -192,6 +234,7 @@ def parse_products(data: object) -> tuple[datetime | None, list[ProductRow]]:
                 date_added=_parse_date(row.get("dateAdded")),
                 id_category=_positive_int(row.get("idCategory")),
                 category_name=str(row.get("categoryName") or "")[:60] or None,
+                game=game,
             )
         )
     return created_at, products
@@ -300,14 +343,18 @@ async def store_catalog(
     guide: Sequence[GuideRow],
     *,
     guide_created_at: datetime,
+    game: str = Game.POKEMON.value,
 ) -> StoreReport:
-    """Produkte, Preise und Ausgaben schreiben (Upsert). Commit macht der Aufrufer."""
+    """Produkte, Preise und Ausgaben eines Spiels schreiben (Upsert). Commit macht der
+    Aufrufer."""
     report = StoreReport(products=len(products), prices=len(guide))
+    single_category = CARDMARKET_GAMES[game].single_category
     for chunk in _batches(products):
         statement = insert(CmProduct).values(
             [
                 {
                     "id_product": p.id_product,
+                    "game": game,
                     "id_expansion": p.id_expansion,
                     "id_metacard": p.id_metacard,
                     "name": p.name,
@@ -324,6 +371,7 @@ async def store_catalog(
                 set_={
                     column: statement.excluded[column]
                     for column in (
+                        "game",
                         "id_expansion",
                         "id_metacard",
                         "name",
@@ -338,7 +386,12 @@ async def store_catalog(
     for guide_chunk in _batches(guide):
         price_statement = insert(CmPrice).values(
             [
-                {"id_product": g.id_product, "metrics": g.metrics, "updated_at": guide_created_at}
+                {
+                    "id_product": g.id_product,
+                    "game": game,
+                    "metrics": g.metrics,
+                    "updated_at": guide_created_at,
+                }
                 for g in guide_chunk
             ]
         )
@@ -346,26 +399,29 @@ async def store_catalog(
             price_statement.on_conflict_do_update(
                 index_elements=[CmPrice.id_product],
                 set_={
+                    "game": price_statement.excluded.game,
                     "metrics": price_statement.excluded.metrics,
                     "updated_at": price_statement.excluded.updated_at,
                 },
             )
         )
-    # Was im neuen Preisführer fehlt, hat keinen aktuellen Preis mehr.
+    # Was im neuen Preisführer fehlt, hat keinen aktuellen Preis mehr – nur in diesem Spiel:
+    # Die Preisführer der Spiele haben verschiedene Zeitstempel.
     await session.execute(
         delete(CmPrice)
-        .where(CmPrice.updated_at < guide_created_at)
+        .where(CmPrice.game == game, CmPrice.updated_at < guide_created_at)
         .execution_options(synchronize_session=False)
     )
 
     # Ausgaben und Zwillinge nur aus Einzelkarten (Versiegeltes hat keine Metakarte).
-    stats = expansion_stats(p for p in products if p.id_category in (None, SINGLE_CATEGORY))
+    stats = expansion_stats(p for p in products if p.id_category in (None, single_category))
     twins = find_twins(stats)
     report.expansions = len(stats)
     report.expansions_with_twins = len(twins)
     rows = [
         {
             "id_expansion": s.id_expansion,
+            "game": game,
             "product_count": s.product_count,
             "first_added": s.first_added,
             "twin_ids": twins.get(s.id_expansion, []),
@@ -379,7 +435,7 @@ async def store_catalog(
                 index_elements=[CmExpansion.id_expansion],
                 set_={
                     column: expansion_statement.excluded[column]
-                    for column in ("product_count", "first_added", "twin_ids")
+                    for column in ("game", "product_count", "first_added", "twin_ids")
                 },
             )
         )
@@ -394,7 +450,10 @@ async def store_catalog(
 
 
 async def download_catalog(
-    settings: Settings, *, transport: httpx.AsyncBaseTransport | None = None
+    settings: Settings,
+    *,
+    game: CardmarketGame = CARDMARKET_GAMES[Game.POKEMON.value],
+    transport: httpx.AsyncBaseTransport | None = None,
 ) -> tuple[object, object, object]:
     """Lädt Einzelkarten, versiegelte Produkte und Preisführer (gleichzeitig) als JSON."""
     base = settings.cardmarket_catalog_url.rstrip("/")
@@ -406,9 +465,9 @@ async def download_catalog(
     ) as client:
         try:
             responses = await asyncio.gather(
-                client.get(f"{base}/{PRODUCTS_PATH}"),
-                client.get(f"{base}/{SEALED_PATH}"),
-                client.get(f"{base}/{GUIDE_PATH}"),
+                client.get(f"{base}/{game.products_path}"),
+                client.get(f"{base}/{game.sealed_path}"),
+                client.get(f"{base}/{game.guide_path}"),
             )
             for response in responses:
                 response.raise_for_status()
@@ -756,8 +815,9 @@ class CardmarketChoice:
     options: list[ProductOption] = field(default_factory=list)
 
 
-def product_url(product_id: int) -> str:
-    return f"https://www.cardmarket.com/de/Pokemon/Products?idProduct={product_id}"
+def product_url(product_id: int, game: str = Game.POKEMON.value) -> str:
+    url_name = CARDMARKET_GAMES.get(game, CARDMARKET_GAMES[Game.POKEMON.value]).url_name
+    return f"https://www.cardmarket.com/de/{url_name}/Products?idProduct={product_id}"
 
 
 def _euro(metrics: dict[str, float], key: str) -> Decimal | None:
@@ -787,7 +847,7 @@ async def cardmarket_choice(session: AsyncSession, card: Card) -> CardmarketChoi
         set_source=card_set.cardmarket_expansion_source,
         uncertain=False,
         catalog_ready=catalog_ready,
-        url=product_url(resolution.product_id) if resolution.product_id else None,
+        url=product_url(resolution.product_id, card_set.game) if resolution.product_id else None,
     )
     if base is None:
         return result
@@ -843,7 +903,7 @@ async def cardmarket_choice(session: AsyncSession, card: Card) -> CardmarketChoi
                 name=p.name,
                 trend=_euro(metrics, "trend"),
                 low=_euro(metrics, "low"),
-                url=product_url(p.id_product),
+                url=product_url(p.id_product, p.game),
                 selected=p.id_product == resolution.product_id,
                 from_tcgdex=p.id_product == resolution.tcgdex_product_id,
             )
@@ -969,23 +1029,26 @@ async def run_catalog_import(
     tcgdex: TcgdexClient | None,
     transport: httpx.AsyncBaseTransport | None = None,
     clock: Clock = _utc_now,
+    game: str = Game.POKEMON.value,
 ) -> ImportSummary:
-    """Ein Lauf: herunterladen, speichern, feste Ausgaben, Sets bei TCGdex verknüpfen.
+    """Ein Lauf für ein Spiel: herunterladen, speichern, Sets verknüpfen.
 
-    ``tcgdex=None`` überspringt das Verknüpfen (z. B. für einen schnellen Test).
+    Pokémon: feste Ausgaben, TCGdex, Kartennamen (``tcgdex=None`` überspringt TCGdex, z. B.
+    für einen schnellen Test). One Piece: über die Kartennummer im Produktnamen.
     Fehler werden im Lauf protokolliert und als ``error`` zurückgegeben.
     """
+    cm_game = CARDMARKET_GAMES[game]
     async with session_factory() as session:
-        run = CmImport()
+        run = CmImport(game=game)
         session.add(run)
         await session.commit()
         summary = ImportSummary(run_id=run.id)
     try:
         products_data, sealed_data, guide_data = await download_catalog(
-            settings, transport=transport
+            settings, game=cm_game, transport=transport
         )
-        summary.catalog_created_at, products = parse_products(products_data)
-        _, sealed = parse_products(sealed_data)
+        summary.catalog_created_at, products = parse_products(products_data, game=game)
+        _, sealed = parse_products(sealed_data, game=game)
         summary.guide_created_at, guide = parse_price_guide(guide_data)
         if not products:
             raise CatalogError("Produktkatalog ist leer")
@@ -995,21 +1058,23 @@ async def run_catalog_import(
                 [*products, *sealed],
                 guide,
                 guide_created_at=summary.guide_created_at or clock(),
+                game=game,
             )
-            summary.known_links = await apply_known_links(session)
+            if game == Game.POKEMON.value:
+                summary.known_links = await apply_known_links(session)
             await session.commit()
         summary.products, summary.prices = stored.products, stored.prices
         summary.expansions = stored.expansions
         summary.expansions_with_twins = stored.expansions_with_twins
-        if tcgdex is not None:
-            summary.sets_linked = await link_sets(session_factory, tcgdex, settings, now=clock())
-        # Erst nach TCGdex: übernimmt nur, was TCGdex offen lässt.
-        from app.services.cardmarket_matching import match_cardmarket  # noqa: PLC0415 – Zyklus
+        if game == Game.POKEMON.value:
+            await _link_pokemon(session_factory, settings, tcgdex, summary, now=clock())
+        else:
+            from app.services.onepiece_catalog import link_onepiece  # noqa: PLC0415 – Zyklus
 
-        async with session_factory() as session:
-            matched = await match_cardmarket(session)
-            await session.commit()
-        summary.names_matched = sum(matched.cards_linked.values())
+            async with session_factory() as session:
+                linked = await link_onepiece(session)
+                await session.commit()
+            summary.sets_linked, summary.names_matched = linked.sets_linked, linked.cards_linked
     except Exception as exc:  # Lauf protokollieren statt den Worker zu stören
         summary.error = f"{type(exc).__name__}: {exc}"[:500]
         log.exception("cardmarket.import_failed")
@@ -1040,9 +1105,33 @@ async def run_catalog_import(
     return summary
 
 
-async def last_successful_import(session: AsyncSession) -> datetime | None:
+async def _link_pokemon(
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    tcgdex: TcgdexClient | None,
+    summary: ImportSummary,
+    *,
+    now: datetime,
+) -> None:
+    """Pokémon-Sets verknüpfen: erst über TCGdex, dann über die Kartennamen."""
+    if tcgdex is not None:
+        summary.sets_linked = await link_sets(session_factory, tcgdex, settings, now=now)
+    # Erst nach TCGdex: übernimmt nur, was TCGdex offen lässt.
+    from app.services.cardmarket_matching import match_cardmarket  # noqa: PLC0415 – Zyklus
+
+    async with session_factory() as session:
+        matched = await match_cardmarket(session)
+        await session.commit()
+    summary.names_matched = sum(matched.cards_linked.values())
+
+
+async def last_successful_import(
+    session: AsyncSession, game: str = Game.POKEMON.value
+) -> datetime | None:
     return await session.scalar(
-        select(func.max(CmImport.finished_at)).where(CmImport.error.is_(None))
+        select(func.max(CmImport.finished_at)).where(
+            CmImport.error.is_(None), CmImport.game == game
+        )
     )
 
 
@@ -1070,7 +1159,12 @@ class CatalogStatus:
 
 
 async def catalog_status(session: AsyncSession) -> CatalogStatus:
-    last_run = await session.scalar(select(CmImport).order_by(CmImport.id.desc()).limit(1))
+    last_run = await session.scalar(
+        select(CmImport)
+        .where(CmImport.game == Game.POKEMON.value)
+        .order_by(CmImport.id.desc())
+        .limit(1)
+    )
     products = int(await session.scalar(select(func.count()).select_from(CmProduct)) or 0)
     prices = int(await session.scalar(select(func.count()).select_from(CmPrice)) or 0)
     source_rows = await session.execute(

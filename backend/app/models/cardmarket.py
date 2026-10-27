@@ -48,6 +48,10 @@ class CmProduct(Base):
     __tablename__ = "cm_products"
 
     id_product: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    # Spiel des Downloads (:class:`app.models.catalog.Game`).
+    game: Mapped[str] = mapped_column(
+        String(16), server_default=text("'pokemon'"), index=True, nullable=False
+    )
     id_expansion: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id_metacard: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(300), nullable=False)
@@ -66,6 +70,8 @@ class CmPrice(Base):
     __tablename__ = "cm_prices"
 
     id_product: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    # Jedes Spiel hat einen eigenen Preisführer – Aufräumen nur innerhalb des Spiels.
+    game: Mapped[str] = mapped_column(String(16), server_default=text("'pokemon'"), nullable=False)
     metrics: Mapped[dict[str, float]] = mapped_column(JSONB, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -76,6 +82,7 @@ class CmExpansion(Base):
     __tablename__ = "cm_expansions"
 
     id_expansion: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    game: Mapped[str] = mapped_column(String(16), server_default=text("'pokemon'"), nullable=False)
     product_count: Mapped[int] = mapped_column(Integer, nullable=False)
     first_added: Mapped[date | None] = mapped_column(Date)
     twin_ids: Mapped[list[int]] = mapped_column(
@@ -93,6 +100,7 @@ class CmImport(Base):
     __tablename__ = "cm_imports"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game: Mapped[str] = mapped_column(String(16), server_default=text("'pokemon'"), nullable=False)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

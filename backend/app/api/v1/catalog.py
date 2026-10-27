@@ -11,6 +11,7 @@ from app.api.deps import CurrentUser, PriceServiceDep, SessionDep
 from app.core.config import CatalogLanguage
 from app.schemas.catalog import CardOut, SearchHitOut, SetOut
 from app.services import catalog_search
+from app.services.games import GameName
 
 router = APIRouter(tags=["catalog"])
 
@@ -23,11 +24,12 @@ async def search_cards(
     prices: PriceServiceDep,
     q: Annotated[str, Query(min_length=1, max_length=100, description="z. B. „nachtara 215“")],
     language: CatalogLanguage | None = None,
+    game: GameName | None = None,
     limit: Annotated[int, Query(ge=1, le=catalog_search.MAX_LIMIT)] = catalog_search.DEFAULT_LIMIT,
 ) -> list[SearchHitOut]:
     """Suche nach Name (Deutsch/Englisch, auch gemischt, tippfehlertolerant) und/oder Nummer –
     mit Near-Mint-Preis je Treffer (nur Gespeichertes und Preisführer, kein Abruf)."""
-    hits = await catalog_search.search_cards(session, q, language=language, limit=limit)
+    hits = await catalog_search.search_cards(session, q, language=language, game=game, limit=limit)
     preview = await prices.preview_prices([hit.card for hit in hits], user)
     return [
         SearchHitOut(
@@ -47,6 +49,10 @@ async def get_card(card_id: uuid.UUID, session: SessionDep, _user: CurrentUser) 
 
 @router.get("/sets")
 async def list_sets(
-    session: SessionDep, _user: CurrentUser, language: CatalogLanguage | None = None
+    session: SessionDep,
+    _user: CurrentUser,
+    language: CatalogLanguage | None = None,
+    game: GameName | None = None,
 ) -> list[SetOut]:
-    return [SetOut.model_validate(s) for s in await catalog_search.list_sets(session, language)]
+    sets = await catalog_search.list_sets(session, language, game=game)
+    return [SetOut.model_validate(s) for s in sets]

@@ -40,13 +40,17 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
-from app.models import CardSet, CmImport, CmProduct, Product, ProductKind
-from app.services.cardmarket_catalog import ASIAN_LANGUAGES, SINGLE_CATEGORY
+from app.models import CardSet, CmImport, CmProduct, Game, Product, ProductKind
+from app.services.cardmarket_catalog import ASIAN_LANGUAGES, SINGLE_CATEGORIES
 from app.services.sealed import kind_for
 
 log = structlog.get_logger(__name__)
 
-CATEGORIES = {3: "en", 85: "ja"}  # Pokemon, Pokemon Japan
+# Katalog je TCGplayer-Kategorie: Pokemon, Pokemon Japan, One Piece Card Game (Spike
+# ``docs/phase5/onepiece.md``). One Piece bekommt einen eigenen Schlüssel – Namen wie
+# „Booster Box“ dürfen nie über die Spielgrenze hinweg zugeordnet werden.
+ONEPIECE_KEY = "onepiece"
+CATEGORIES = {3: "en", 85: "ja", 68: ONEPIECE_KEY}
 MIN_SIMILARITY = 0.72
 MIN_SIMILARITY_ANY_KIND = 0.9  # Art auf einer Seite unbekannt → Name muss fast gleich sein
 MIN_LEAD = 0.05  # Vorsprung vor dem Zweitbesten, sonst zweideutig
@@ -320,13 +324,17 @@ async def match_sealed_images(session: AsyncSession, products: Sequence[TcgProdu
     sealed = (
         await session.scalars(
             select(CmProduct).where(
-                CmProduct.id_category.is_not(None), CmProduct.id_category != SINGLE_CATEGORY
+                CmProduct.id_category.is_not(None),
+                CmProduct.id_category.not_in(SINGLE_CATEGORIES),
             )
         )
     ).all()
     report.sealed = len(sealed)
     for product in sealed:
-        languages = ("ja", "en") if product.id_expansion in asian else ("en", "ja")
+        if product.game == Game.ONEPIECE.value:
+            languages: tuple[str, ...] = (ONEPIECE_KEY,)
+        else:
+            languages = ("ja", "en") if product.id_expansion in asian else ("en", "ja")
         hit = matcher.best(product.name, kind_for(product.category_name, product.name), languages)
         if hit is None:
             # Zuordnung neu bewertet → altes, jetzt verworfenes Bild nicht stehen lassen.

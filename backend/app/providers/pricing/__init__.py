@@ -40,6 +40,7 @@ class CardRef:
     release_date: date | None = None
     graded: bool = False  # liegt bei jemandem als Slab in der Sammlung
     pricecharting_url: str | None = None  # bekannte PriceCharting-Produktseite
+    game: str = "pokemon"  # Spiel der Karte; die meisten Quellen kennen nur Pokémon
 
 
 @dataclass(frozen=True)

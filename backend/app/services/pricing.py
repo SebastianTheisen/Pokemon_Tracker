@@ -36,6 +36,7 @@ from app.models import (
     CardPriceLink,
     CmPrice,
     CollectionItem,
+    Game,
     PriceAlert,
     PriceCheck,
     PricePoint,
@@ -45,6 +46,7 @@ from app.models import (
 from app.providers.pricing import (
     CONDITIONS,
     CardRef,
+    PriceKind,
     PriceNotAvailableError,
     PriceProvider,
     PriceQuote,
@@ -161,6 +163,20 @@ class RefreshReport:
     quotes_stored: int = 0
 
 
+class GuideOnlyProvider:
+    """Quelle für Spiele ohne eigene Preisquelle (One Piece): Sie kennt keine Karte – dadurch
+    greifen die Werte des Cardmarket-Preisführers für das verknüpfte Produkt."""
+
+    name = "cardmarket-guide"
+    kind: PriceKind = "verified"
+
+    async def fetch(self, card: CardRef) -> list[PriceQuote]:
+        raise PriceNotAvailableError(f"{card.game}: nur Cardmarket-Preisführer")
+
+
+GUIDE_ONLY = GuideOnlyProvider()
+
+
 def card_ref(card: Card) -> CardRef:
     return CardRef(
         card_id=card.id,
@@ -169,6 +185,7 @@ def card_ref(card: Card) -> CardRef:
         name=card.name,
         number=card.number,
         set_name=card.card_set.name,
+        game=card.card_set.game,
     )
 
 
@@ -210,7 +227,10 @@ class PriceService:
         für die tägliche Aktualisierung vor."""
         report = RefreshReport()
         now = self._now()
-        for provider in self._providers:
+        # Die Quellen (TCGdex, PriceCharting, Plug-ins) kennen nur Pokémon; andere Spiele
+        # bekommen ihre Werte allein aus dem Cardmarket-Preisführer.
+        providers = self._providers if card.card_set.game == Game.POKEMON.value else [GUIDE_ONLY]
+        for provider in providers:
             if getattr(provider, "fallback_only", False) and not await self._needs_fallback(card):
                 report.outcomes[provider.name] = "not_needed"  # Cardmarket hat einen Preis
                 continue

@@ -47,6 +47,7 @@ from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import create_engine, create_session_factory
 from app.models import (
+    Game,
     GradingCompany,
     ImageImportRun,
     OfficialCard,
@@ -67,9 +68,9 @@ from app.services import push
 from app.services.admin import AdminService
 from app.services.alerts import check_price_alerts
 from app.services.card_details import sync_card_details
+from app.services.cardmarket_catalog import CARDMARKET_GAMES, run_catalog_import
 from app.services.cardmarket_catalog import catalog_status as cardmarket_status
 from app.services.cardmarket_catalog import render_status as render_cardmarket_status
-from app.services.cardmarket_catalog import run_catalog_import
 from app.services.cardmarket_matching import match_cardmarket, render_match_report
 from app.services.catalog_search import search_cards
 from app.services.catalog_sync import fill_image_fallbacks, remove_digital_sets, sync_catalog
@@ -85,6 +86,11 @@ from app.services.image_import import (
 from app.services.image_import import (
     render_report as render_image_report,
 )
+from app.services.onepiece_catalog import (
+    OnePieceCatalog,
+    OnePieceCatalogError,
+)
+from app.services.onepiece_catalog import render_report as render_onepiece_report
 from app.services.price_health import SourceHealth
 from app.services.pricecharting_catalog import PriceChartingCatalog
 from app.services.pricecharting_catalog import render_report as render_pricecharting_report
@@ -298,13 +304,25 @@ async def _cardmarket_import(
     factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
 ) -> None:
     """Cardmarket-Katalog + Preisführer laden, Sets mit ihrer Cardmarket-Ausgabe verknüpfen."""
-    if args.no_link:
-        summary = await run_catalog_import(factory, settings, tcgdex=None)
-    else:
-        async with TcgdexClient(
-            base_url=settings.tcgdex_base_url, user_agent=settings.http_user_agent
-        ) as client:
-            summary = await run_catalog_import(factory, settings, tcgdex=client)
+    games = list(CARDMARKET_GAMES) if args.game == "all" else [args.game]
+    errors: list[str] = []
+    for game in games:
+        if args.no_link or game != Game.POKEMON.value:
+            summary = await run_catalog_import(factory, settings, tcgdex=None, game=game)
+        else:
+            async with TcgdexClient(
+                base_url=settings.tcgdex_base_url, user_agent=settings.http_user_agent
+            ) as client:
+                summary = await run_catalog_import(factory, settings, tcgdex=client, game=game)
+        print(
+            f"[{game}] Produkte: {summary.products}, Preise: {summary.prices}, Ausgaben: "
+            f"{summary.expansions} (mit Zwillingen: {summary.expansions_with_twins}), "
+            f"feste Zuordnungen geändert: {summary.known_links}, "
+            f"Sets verknüpft: {summary.sets_linked}, "
+            f"Karten verknüpft (Name bzw. Nummer): {summary.names_matched}"
+        )
+        if summary.error:
+            errors.append(f"{game}: {summary.error}")
     images = await refresh_sealed_images(factory, settings, force=args.images)
     if images is not None:
         print(
@@ -312,20 +330,27 @@ async def _cardmarket_import(
             f"({dict(images.by_category.most_common())}), Produkte ergänzt: "
             f"{images.products_updated}"
         )
-    print(
-        f"Produkte: {summary.products}, Preise: {summary.prices}, Ausgaben: "
-        f"{summary.expansions} (mit Zwillingen: {summary.expansions_with_twins}), "
-        f"feste Zuordnungen geändert: {summary.known_links}, "
-        f"Sets verknüpft: {summary.sets_linked}, "
-        f"Karten über den Namen verknüpft: {summary.names_matched}"
-    )
     async with factory() as session:
         text = render_cardmarket_status(await cardmarket_status(session))
     if args.out:
         await asyncio.to_thread(Path(args.out).write_text, text, encoding="utf-8")
     print(text)
-    if summary.error:
-        raise SystemExit(f"Fehler: {summary.error}")
+    if errors:
+        raise SystemExit("Fehler: " + "; ".join(errors))
+
+
+async def _onepiece_import(
+    factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
+) -> None:
+    """Sets und Karten (alle Fassungen) laden, danach mit Cardmarket verknüpfen."""
+    try:
+        report = await OnePieceCatalog(factory, settings).run(args.language, dry_run=args.dry_run)
+    except OnePieceCatalogError as exc:
+        raise SystemExit(f"Fehler: {exc}") from exc
+    text = render_onepiece_report(report)
+    if args.out:
+        await asyncio.to_thread(Path(args.out).write_text, text, encoding="utf-8")
+    print(text)
 
 
 async def _cardmarket_status(
@@ -776,6 +801,9 @@ def _add_cardmarket_commands(commands: Any) -> None:
     )
     cardmarket.add_argument("--out", help="Status zusätzlich als Markdown-Datei")
     cardmarket.add_argument(
+        "--game", choices=[*CARDMARKET_GAMES, "all"], default="all", help="Spiel (Standard: alle)"
+    )
+    cardmarket.add_argument(
         "--images", action="store_true", help="Bilder für Versiegeltes jetzt abgleichen"
     )
     cardmarket.set_defaults(handler=_cardmarket_import)
@@ -789,6 +817,15 @@ def _add_cardmarket_commands(commands: Any) -> None:
     )
     cardmarket_info.add_argument("--out", help="zusätzlich als Markdown-Datei")
     cardmarket_info.set_defaults(handler=_cardmarket_status)
+    onepiece = commands.add_parser(
+        "onepiece-import", help="One-Piece-Katalog aus den offiziellen Kartenlisten (EN/JP)"
+    )
+    onepiece.add_argument("--dry-run", action="store_true", help="nur lesen, nichts speichern")
+    onepiece.add_argument(
+        "--language", action="append", choices=["en", "ja"], help="nur diese Sprache(n)"
+    )
+    onepiece.add_argument("--out", help="Bericht zusätzlich als Markdown-Datei")
+    onepiece.set_defaults(handler=_onepiece_import)
 
 
 def build_parser() -> argparse.ArgumentParser:

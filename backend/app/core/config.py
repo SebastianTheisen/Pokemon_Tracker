@@ -109,6 +109,21 @@ class Settings(BaseSettings):
     )
     image_probe_max_per_run: int = Field(default=6000, ge=0)
 
+    # --- One Piece (offizielle Kartenlisten, Phase 8) ----------------------------
+    onepiece_sources: dict[str, str] = Field(
+        default_factory=lambda: {
+            "en": "https://en.onepiece-cardgame.com",
+            "ja": "https://www.onepiece-cardgame.com",
+        },
+        description="Kartenliste je Sprache (Seite /cardlist/, ein Abruf je Set).",
+    )
+    onepiece_catalog_interval_days: int = Field(
+        default=7, ge=0, description="One-Piece-Katalog im Worker alle n Tage; 0 = aus."
+    )
+    onepiece_request_interval_seconds: float = Field(
+        default=1.5, ge=0, le=30, description="Abstand zweier Seitenabrufe (rücksichtsvoll)."
+    )
+
     # --- Cardmarket-Katalog (offizielle Download-Dateien) ----------------------
     cardmarket_catalog_url: str = "https://downloads.s3.cardmarket.com/productCatalog"
     cardmarket_catalog_interval_hours: int = Field(
@@ -298,8 +313,13 @@ class Settings(BaseSettings):
         description="Nur von diesen Hosts werden Katalogbilder geladen (Schutz vor SSRF).",
     )
     image_proxy_extra_hosts: list[str] = Field(
-        default_factory=lambda: ["tcgplayer-cdn.tcgplayer.com", "product-images.tcgplayer.com"],
-        description="Zusätzlich für die Bildauslieferung erlaubt (Bilder versiegelter Produkte).",
+        default_factory=lambda: [
+            "tcgplayer-cdn.tcgplayer.com",
+            "product-images.tcgplayer.com",
+            "en.onepiece-cardgame.com",  # One-Piece-Kartenbilder (offizielle Kartenliste)
+            "www.onepiece-cardgame.com",
+        ],
+        description="Zusätzlich für die Bildauslieferung erlaubt (Sealed, One Piece).",
     )
 
     @model_validator(mode="after")
