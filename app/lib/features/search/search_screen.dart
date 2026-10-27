@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/prefs.dart';
+import '../../core/games.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
@@ -22,7 +23,13 @@ typedef SearchQuery = ({String text, String? language});
 final searchProvider = FutureProvider.autoDispose.family<List<SearchHit>, SearchQuery>(
   (ref, query) => query.text.trim().isEmpty
       ? Future.value(const <SearchHit>[])
-      : ref.watch(apiProvider).search(query.text.trim(), language: query.language),
+      : ref
+            .watch(apiProvider)
+            .search(
+              query.text.trim(),
+              language: query.language,
+              game: ref.watch(gameFilterProvider)?.id,
+            ),
 );
 
 /// Suchfeld mit Ergebnisliste. [onSelect] statt Navigation (z. B. im Scanner „Selbst suchen“).
@@ -227,11 +234,18 @@ class _StartHint extends ConsumerWidget {
   final ValueChanged<String> onExample;
   final bool showScan;
 
-  static const _examples = ['Glurak', 'Pikachu', 'Mew', 'Nachtara 215', 'Evoli'];
+  static const _pokemonExamples = ['Glurak', 'Pikachu', 'Mew', 'Nachtara 215', 'Evoli'];
+  static const _onepieceExamples = ['Luffy', 'Zoro', 'Nami', 'OP01-001', 'Shanks'];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final recent = ref.watch(uiPrefsProvider.select((prefs) => prefs.recentSearches));
+    final game = ref.watch(gameFilterProvider);
+    final examples = switch (game) {
+      Game.onepiece => _onepieceExamples,
+      Game.pokemon => _pokemonExamples,
+      null => [..._pokemonExamples.take(4), 'Zoro'],
+    };
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
       children: [
@@ -279,7 +293,7 @@ class _StartHint extends ConsumerWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            for (final example in _examples)
+            for (final example in examples)
               ActionChip(
                 key: Key('search-example-$example'),
                 avatar: const Icon(Icons.north_west, size: 16),
@@ -321,7 +335,12 @@ class SearchScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Suche')),
-    body: const CardSearch(),
+    body: const Column(
+      children: [
+        GameSwitcher(),
+        Expanded(child: CardSearch()),
+      ],
+    ),
   );
 }
 

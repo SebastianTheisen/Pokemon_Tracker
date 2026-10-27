@@ -354,28 +354,41 @@ class Api {
 
   // ---------------------------------------------------------------- Katalog
 
-  Future<List<SearchHit>> search(String query, {String? language, int limit = 30}) async =>
-      parseList(
-        await _getList('/cards/search', query: {'q': query, 'language': language, 'limit': limit}),
-        SearchHit.fromJson,
-      );
+  Future<List<SearchHit>> search(
+    String query, {
+    String? language,
+    String? game,
+    int limit = 30,
+  }) async => parseList(
+    await _getList(
+      '/cards/search',
+      query: {'q': query, 'language': language, 'game': game, 'limit': limit},
+    ),
+    SearchHit.fromJson,
+  );
 
   Future<CardInfo> card(String id) async => CardInfo.fromJson(await _get('/cards/$id'));
 
   /// Versiegelte Produkte im Cardmarket-Katalog (englische Namen) mit Preis.
   /// Suche (deutsch oder englisch) und/oder ein Set (`expansion`), optional nur eine Art.
-  Future<List<SealedOffer>> searchSealed(String query, {String? kind, int? expansion}) async =>
-      parseList(
-        await _getList(
-          '/cardmarket/sealed',
-          query: {'q': query, 'kind': kind, 'expansion': expansion},
-        ),
-        SealedOffer.fromJson,
-      );
+  Future<List<SealedOffer>> searchSealed(
+    String query, {
+    String? kind,
+    int? expansion,
+    String? game,
+  }) async => parseList(
+    await _getList(
+      '/cardmarket/sealed',
+      query: {'q': query, 'kind': kind, 'expansion': expansion, 'game': game},
+    ),
+    SealedOffer.fromJson,
+  );
 
   /// Sets mit versiegelten Produkten, neueste zuerst.
-  Future<List<SealedSet>> sealedSets() async =>
-      parseList(await _getList('/cardmarket/sealed/sets'), SealedSet.fromJson);
+  Future<List<SealedSet>> sealedSets({String? game}) async => parseList(
+    await _getList('/cardmarket/sealed/sets', query: {'game': game}),
+    SealedSet.fromJson,
+  );
 
   /// Produkt zum Cardmarket-Eintrag in einer Sprache (vorhanden oder neu angelegt).
   Future<Product> productFromCardmarket(int cardmarketProductId, String language) async =>
@@ -425,22 +438,27 @@ class Api {
   // ---------------------------------------------------------------- Sammlung
 
   /// Kennzahlen der ganzen Sammlung oder nur eines Ordners.
-  Future<CollectionSummary> dashboard({String? folderId}) async =>
-      CollectionSummary.fromJson(await _get('/dashboard', query: {'folder_id': folderId}));
+  Future<CollectionSummary> dashboard({String? folderId, String? game}) async =>
+      CollectionSummary.fromJson(
+        await _get('/dashboard', query: {'folder_id': folderId, 'game': game}),
+      );
 
   /// Alle Ordner als Portfolios (Wert, Kaufpreise, Gewinn).
   Future<List<FolderSummary>> folderSummaries() async =>
       parseList(await _getList('/collection/folders'), FolderSummary.fromJson);
 
   /// Größte Gewinner und Verlierer der eigenen Rohkarten im Zeitraum (Cardmarket-Trend).
-  Future<Movers> movers({int days = 7}) async =>
-      Movers.fromJson(await _get('/collection/movers', query: {'days': days}));
+  Future<Movers> movers({int days = 7, String? game}) async =>
+      Movers.fromJson(await _get('/collection/movers', query: {'days': days, 'game': game}));
 
   /// Wertkurve der Sammlung oder eines Ordners.
-  Future<CollectionHistory> collectionHistory({int days = 90, String? folderId}) async =>
-      CollectionHistory.fromJson(
-        await _get('/collection/history', query: {'days': days, 'folder_id': folderId}),
-      );
+  Future<CollectionHistory> collectionHistory({
+    int days = 90,
+    String? folderId,
+    String? game,
+  }) async => CollectionHistory.fromJson(
+    await _get('/collection/history', query: {'days': days, 'folder_id': folderId, 'game': game}),
+  );
 
   Future<List<Folder>> folders() async => parseList(await _getList('/folders'), Folder.fromJson);
 
@@ -504,6 +522,7 @@ class Api {
     String? minValue,
     String? maxValue,
     bool? withPurchase,
+    String? game,
     int limit = 500,
     int offset = 0,
   }) async => ItemPage.fromJson(
@@ -518,6 +537,7 @@ class Api {
         'min_value': minValue,
         'max_value': maxValue,
         'with_purchase': withPurchase,
+        'game': game,
         'sort': sort,
         'limit': limit,
         'offset': offset,
@@ -526,8 +546,10 @@ class Api {
   );
 
   /// Alle Sets des Katalogs (neueste zuerst), optional nur einer Sprache.
-  Future<List<CardSet>> catalogSets({String? language}) async =>
-      parseList(await _getList('/sets', query: {'language': language}), CardSet.fromJson);
+  Future<List<CardSet>> catalogSets({String? language, String? game}) async => parseList(
+    await _getList('/sets', query: {'language': language, 'game': game}),
+    CardSet.fromJson,
+  );
 
   Future<CollectionItem> item(String id) async =>
       CollectionItem.fromJson(await _get('/collection/items/$id'));
@@ -560,8 +582,8 @@ class Api {
     return ((result! as Json)['count'] as num).toInt();
   }
 
-  Future<List<SetOverview>> collectionSets() async =>
-      parseList(await _getList('/collection/sets'), SetOverview.fromJson);
+  Future<List<SetOverview>> collectionSets({String? game}) async =>
+      parseList(await _getList('/collection/sets', query: {'game': game}), SetOverview.fromJson);
 
   /// Alle Karten eines Sets mit Besitz je Fassung (Set- und Master-Fortschritt).
   Future<SetProgress> setProgress(String setId) async =>

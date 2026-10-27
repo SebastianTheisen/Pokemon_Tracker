@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'games.dart';
+
 abstract interface class PrefsStore {
   Future<Map<String, String>> readAll();
   Future<void> write(String key, String value);
@@ -51,6 +53,7 @@ class UiPrefs {
     this.firstStepsHidden = false,
     this.installHintHidden = false,
     this.recentSearches = const [],
+    this.game,
   });
 
   /// Erst nach dem Laden entscheiden (sonst blitzt z. B. die Anleitung kurz auf).
@@ -72,6 +75,9 @@ class UiPrefs {
   /// Zuletzt gesuchte Begriffe (neueste zuerst, höchstens [maxRecentSearches]).
   final List<String> recentSearches;
 
+  /// Gewähltes Spiel (`pokemon`, `onepiece`); `null` = alle.
+  final String? game;
+
   UiPrefs copyWith({
     bool? loaded,
     bool? listView,
@@ -80,6 +86,7 @@ class UiPrefs {
     bool? firstStepsHidden,
     bool? installHintHidden,
     List<String>? recentSearches,
+    String? Function()? game,
   }) => UiPrefs(
     loaded: loaded ?? this.loaded,
     listView: listView ?? this.listView,
@@ -88,6 +95,7 @@ class UiPrefs {
     firstStepsHidden: firstStepsHidden ?? this.firstStepsHidden,
     installHintHidden: installHintHidden ?? this.installHintHidden,
     recentSearches: recentSearches ?? this.recentSearches,
+    game: game != null ? game() : this.game,
   );
 }
 
@@ -115,6 +123,7 @@ class UiPrefsController extends Notifier<UiPrefs> {
       firstStepsHidden: values['first_steps_hidden'] == 'true',
       installHintHidden: values['install_hint_hidden'] == 'true',
       recentSearches: _decodeList(values['recent_searches']),
+      game: (values['game'] ?? '').isEmpty ? null : values['game'],
     );
   }
 
@@ -129,6 +138,12 @@ class UiPrefsController extends Notifier<UiPrefs> {
   void setListView({required bool value}) {
     state = state.copyWith(listView: value);
     _save('list_view', '$value');
+  }
+
+  /// Spielfilter setzen (`null` = alle Spiele) – gilt für alle Hauptseiten.
+  void setGame(Game? game) {
+    state = state.copyWith(game: () => game?.id);
+    _save('game', game?.id ?? '');
   }
 
   void setThemeMode(ThemeMode mode) {

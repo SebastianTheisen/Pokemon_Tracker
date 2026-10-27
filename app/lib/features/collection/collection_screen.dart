@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/prefs.dart';
+import '../../core/games.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
@@ -35,6 +36,7 @@ final itemsProvider = FutureProvider.autoDispose.family<ItemPage, ItemFilter>(
           minValue: filter.minValue,
           maxValue: filter.maxValue,
           withPurchase: filter.withPurchase,
+          game: ref.watch(gameFilterProvider)?.id,
         ),
   ),
 );
@@ -44,12 +46,20 @@ final folderHistoryProvider = FutureProvider.autoDispose
     .family<CollectionHistory, ({String? folderId, int days})>(
       (ref, key) => cached(
         ref,
-        ref.watch(apiProvider).collectionHistory(folderId: key.folderId, days: key.days),
+        ref
+            .watch(apiProvider)
+            .collectionHistory(
+              folderId: key.folderId,
+              days: key.days,
+              // Spielfilter nur für die ganze Sammlung (Ordnerkurven gibt es nicht je Spiel).
+              game: key.folderId == null ? ref.watch(gameFilterProvider)?.id : null,
+            ),
       ),
     );
 
 final collectionSetsProvider = FutureProvider.autoDispose<List<SetOverview>>(
-  (ref) => cached(ref, ref.watch(apiProvider).collectionSets()),
+  (ref) =>
+      cached(ref, ref.watch(apiProvider).collectionSets(game: ref.watch(gameFilterProvider)?.id)),
 );
 
 const sortLabels = {
@@ -170,6 +180,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
           onRefresh: () async => _reload(),
           child: CustomScrollView(
             slivers: [
+              const SliverToBoxAdapter(child: GameSwitcher()),
               // Ganz leere Sammlung: keine Leiste voller Filter für nichts – nur die Einladung.
               if (_brandNew(summary.value))
                 SliverFillRemaining(hasScrollBody: false, child: _empty())
@@ -273,7 +284,9 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       _filter.extraCount > 0;
 
   /// Noch keine einzige Position (und kein Filter aktiv).
-  bool _brandNew(CollectionSummary? summary) => summary != null && summary.items == 0 && !_filtered;
+  /// Wirklich leere Sammlung – nicht nur „in diesem Spiel noch nichts“.
+  bool _brandNew(CollectionSummary? summary) =>
+      summary != null && summary.items == 0 && !_filtered && ref.read(gameFilterProvider) == null;
 
   /// Wie bei Collectr: Antippen öffnet die Kartenseite (dort bearbeiten, verschieben …).
   /// Versiegeltes hat keine eigene Seite – dort gleich die Aktionen.
@@ -427,6 +440,21 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
         message:
             'Dieser Ordner ist noch leer. Beim Scannen oder Hinzufügen wählst du ihn '
             'oben als Ziel („Ordner: …“).',
+      );
+    }
+    if (ref.read(gameFilterProvider) case final game? when !_filtered) {
+      return EmptyView(
+        icon: Icons.style_outlined,
+        message:
+            'Noch keine ${game.label}-Karten in deiner Sammlung.\n'
+            'Über die Suche findest du sie'
+            '${game == Game.onepiece ? ' – auch mit Nummer, z. B. „OP01-001“' : ''}.',
+        action: FilledButton.icon(
+          key: const Key('empty-game-search'),
+          onPressed: () => context.go('/search'),
+          icon: const Icon(Icons.search),
+          label: const Text('Karten suchen'),
+        ),
       );
     }
     if (_filtered) {

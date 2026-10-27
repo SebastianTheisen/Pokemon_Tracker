@@ -29,6 +29,7 @@ void main() {
   usabilityTests();
   variantTests();
   psaTests();
+  gameTests();
 
   testWidgets('ohne Sitzung: Anmeldung, falsches und richtiges Passwort', (tester) async {
     final api = FakeApi();
@@ -1663,5 +1664,86 @@ void usabilityTests() {
     await tester.pump();
     expect(find.text('Fertig (1)'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
+  });
+}
+
+void gameTests() {
+  testWidgets('Spiel-Umschalter: wirkt auf Übersicht und Sammlung und wird gemerkt', (
+    tester,
+  ) async {
+    final api = FakeApi(loggedIn: true);
+    final prefs = MemoryPrefsStore({'onboarded': 'true', 'first_steps_hidden': 'true'});
+    await pumpApp(tester, api, prefs: prefs);
+    expect(api.gameCalls, contains('dashboard:null'));
+
+    await tester.tap(find.byKey(const Key('game-onepiece')));
+    await tester.pumpAndSettle();
+
+    expect(prefs.values['game'], 'onepiece');
+    expect(api.gameCalls, containsAll(['dashboard:onepiece', 'movers:onepiece']));
+
+    await tester.tap(find.byKey(const Key('tab-Sammlung')));
+    await tester.pumpAndSettle();
+    expect(api.gameCalls, contains('items:onepiece'));
+
+    // Zurück auf „Alle“ – auch das wird gemerkt.
+    await tester.tap(find.byKey(const Key('game-all')).first);
+    await tester.pumpAndSettle();
+    expect(prefs.values['game'], '');
+    expect(api.gameCalls.last, isNot(contains('onepiece')));
+  });
+
+  testWidgets('Spiel ohne Karten: Hinweis statt Willkommens-Bildschirm', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..summaryOverride = {...summaryJson(total: '0.00'), 'items': 0, 'positions': 0};
+    await pumpApp(
+      tester,
+      api,
+      prefs: MemoryPrefsStore({
+        'onboarded': 'true',
+        'first_steps_hidden': 'true',
+        'game': 'onepiece',
+      }),
+    );
+
+    expect(find.byKey(const Key('empty-game')), findsOneWidget);
+    expect(find.text('Noch keine One Piece-Karten'), findsOneWidget);
+    expect(find.byKey(const Key('game-switcher')), findsOneWidget);
+  });
+
+  testWidgets('Gesamtwert zeigt die Aufteilung je Spiel', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..summaryOverride = {
+        ...summaryJson(),
+        'by_game': {'pokemon': '4800.00', 'onepiece': '94.67'},
+      };
+    await pumpApp(tester, api);
+
+    expect(find.byKey(const Key('game-split')), findsOneWidget);
+    expect(find.textContaining('One Piece 94,67'), findsOneWidget);
+  });
+
+  testWidgets('Sets durchblättern: One Piece nur auf Englisch und Japanisch', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(
+      tester,
+      api,
+      prefs: MemoryPrefsStore({
+        'onboarded': 'true',
+        'first_steps_hidden': 'true',
+        'game': 'onepiece',
+      }),
+    );
+    await tester.tap(find.byKey(const Key('tab-Suche')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('search-browse-sets')));
+    await tester.tap(find.byKey(const Key('search-browse-sets')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('set-language-en')), findsOneWidget);
+    expect(find.byKey(const Key('set-language-ja')), findsOneWidget);
+    expect(find.byKey(const Key('set-language-de')), findsNothing);
+    expect(api.calls, contains('catalogSets:en'));
+    expect(api.gameCalls, contains('catalogSets:onepiece'));
   });
 }

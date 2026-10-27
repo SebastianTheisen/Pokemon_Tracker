@@ -163,6 +163,7 @@ class SetSummary {
     required this.language,
     required this.name,
     this.translatedName,
+    this.game = 'pokemon',
   });
 
   factory SetSummary.fromJson(Json json) => SetSummary(
@@ -171,12 +172,16 @@ class SetSummary {
     language: json.str('language'),
     name: json.str('name'),
     translatedName: json.strOrNull('translated_name'),
+    game: json.strOrNull('game') ?? 'pokemon',
   );
 
   final String id;
   final String externalId;
   final String language;
   final String name;
+
+  /// Spiel (`pokemon`, `onepiece`).
+  final String game;
 
   /// Englischer Name japanischer, koreanischer und taiwanischer Sets („Paradigm Trigger“).
   final String? translatedName;
@@ -195,6 +200,7 @@ class CardSet extends SetSummary {
     required super.language,
     required super.name,
     super.translatedName,
+    super.game,
     this.seriesName,
     this.releaseDate,
     this.officialCount,
@@ -207,6 +213,7 @@ class CardSet extends SetSummary {
     language: json.str('language'),
     name: json.str('name'),
     translatedName: json.strOrNull('translated_name'),
+    game: json.strOrNull('game') ?? 'pokemon',
     seriesName: json.strOrNull('series_name'),
     releaseDate: json.timeOrNull('release_date'),
     officialCount: json.intOrNull('card_count_official'),
@@ -917,6 +924,7 @@ class CollectionSummary {
     this.profitPositions = 0,
     this.bestProfit,
     this.worstProfit,
+    this.byGame = const {},
   });
 
   factory CollectionSummary.fromJson(Json json) {
@@ -944,8 +952,15 @@ class CollectionSummary {
       profitPositions: json.intOrNull('profit_positions') ?? 0,
       bestProfit: item('best_profit'),
       worstProfit: item('worst_profit'),
+      byGame: {
+        for (final MapEntry(:key, :value) in (json.objOrNull('by_game') ?? const {}).entries)
+          key: '$value',
+      },
     );
   }
+
+  /// Wert je Spiel (`pokemon` → "120.50"), nur in der Gesamtübersicht.
+  final Map<String, String> byGame;
 
   final String totalValue;
   final String estimatedValue;

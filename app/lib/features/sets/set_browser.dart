@@ -6,14 +6,18 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/images.dart';
+import '../../core/games.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
 
-final catalogSetsProvider = FutureProvider.autoDispose.family<List<CardSet>, String>(
-  (ref, language) => cached(ref, ref.watch(apiProvider).catalogSets(language: language)),
-);
+/// Alle Sets einer Sprache, optional nur eines Spiels (`game` = `null`: alle Spiele).
+final catalogSetsProvider = FutureProvider.autoDispose
+    .family<List<CardSet>, ({String language, String? game})>(
+      (ref, key) =>
+          cached(ref, ref.watch(apiProvider).catalogSets(language: key.language, game: key.game)),
+    );
 
 class SetBrowserScreen extends ConsumerStatefulWidget {
   const SetBrowserScreen({super.key});
@@ -28,11 +32,17 @@ class _SetBrowserScreenState extends ConsumerState<SetBrowserScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final sets = ref.watch(catalogSetsProvider(_language));
+    final game = ref.watch(gameFilterProvider);
+    // One Piece gibt es nur auf Englisch und Japanisch – Auswahl passend einschränken.
+    final languages = game?.languages ?? languageLabels.keys.toList();
+    final language = languages.contains(_language) ? _language : languages.first;
+    final key = (language: language, game: game?.id);
+    final sets = ref.watch(catalogSetsProvider(key));
     return Scaffold(
       appBar: AppBar(title: const Text('Sets durchblättern')),
       body: Column(
         children: [
+          const GameSwitcher(padding: EdgeInsets.fromLTRB(16, 8, 16, 0)),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
             child: TextField(
@@ -51,14 +61,14 @@ class _SetBrowserScreenState extends ConsumerState<SetBrowserScreen> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
-                for (final entry in languageLabels.entries)
+                for (final code in languages)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: ChoiceChip(
-                      key: Key('set-language-${entry.key}'),
-                      label: Text(entry.value),
-                      selected: _language == entry.key,
-                      onSelected: (_) => setState(() => _language = entry.key),
+                      key: Key('set-language-$code'),
+                      label: Text(languageLabels[code] ?? code),
+                      selected: language == code,
+                      onSelected: (_) => setState(() => _language = code),
                     ),
                   ),
               ],
@@ -67,7 +77,7 @@ class _SetBrowserScreenState extends ConsumerState<SetBrowserScreen> {
           Expanded(
             child: AsyncBody(
               value: sets,
-              onRetry: () => ref.invalidate(catalogSetsProvider(_language)),
+              onRetry: () => ref.invalidate(catalogSetsProvider(key)),
               builder: (list) {
                 final shown = [
                   for (final set in list)
@@ -83,7 +93,12 @@ class _SetBrowserScreenState extends ConsumerState<SetBrowserScreen> {
                 // Nach Serie gruppiert, Reihenfolge der Liste (neueste zuerst) bleibt.
                 final groups = <String, List<CardSet>>{};
                 for (final set in shown) {
-                  groups.putIfAbsent(set.seriesName ?? 'Weitere', () => []).add(set);
+                  // Bei „Alle“ das Spiel davorschreiben – sonst stünde „Booster“ ohne Bezug da.
+                  final series = set.seriesName ?? 'Weitere';
+                  final label = game == null && set.game != Game.pokemon.id
+                      ? '${Game.fromId(set.game)?.label ?? set.game} · $series'
+                      : series;
+                  groups.putIfAbsent(label, () => []).add(set);
                 }
                 return ListView(
                   padding: const EdgeInsets.only(bottom: 24),

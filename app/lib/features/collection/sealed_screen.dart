@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/images.dart';
+import '../../core/games.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
@@ -41,7 +42,7 @@ const sealedKinds = [
 ];
 
 final sealedSetsProvider = FutureProvider.autoDispose<List<SealedSet>>(
-  (ref) => ref.watch(apiProvider).sealedSets(),
+  (ref) => ref.watch(apiProvider).sealedSets(game: ref.watch(gameFilterProvider)?.id),
 );
 
 class SealedAddScreen extends ConsumerStatefulWidget {
@@ -71,7 +72,14 @@ class _SealedAddScreenState extends ConsumerState<SealedAddScreen> {
   void _reload() {
     _results = _browsing
         ? null
-        : ref.read(apiProvider).searchSealed(_query, kind: _kind, expansion: _set?.expansionId);
+        : ref
+              .read(apiProvider)
+              .searchSealed(
+                _query,
+                kind: _kind,
+                expansion: _set?.expansionId,
+                game: ref.read(gameFilterProvider)?.id,
+              );
   }
 
   void _onChanged(String text) {

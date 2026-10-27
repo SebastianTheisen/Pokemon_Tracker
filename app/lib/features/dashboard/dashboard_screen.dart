@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
+import '../../core/games.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
@@ -19,11 +20,14 @@ import 'first_steps.dart';
 import 'install_hint.dart';
 
 final dashboardProvider = FutureProvider.autoDispose<CollectionSummary>(
-  (ref) => cached(ref, ref.watch(apiProvider).dashboard()),
+  (ref) => cached(ref, ref.watch(apiProvider).dashboard(game: ref.watch(gameFilterProvider)?.id)),
 );
 
 final collectionHistoryProvider = FutureProvider.autoDispose<CollectionHistory>(
-  (ref) => cached(ref, ref.watch(apiProvider).collectionHistory()),
+  (ref) => cached(
+    ref,
+    ref.watch(apiProvider).collectionHistory(game: ref.watch(gameFilterProvider)?.id),
+  ),
 );
 
 /// Wertvollste bzw. zuletzt hinzugefügte Positionen für die Bilder-Reihen.
@@ -32,17 +36,27 @@ final showcaseProvider = FutureProvider.autoDispose.family<List<CollectionItem>,
   sort,
 ) async {
   ref.cacheFor(providerCache);
-  return (await ref.watch(apiProvider).items(sort: sort, limit: 12)).items;
+  final game = ref.watch(gameFilterProvider)?.id;
+  return (await ref.watch(apiProvider).items(sort: sort, limit: 12, game: game)).items;
 });
 
 /// Gewinner und Verlierer der letzten 7 Tage (eigene Rohkarten, Cardmarket-Trend).
 final moversProvider = FutureProvider.autoDispose<Movers>(
-  (ref) => cached(ref, ref.watch(apiProvider).movers()),
+  (ref) => cached(ref, ref.watch(apiProvider).movers(game: ref.watch(gameFilterProvider)?.id)),
 );
 
-/// Kennzahlen eines Ordners (`null` = ganze Sammlung) – für den Kopf der Sammlung.
+/// Kennzahlen eines Ordners (`null` = ganze Sammlung, dann im gewählten Spiel) – für den
+/// Kopf der Sammlung.
 final folderSummaryProvider = FutureProvider.autoDispose.family<CollectionSummary, String?>(
-  (ref, folderId) => cached(ref, ref.watch(apiProvider).dashboard(folderId: folderId)),
+  (ref, folderId) => cached(
+    ref,
+    ref
+        .watch(apiProvider)
+        .dashboard(
+          folderId: folderId,
+          game: folderId == null ? ref.watch(gameFilterProvider)?.id : null,
+        ),
+  ),
 );
 
 /// Alle Ordner als Portfolios (Wert, Kaufpreise, Gewinn).
@@ -84,6 +98,74 @@ String profitText(String profit, String? profitPercent) {
       : '${signedMoney(profit)} (${signedPercent(pct, isPercent: true)})';
 }
 
+/// „Pokémon 1.234,56 € · One Piece 78,90 €“ – nur wenn mehr als ein Spiel Wert hat.
+class _GameSplit extends StatelessWidget {
+  const _GameSplit({required this.byGame});
+
+  final Map<String, String> byGame;
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = [
+      for (final game in Game.values)
+        if ((parseAmount(byGame[game.id]) ?? 0) > 0) (game, byGame[game.id]!),
+    ];
+    if (entries.length < 2) return const SizedBox.shrink();
+    return Padding(
+      key: const Key('game-split'),
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          for (final (game, value) in entries)
+            Tag('${game.label} ${money(value)}', color: AppColors.textMuted),
+        ],
+      ),
+    );
+  }
+}
+
+/// Spielfilter aktiv, aber in diesem Spiel noch nichts gesammelt.
+class _EmptyGameHint extends StatelessWidget {
+  const _EmptyGameHint({required this.game});
+
+  final Game game;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    key: const Key('empty-game'),
+    child: Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          const Icon(Icons.style_outlined, size: 40),
+          const SizedBox(height: 8),
+          Text(
+            'Noch keine ${game.label}-Karten',
+            style: Theme.of(context).textTheme.titleMedium,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            game == Game.onepiece
+                ? 'Such nach Namen oder Nummer (z. B. „Zoro“ oder „OP01-001“) und leg los.'
+                : 'Such nach Namen oder scanne deine erste Karte.',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: () => context.go('/search'),
+            icon: const Icon(Icons.search),
+            label: const Text('Karten suchen'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -91,6 +173,7 @@ class DashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(sessionProvider).value;
     final summary = ref.watch(dashboardProvider);
+    final game = ref.watch(gameFilterProvider);
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
@@ -111,20 +194,30 @@ class DashboardScreen extends ConsumerWidget {
                   style: Theme.of(context).textTheme.titleLarge
                       ?.copyWith(fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
+                const GameSwitcher(padding: EdgeInsets.only(bottom: 12)),
                 AsyncBody(
                   value: summary,
                   onRetry: () => invalidateCollection(ref),
                   loading: const Shimmer(child: SkeletonBox(height: 220, radius: 24)),
-                  builder: (data) =>
-                      data.items == 0 ? const _WelcomeHero() : _ValueHero(summary: data),
+                  builder: (data) => switch ((data.items, game)) {
+                    (0, final Game game) => _EmptyGameHint(game: game),
+                    (0, null) => const _WelcomeHero(),
+                    _ => Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _ValueHero(summary: data),
+                        if (game == null) _GameSplit(byGame: data.byGame),
+                      ],
+                    ),
+                  },
                 ),
                 // Für Neue: Checkliste mit dem jeweils nächsten Schritt (ausblendbar).
-                if (summary.value case final data?) FirstSteps(summary: data),
+                if (summary.value case final data? when game == null) FirstSteps(summary: data),
                 const InstallHint(),
                 // Reihenfolge: Wert → Heute → Bewegungen → Schnellzugriffe → Karten. Scannen
                 // steckt im runden Knopf unten; die große Kachel nur bei leerer Kiste ohne Checkliste.
-                if (summary.value case final data? when data.items == 0) ...[
+                if (summary.value case final data? when data.items == 0 && game == null) ...[
                   if (ref.watch(uiPrefsProvider).firstStepsHidden) ...[
                     const SizedBox(height: 16),
                     _ScanCallToAction(onTap: () => context.push('/scan')),

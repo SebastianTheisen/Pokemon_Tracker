@@ -89,6 +89,7 @@ SERIES_GROUPS: tuple[tuple[str, str], ...] = (
 )
 OTHER_GROUP = "Promos & Sonstiges"
 MIN_SET_SHARE = 0.5  # so viele Nummern des Sets muss die Cardmarket-Ausgabe enthalten
+ONEPIECE_VARIANTS = {"normal": True, "reverse": False, "holo": False}
 
 Sleep = Callable[[float], Awaitable[None]]
 
@@ -396,6 +397,8 @@ class OnePieceCatalog:
                 number_norm=normalize_number(card.number),
                 name=card.display_name[:200],
                 rarity=card.rarity,
+                # Kein Reverse Holo bei One Piece – Parallel-Fassungen sind eigene Karten.
+                variants=ONEPIECE_VARIANTS,
                 image_url=image[:500],
                 image_source=ImageSource.ONEPIECE,
                 source=CardSource.ONEPIECE,
@@ -410,6 +413,7 @@ class OnePieceCatalog:
                         "number": card_statement.excluded.number,
                         "number_norm": card_statement.excluded.number_norm,
                         "rarity": card_statement.excluded.rarity,
+                        "variants": card_statement.excluded.variants,
                         "image_url": card_statement.excluded.image_url,
                         "image_source": card_statement.excluded.image_source,
                         "updated_at": func.now(),

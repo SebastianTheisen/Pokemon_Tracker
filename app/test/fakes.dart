@@ -170,6 +170,9 @@ class FakeApi extends Api {
   bool loggedIn;
   String role;
   final calls = <String>[];
+
+  /// Spielfilter je Abruf (`dashboard:onepiece`, `items:null` …).
+  final gameCalls = <String>[];
   Map<String, Object?>? lastItemBody;
   Json pricesJson = {
     'card_id': 'c1',
@@ -228,8 +231,9 @@ class FakeApi extends Api {
   Json? summaryOverride;
 
   @override
-  Future<CollectionSummary> dashboard({String? folderId}) async {
+  Future<CollectionSummary> dashboard({String? folderId, String? game}) async {
     calls.add('dashboard:$folderId');
+    gameCalls.add('dashboard:$game');
     return CollectionSummary.fromJson(summaryOverride ?? summaryJson(top: itemJson()));
   }
 
@@ -256,11 +260,20 @@ class FakeApi extends Api {
   Json moversJson = {'days': 7, 'gainers': <Json>[], 'losers': <Json>[]};
 
   @override
-  Future<Movers> movers({int days = 7}) async => Movers.fromJson(moversJson);
+  Future<Movers> movers({int days = 7, String? game}) async {
+    gameCalls.add('movers:$game');
+    return Movers.fromJson(moversJson);
+  }
 
   @override
-  Future<CollectionHistory> collectionHistory({int days = 90, String? folderId}) async =>
-      CollectionHistory.fromJson({'points': historyPoints, 'markers': <Json>[]});
+  Future<CollectionHistory> collectionHistory({
+    int days = 90,
+    String? folderId,
+    String? game,
+  }) async {
+    gameCalls.add('history:$game');
+    return CollectionHistory.fromJson({'points': historyPoints, 'markers': <Json>[]});
+  }
 
   List<Json> historyPoints = [];
 
@@ -271,8 +284,14 @@ class FakeApi extends Api {
   }
 
   @override
-  Future<List<SearchHit>> search(String query, {String? language, int limit = 30}) async {
+  Future<List<SearchHit>> search(
+    String query, {
+    String? language,
+    String? game,
+    int limit = 30,
+  }) async {
     calls.add('search:$query');
+    gameCalls.add('search:$game');
     return query.toLowerCase().contains('nachtara')
         ? [
             SearchHit.fromJson({
@@ -458,8 +477,9 @@ class FakeApi extends Api {
   ];
 
   @override
-  Future<List<CardSet>> catalogSets({String? language}) async {
+  Future<List<CardSet>> catalogSets({String? language, String? game}) async {
     calls.add('catalogSets:$language');
+    gameCalls.add('catalogSets:$game');
     Json set(String id, String name, String series, int year) => {
       'id': id,
       'external_id': id,
@@ -490,9 +510,11 @@ class FakeApi extends Api {
     String? minValue,
     String? maxValue,
     bool? withPurchase,
+    String? game,
     int limit = 500,
     int offset = 0,
   }) async {
+    gameCalls.add('items:$game');
     calls.add(
       'items:${[language, condition, minValue, maxValue, withPurchase].map((v) => v ?? '-').join('|')}',
     );
@@ -501,7 +523,7 @@ class FakeApi extends Api {
   }
 
   @override
-  Future<List<SealedSet>> sealedSets() async {
+  Future<List<SealedSet>> sealedSets({String? game}) async {
     calls.add('sealedSets');
     return [
       SealedSet.fromJson({
@@ -516,7 +538,12 @@ class FakeApi extends Api {
   }
 
   @override
-  Future<List<SealedOffer>> searchSealed(String query, {String? kind, int? expansion}) async {
+  Future<List<SealedOffer>> searchSealed(
+    String query, {
+    String? kind,
+    int? expansion,
+    String? game,
+  }) async {
     calls.add('searchSealed:$query:${kind ?? ''}:${expansion ?? ''}');
     return [
       SealedOffer.fromJson({
@@ -738,7 +765,7 @@ class FakeApi extends Api {
   Future<List<SavedTrade>> trades() async => [];
 
   @override
-  Future<List<SetOverview>> collectionSets() async => [
+  Future<List<SetOverview>> collectionSets({String? game}) async => [
     SetOverview.fromJson({
       'card_set': setJson(),
       'positions': 3,

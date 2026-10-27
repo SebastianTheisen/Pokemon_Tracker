@@ -271,6 +271,7 @@ async def test_import_creates_sets_cards_and_links_cardmarket(
     zoro = cards[("en", "op-OP01-001")]
     assert zoro.set_id == op01.id  # nicht im später gelisteten Premium-Booster
     assert zoro.number == "OP01-001"
+    assert zoro.variants == {"normal": True, "reverse": False, "holo": False}
     assert zoro.image_url == "https://en.onepiece-cardgame.com/images/cardlist/card/OP01-001.png"
     # Normal und Parallel in Produkt-ID-Reihenfolge.
     assert zoro.cardmarket_product_id == 690368
