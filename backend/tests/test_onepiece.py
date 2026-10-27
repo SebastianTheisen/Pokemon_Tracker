@@ -431,3 +431,33 @@ async def test_sealed_images_never_cross_games_or_touch_singles(
         single = await session.get_one(CmProduct, 690368)
     assert box.image_url == f"{cdn}/450086_200w.jpg"
     assert single.image_url is None
+
+
+def test_double_set_codes_use_the_first_code() -> None:
+    page = """<select id="series">
+      <option value="569114">BOOSTER PACK -THE AZURE SEA&#39;S SEVEN- [OP14-EB04]</option>
+      <option value="550114">ブースターパック 蒼海の七傑【OP-14】</option>
+    </select>"""
+    english, japanese = parse_series(page)
+    assert (english.code, english.external_id, english.group) == ("OP14", "op-OP14", "Booster")
+    assert japanese.external_id == english.external_id
+
+
+async def test_import_removes_sets_left_without_cards(
+    session_factory: async_sessionmaker[AsyncSession], settings: Settings
+) -> None:
+    async with session_factory() as session:
+        session.add(CardSet(external_id="op-OP14EB04", language="en", game="onepiece", name="Alt"))
+        await session.commit()
+
+    catalog = OnePieceCatalog(
+        session_factory, settings, transport=site_transport([]), sleep=no_sleep
+    )
+    report = await catalog.run(["en"])
+
+    assert report.sets_removed == 1
+    assert "Leere Sets entfernt: 1" in render_report(report)
+    async with session_factory() as session:
+        names = set(await session.scalars(select(CardSet.external_id)))
+    assert "op-OP14EB04" not in names
+    assert {"op-OP01", "op-PRB01"} <= names

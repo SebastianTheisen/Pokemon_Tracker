@@ -33,7 +33,7 @@ from typing import Any
 
 import httpx
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -76,6 +76,9 @@ _TAG = re.compile(r"<[^>]+>")
 _CARD_ID = re.compile(r"^(?P<number>[A-Z]{1,5}\d{0,2}-\d{3})(?:_(?P<kind>[pr])(?P<n>\d+))?$")
 # Setkürzel am Ende der Bezeichnung: „… [OP-01]“ (englisch) oder „…【OP-01】“ (japanisch).
 _SERIES_CODE = re.compile(r"\s*[\[【]\s*([A-Z0-9-]+)\s*[\]】]\s*$")
+# Erstes Kürzel einer Angabe – Doppelsets heißen auf Englisch „[OP14-EB04]“, auf Japanisch
+# nur „【OP-14】“: Beide sollen dasselbe Set (``op-OP14``) werden.
+_FIRST_CODE = re.compile(r"[A-Z]+-?\d+")
 _TITLE = re.compile(r"^(?P<kind>.*?)\s*-(?P<title>.+?)-\s*$")
 # Kartennummer im Cardmarket-Produktnamen: „Roronoa Zoro (OP01-001)“.
 _PRODUCT_CODE = re.compile(r"\(([A-Z]{1,5}\d{0,2}-\d{3})\)")
@@ -154,7 +157,8 @@ def parse_series(page: str) -> list[Series]:
         seen.add(series_id)
         label = _text(raw_label)
         code_match = _SERIES_CODE.search(label)
-        code = code_match.group(1).replace("-", "") if code_match else None
+        first = _FIRST_CODE.search(code_match.group(1)) if code_match else None
+        code = first.group(0).replace("-", "") if first else None
         series.append(Series(series_id=series_id, label=label, code=code))
     return series
 
@@ -245,6 +249,18 @@ class ImportReport:
     languages: list[LanguageReport] = field(default_factory=list)
     link: LinkReport | None = None
     dry_run: bool = False
+    sets_removed: int = 0
+
+
+async def remove_empty_sets(session: AsyncSession) -> int:
+    """One-Piece-Sets ohne Karten löschen (z. B. nach geänderter Set-Zuordnung: Die Karten
+    sind beim Upsert ins neue Set gewandert). Gibt die Anzahl zurück."""
+    removed = await session.scalars(
+        delete(CardSet)
+        .where(CardSet.game == GAME, ~exists().where(Card.set_id == CardSet.id))
+        .returning(CardSet.external_id)
+    )
+    return len(removed.all())
 
 
 def _import_order(series: Sequence[Series]) -> list[Series]:
@@ -288,6 +304,7 @@ class OnePieceCatalog:
                 )
         if not dry_run:
             async with self._session_factory() as session:
+                report.sets_removed = await remove_empty_sets(session)
                 report.link = await link_onepiece(session)
                 await session.commit()
         return report
@@ -587,5 +604,6 @@ def render_report(report: ImportReport) -> str:
             f"- Sets neu verknüpft: {link.sets_linked}, ohne Ausgabe: {len(link.sets_unlinked)}"
             + (f" ({', '.join(link.sets_unlinked[:15])})" if link.sets_unlinked else ""),
             f"- Karten mit Produkt: {link.cards_linked}, ohne: {link.cards_unlinked}",
+            f"- Leere Sets entfernt: {report.sets_removed}",
         ]
     return "\n".join(lines) + "\n"

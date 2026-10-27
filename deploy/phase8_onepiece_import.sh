@@ -20,7 +20,7 @@ mkdir -p docs/phase8
     | grep -E '^\[onepiece\]|^Fehler|Bilder' || echo "(Exit-Code $?)"
   echo '```'
   echo
-  docker compose exec -T api python -m app.cli onepiece-import 2>&1 | grep -v '^{' \
+  docker compose exec -T api python -m app.cli onepiece-import 2>&1 | grep -v -E '^\{|\[(info|debug) ' \
     || echo "(Exit-Code $?)"
   echo
   echo "_Lauf: $(date -u '+%Y-%m-%d %H:%M UTC'), Stand $(git rev-parse --short HEAD)_"
