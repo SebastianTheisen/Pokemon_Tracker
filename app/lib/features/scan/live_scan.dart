@@ -1,8 +1,9 @@
 // Live-Scanner (wie Collectr/TCGplayer): Kamera läuft, Karte hinhalten – die App erkennt sie
 // selbst, vibriert und sammelt sie in einer Liste. Am Ende prüfen und alle auf einmal hinzufügen.
 //
-// Damit nicht dauernd Bilder zum Server gehen, wird nur ausgelöst, wenn das Bild ruhig ist
-// UND sich seit dem letzten Foto deutlich verändert hat (also eine neue Karte daliegt).
+// Damit nicht dauernd Bilder zum Server gehen, wird nur ausgelöst, wenn das Bild ruhig ist,
+// sich seit dem letzten Foto deutlich verändert hat UND im Rahmen eine Karte liegt (der Rahmen
+// wird dann grün – geprüft auf dem Gerät, web/livescan.js).
 // Der Auslöser-Knopf erkennt sofort – Rückfallweg, falls die Automatik nicht anspringt
 // (z. B. unruhiges Kamerabild bei wenig Licht).
 import 'dart:async';
@@ -29,8 +30,11 @@ const stillThreshold = 9.0;
 /// Neue Szene: Abstand zum letzten Foto darüber.
 const changeThreshold = 14.0;
 
-/// So viele ruhige Messungen hintereinander, bevor ausgelöst wird.
+/// So viele ruhige Messungen (mit Karte im Rahmen) hintereinander, bevor ausgelöst wird.
 const stillSamples = 2;
+
+/// Unsichere Treffer darunter nicht als Tipp anbieten (eher falsch als hilfreich).
+const minGuessConfidence = 0.5;
 
 const _tick = Duration(milliseconds: 300);
 
@@ -72,6 +76,9 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
   _Phase _phase = _Phase.starting;
   Timer? _timer;
   int _still = 0;
+
+  /// Messungen hintereinander mit Karte im Rahmen (Rahmen grün ab der ersten).
+  int _cardSeen = 0;
 
   /// Foto wird gerade aufgenommen (kurz); die Erkennung selbst läuft im Hintergrund weiter,
   /// währenddessen kann schon die nächste Karte hingelegt werden.
@@ -128,28 +135,34 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
   bool get _canCapture => !_capturing && _pending < maxPending;
 
   void _check() {
-    if (!_canCapture || !mounted) return;
-    final (:motion, :change) = _camera.measure();
-    final hintBefore = _hint;
+    if (!mounted) return;
+    final (:motion, :change, :card) = _camera.measure(guide: liveGuide);
+    final before = (_hint, _cardSeen > 0);
+    _cardSeen = card ? _cardSeen + 1 : 0;
     if (motion < 0) {
       _noSignalTicks++; // Kamera liefert (noch) kein Bild
     } else {
       _noSignalTicks = 0;
       _still = motion < stillThreshold ? _still + 1 : 0;
-      if (_still >= stillSamples && change > changeThreshold) {
+      if (_canCapture &&
+          _cardSeen >= stillSamples &&
+          _still >= stillSamples &&
+          change > changeThreshold) {
         unawaited(_capture());
         return;
       }
     }
     _idleTicks++;
-    if (_hint != hintBefore) setState(() {});
+    if ((_hint, _cardSeen > 0) != before) setState(() {});
   }
 
   /// Hinweis in der Statuszeile, wenn die Automatik nicht anspringt.
   String? get _hint => _noSignalTicks >= stillSamples * 5
       ? 'Kamera liefert kein Bild – Auslöser antippen'
       : _idleTicks >= hintAfterTicks && _pending == 0
-      ? 'Erkennt nichts? Auslöser antippen'
+      ? (_cardSeen > 0
+            ? 'Karte erkannt – ruhig halten oder Auslöser antippen'
+            : 'Karte gerade in den Rahmen legen – oder Auslöser antippen')
       : null;
 
   /// Foto aufnehmen und die Erkennung im Hintergrund starten.
@@ -158,8 +171,11 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
     _capturing = true;
     _still = 0;
     _idleTicks = 0;
+    // Neue Karte: ein offener Tipp zur vorigen gilt nicht mehr.
+    if (_guess != null) setState(() => _guess = null);
     try {
       final bytes = await _camera.frame(guide: liveGuide);
+      final crop = _camera.lastCrop();
       if (!mounted) return;
       if (bytes == null) {
         _show('Kein Kamerabild – Live-Scanner neu öffnen oder mit Foto scannen');
@@ -173,13 +189,13 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
       Timer(const Duration(milliseconds: 120), () {
         if (mounted) setState(() => _shutterFlash = false);
       });
-      unawaited(_recognize(bytes));
+      unawaited(_recognize(bytes, crop));
     } finally {
       _capturing = false;
     }
   }
 
-  Future<void> _recognize(Uint8List bytes) async {
+  Future<void> _recognize(Uint8List bytes, Uint8List? crop) async {
     try {
       final result = await ref
           .read(apiProvider)
@@ -189,10 +205,12 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
       if (result.looksEmpty) {
         return; // keine Karte im Bild (Tisch, Boden …) – still verwerfen
       } else if (result.confident && best != null) {
-        _take(LiveHit(scan: result, match: best, crop: bytes));
-      } else if (best != null) {
+        _take(LiveHit(scan: result, match: best, crop: crop));
+      } else if (best != null && best.confidence >= minGuessConfidence) {
         // Wie bei Collectr: bester Tipp zum Bestätigen statt nur „nicht sicher“.
-        setState(() => _guess = LiveHit(scan: result, match: best, crop: bytes));
+        setState(() => _guess = LiveHit(scan: result, match: best, crop: crop));
+      } else if (best != null) {
+        _show('Nicht sicher erkannt – Karte gerade und nah in den Rahmen, dann Auslöser');
       } else {
         _show('Nicht erkannt – Karte ruhig und ganz in den Rahmen halten');
       }
@@ -269,7 +287,12 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
         fit: StackFit.expand,
         children: [
           _camera.preview(),
-          const IgnorePointer(child: CustomPaint(painter: _FramePainter())),
+          IgnorePointer(
+            child: CustomPaint(
+              key: Key(_cardSeen > 0 ? 'live-frame-card' : 'live-frame-empty'),
+              painter: _FramePainter(card: _cardSeen > 0),
+            ),
+          ),
           IgnorePointer(
             child: AnimatedOpacity(
               opacity: _shutterFlash ? 0.5 : 0,
@@ -404,32 +427,35 @@ class _Confirmation extends StatelessWidget {
 
 /// Kartenrahmen als Hilfe (Kartenformat 63 × 88), Rest abgedunkelt.
 class _FramePainter extends CustomPainter {
-  const _FramePainter();
+  const _FramePainter({required this.card});
+
+  /// Karte im Rahmen erkannt → grün.
+  final bool card;
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = liveGuide.rect(size);
-    final card = RRect.fromRectAndRadius(rect, const Radius.circular(16));
+    final outline = RRect.fromRectAndRadius(rect, const Radius.circular(16));
     canvas
       ..drawPath(
         Path.combine(
           PathOperation.difference,
           Path()..addRect(Offset.zero & size),
-          Path()..addRRect(card),
+          Path()..addRRect(outline),
         ),
         Paint()..color = Colors.black.withValues(alpha: 0.45),
       )
       ..drawRRect(
-        card,
+        outline,
         Paint()
-          ..color = Colors.white
+          ..color = card ? AppColors.gain : Colors.white
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 3,
+          ..strokeWidth = card ? 5 : 3,
       );
   }
 
   @override
-  bool shouldRepaint(_FramePainter oldDelegate) => false;
+  bool shouldRepaint(_FramePainter oldDelegate) => oldDelegate.card != card;
 }
 
 /// Runder Auslöser wie in der Kamera-App: erkennt das aktuelle Bild sofort.

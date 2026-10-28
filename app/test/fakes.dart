@@ -1203,7 +1203,7 @@ class FakeLiveCamera implements LiveCamera {
   FakeLiveCamera({this.result = CameraStart.ok});
 
   final CameraStart result;
-  final measurements = <({double motion, double change})>[];
+  final measurements = <({double motion, double change, bool card})>[];
   int frames = 0;
   bool stopped = false;
 
@@ -1214,8 +1214,11 @@ class FakeLiveCamera implements LiveCamera {
   void stop() => stopped = true;
 
   @override
-  ({double motion, double change}) measure() =>
-      measurements.isEmpty ? (motion: 50, change: 0) : measurements.removeAt(0);
+  ({double motion, double change, bool card}) measure({LiveGuide? guide}) =>
+      measurements.isEmpty ? (motion: 50, change: 0, card: false) : measurements.removeAt(0);
+
+  @override
+  Uint8List? lastCrop() => noSignal ? null : Uint8List.fromList(_png);
 
   LiveGuide? lastGuide;
 

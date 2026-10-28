@@ -1603,9 +1603,9 @@ void usabilityTests() {
     final api = FakeApi(loggedIn: true);
     final camera = FakeLiveCamera()
       ..measurements.addAll([
-        (motion: 30, change: 40), // Hand bewegt sich
-        (motion: 2, change: 40), // ruhig (1)
-        (motion: 2, change: 40), // ruhig (2) und neu → Foto
+        (motion: 30, change: 40, card: true), // Hand bewegt sich
+        (motion: 2, change: 40, card: true), // ruhig (1)
+        (motion: 2, change: 40, card: true), // ruhig (2) und neu → Foto
       ]);
     await pumpApp(tester, api, camera: camera);
     final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
@@ -1652,7 +1652,7 @@ void usabilityTests() {
     final api = FakeApi(loggedIn: true);
     // iPhone-Fall: Die Automatik springt nie an (kein Bild bzw. unruhig).
     final camera = FakeLiveCamera()
-      ..measurements.addAll(List.filled(12, (motion: -1.0, change: -1.0)));
+      ..measurements.addAll(List.filled(12, (motion: -1.0, change: -1.0, card: false)));
     await pumpApp(tester, api, camera: camera);
     final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
         .read(routerProvider);
@@ -1679,11 +1679,11 @@ void usabilityTests() {
     final api = FakeApi(loggedIn: true)..scanGate = gate;
     final camera = FakeLiveCamera()
       ..measurements.addAll([
-        (motion: 2, change: 40),
-        (motion: 2, change: 40), // Karte 1 → Foto, Erkennung läuft
-        (motion: 30, change: 40), // nächste Karte wird hingelegt
-        (motion: 2, change: 40),
-        (motion: 2, change: 40), // Karte 2 → Foto, obwohl Karte 1 noch erkannt wird
+        (motion: 2, change: 40, card: true),
+        (motion: 2, change: 40, card: true), // Karte 1 → Foto, Erkennung läuft
+        (motion: 30, change: 40, card: true), // nächste Karte wird hingelegt
+        (motion: 2, change: 40, card: true),
+        (motion: 2, change: 40, card: true), // Karte 2 → Foto, obwohl Karte 1 noch erkannt wird
       ]);
     await pumpApp(tester, api, camera: camera);
     final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
@@ -1709,6 +1709,59 @@ void usabilityTests() {
     await tester.pump(const Duration(seconds: 3));
   });
 
+  testWidgets('Live-Scanner: löst nur mit Karte im Rahmen aus; Rahmen wird grün', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    final camera = FakeLiveCamera()
+      ..measurements.addAll([
+        (motion: 2, change: 40, card: false), // ruhig und neu, aber leer (Boden, Stoff)
+        (motion: 2, change: 40, card: false),
+        (motion: 2, change: 40, card: false),
+        (motion: 2, change: 40, card: true), // Karte hingelegt → grün
+        (motion: 2, change: 40, card: true), // zweimal hintereinander → Foto
+      ]);
+    await pumpApp(tester, api, camera: camera);
+    final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
+        .read(routerProvider);
+    unawaited(router.push('/scan/live'));
+    await tester.pump();
+    await tester.pump();
+    for (var i = 0; i < 3; i++) {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    expect(camera.frames, 0); // leerer Rahmen löst nie aus
+    expect(find.byKey(const Key('live-frame-empty')), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('live-frame-card')), findsOneWidget);
+    expect(camera.frames, 0);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(camera.frames, 1);
+    expect(camera.lastGuide, liveGuide);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('Live-Scanner: sehr unsicherer Treffer ist kein Tipp', (tester) async {
+    final json = scanJson(confident: false);
+    (json['best'] as Map<String, Object?>)['confidence'] = 0.3;
+    final api = FakeApi(loggedIn: true)..scanResult = json;
+    final camera = FakeLiveCamera()
+      ..measurements.addAll([
+        (motion: 2, change: 40, card: true),
+        (motion: 2, change: 40, card: true),
+      ]);
+    await pumpApp(tester, api, camera: camera);
+    final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
+        .read(routerProvider);
+    unawaited(router.push('/scan/live'));
+    await tester.pump();
+    await tester.pump();
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    expect(find.byKey(const Key('live-guess')), findsNothing);
+    expect(find.textContaining('Nicht sicher erkannt'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
   testWidgets('Live-Scanner: Bild ohne Karte wird still verworfen', (tester) async {
     final api = FakeApi(loggedIn: true)
       ..scanResult = {
@@ -1716,7 +1769,10 @@ void usabilityTests() {
         'detected': {'card_found': false, 'numbers': <Object>[], 'names': <Object>[]},
       };
     final camera = FakeLiveCamera()
-      ..measurements.addAll([(motion: 2, change: 40), (motion: 2, change: 40)]);
+      ..measurements.addAll([
+        (motion: 2, change: 40, card: true),
+        (motion: 2, change: 40, card: true),
+      ]);
     await pumpApp(tester, api, camera: camera);
     final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
         .read(routerProvider);
@@ -1736,7 +1792,10 @@ void usabilityTests() {
   testWidgets('Live-Scanner: unsicherer Treffer als Tipp – „Ja“ übernimmt ihn', (tester) async {
     final api = FakeApi(loggedIn: true)..scanResult = scanJson(confident: false);
     final camera = FakeLiveCamera()
-      ..measurements.addAll([(motion: 2, change: 40), (motion: 2, change: 40)]);
+      ..measurements.addAll([
+        (motion: 2, change: 40, card: true),
+        (motion: 2, change: 40, card: true),
+      ]);
     await pumpApp(tester, api, camera: camera);
     final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
         .read(routerProvider);

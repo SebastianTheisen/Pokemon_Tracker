@@ -843,6 +843,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] One Piece: japanische Karten und Sets zeigen den englischen Namen (gleiche Kartennummer in der englischen Liste, z. B. „ゴール・D・ロジャー (Parallel)“ → „Gol D. Roger (Parallel)“, Original klein darunter). Spalte `name_en` (Migration 0023, Erstbefüllung für den Bestand, danach bei jedem Import), Suche findet japanische Karten auch über den englischen Namen, eBay-Suche nutzt ihn. Deutsch: Es gibt keine deutsche One-Piece-Kartenliste als Quelle
 
+- [x] Live-Scanner (iPhone-Rückmeldung): löst nur aus, wenn im Rahmen eine Karte liegt – Prüfung auf dem Gerät (vier gerade Kanten im Karten-/Slab-Format), Rahmen wird dann grün. Gemessen an iPhone-Bildern (Roger im Toploader, Boden, Stoff) und Testfotos: 0/18 leere Bilder lösen aus, 18/29 Karten werden erkannt (Fehlschläge: schräg gehalten, angeschnitten, Slab in der Hand → Auslöser-Knopf). Erkennung wieder mit dem ganzen Bild (Zuschnitt hatte Roger verschlechtert), Ausschnitt nur als Bestätigung; Erkennung im Hintergrund; sehr unsichere Treffer (< 50 %) kein Tipp; alter Tipp verschwindet bei neuer Aufnahme
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

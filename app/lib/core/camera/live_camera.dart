@@ -7,9 +7,8 @@ import 'live_camera_stub.dart' if (dart.library.js_interop) 'live_camera_web.dar
 
 enum CameraStart { ok, denied, unsupported }
 
-/// Kartenrahmen in der Vorschau, als Anteile der Ansicht – zum Zeichnen und zum Zuschneiden
-/// des Fotos (nur der Rahmen plus Rand geht zum Server: weniger Hintergrund, schnellere
-/// Erkennung, und der Ausschnitt dient als Bestätigung).
+/// Kartenrahmen in der Vorschau, als Anteile der Ansicht – zum Zeichnen, für die Kartenprüfung
+/// („liegt eine Karte im Rahmen?“) und für den Ausschnitt, der als Bestätigung erscheint.
 class LiveGuide {
   const LiveGuide({
     required this.centerX,
@@ -48,11 +47,16 @@ abstract class LiveCamera {
 
   void stop();
 
-  /// Bewegung seit der letzten Messung und Abstand zum letzten Foto (je 0–255).
-  ({double motion, double change}) measure();
+  /// Bewegung seit der letzten Messung und Abstand zum letzten Foto (je 0–255; −1 ohne
+  /// Kamerabild) und ob im Rahmen [guide] eine Karte liegt.
+  ({double motion, double change, bool card}) measure({LiveGuide? guide});
 
-  /// Aktuelles Bild als JPEG (wird als „letztes Foto“ gemerkt), zugeschnitten auf [guide].
+  /// Aktuelles Bild als JPEG (ganzes Bild, wie beim Foto-Scan; wird als „letztes Foto“
+  /// gemerkt). Den Ausschnitt im Rahmen [guide] liefert danach [lastCrop].
   Future<Uint8List?> frame({LiveGuide? guide});
+
+  /// Rahmenausschnitt des letzten [frame] (klein, für die Bestätigung).
+  Uint8List? lastCrop();
 
   /// Kamerabild als Widget.
   Widget preview();

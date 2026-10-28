@@ -16,7 +16,14 @@ extension type _JsCamera(JSObject _) implements JSObject {
   external JSObject createVideo();
   external JSPromise<JSString> start();
   external void stop();
-  external JSString measure();
+  external JSString measure(
+    JSNumber centerX,
+    JSNumber centerY,
+    JSNumber widthFraction,
+    JSNumber aspect,
+    JSNumber margin,
+  );
+  external JSUint8Array? lastCrop();
   external JSPromise<JSUint8Array?> frame(
     JSNumber centerX,
     JSNumber centerY,
@@ -27,6 +34,9 @@ extension type _JsCamera(JSObject _) implements JSObject {
 }
 
 const _viewType = 'kartenkiste-camera';
+
+/// Ohne Rahmen: ganzes Bild (Breite 0 = nicht zuschneiden, keine Kartenprüfung).
+const _wholeImage = LiveGuide(centerX: 0.5, centerY: 0.5, widthFraction: 0);
 bool _registered = false;
 
 LiveCamera createLiveCamera() => _jsCamera == null ? const NoLiveCamera() : const _WebCamera();
@@ -50,15 +60,25 @@ class _WebCamera implements LiveCamera {
   void stop() => _js.stop();
 
   @override
-  ({double motion, double change}) measure() {
-    final parts = _js.measure().toDart.split(',');
-    return (motion: double.tryParse(parts.first) ?? 255, change: double.tryParse(parts.last) ?? 0);
+  ({double motion, double change, bool card}) measure({LiveGuide? guide}) {
+    final g = guide ?? _wholeImage;
+    final parts = _js
+        .measure(g.centerX.toJS, g.centerY.toJS, g.widthFraction.toJS, g.aspect.toJS, g.margin.toJS)
+        .toDart
+        .split(',');
+    return (
+      motion: double.tryParse(parts.first) ?? 255,
+      change: parts.length > 1 ? double.tryParse(parts[1]) ?? 0 : 0,
+      card: parts.length > 2 && parts[2] == '1',
+    );
   }
 
   @override
+  Uint8List? lastCrop() => _js.lastCrop()?.toDart;
+
+  @override
   Future<Uint8List?> frame({LiveGuide? guide}) async {
-    // Ohne Rahmen: ganzes Bild (Breite 0 = nicht zuschneiden).
-    final g = guide ?? const LiveGuide(centerX: 0.5, centerY: 0.5, widthFraction: 0);
+    final g = guide ?? _wholeImage;
     final bytes = await _js
         .frame(g.centerX.toJS, g.centerY.toJS, g.widthFraction.toJS, g.aspect.toJS, g.margin.toJS)
         .toDart;

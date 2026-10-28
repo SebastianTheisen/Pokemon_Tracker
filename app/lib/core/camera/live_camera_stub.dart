@@ -17,10 +17,14 @@ class NoLiveCamera implements LiveCamera {
   void stop() {}
 
   @override
-  ({double motion, double change}) measure() => (motion: 255, change: 0);
+  ({double motion, double change, bool card}) measure({LiveGuide? guide}) =>
+      (motion: 255, change: 0, card: false);
 
   @override
   Future<Uint8List?> frame({LiveGuide? guide}) async => null;
+
+  @override
+  Uint8List? lastCrop() => null;
 
   @override
   Widget preview() => const SizedBox.shrink();
