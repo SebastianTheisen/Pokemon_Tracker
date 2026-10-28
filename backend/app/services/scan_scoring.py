@@ -13,14 +13,18 @@ Bildabgleich               ≤ 0,60  RANSAC-Inlier; volle Punkte ab 150
 Sprache passt nicht        − 0,05 … 0,30
 Nachdruck unterschieden    0,20    Stempel der 30th Celebration im Foto (:mod:`twins`)
 Set der Binderseite        0,15    übrige Karten der Seite sicher aus demselben Set
+Setgröße widerspricht      − 0,30  ``001/032`` gelesen, Set hat 102 Karten (nie sicher)
 =========================  ======  ===============================================
 
 **Sicherer Treffer** (die App zeigt dann „Erkannt als …“), wenn
 
 * der Bildabgleich ≥ 50 Inlier liefert **oder** Nummer + Setgröße/Setcode + Name/Setcode
   übereinstimmen, **und**
-* der Abstand zur besten *anderen* Karte mindestens 0,15 beträgt. Dieselbe Karte in einer
-  anderen Sprache zählt nicht als Konkurrenz.
+* der Abstand zur besten *anderen* Karte mindestens 0,15 beträgt, **und**
+* die gelesene Setgröße dem Set nicht widerspricht. Beispiel Classic Collection (2023):
+  gleiche Grafik wie das Grundset 1996 – der Bildabgleich allein fände die alte Karte.
+
+Dieselbe Karte in einer anderen Sprache zählt nicht als Konkurrenz.
 
 Gleiches Motiv mit gleicher Nummer in mehreren Sets (Nachdrucke) und kein klarer
 Unterschied im Bild: nie sicher.
@@ -52,6 +56,10 @@ STRONG_LANGUAGE_PENALTY = 0.25
 HINT_LANGUAGE_PENALTY = 0.30
 WEAK_LANGUAGE_PENALTY = 0.05
 TWIN_POINTS = 0.20
+CONFLICT_PENALTY = 0.30
+# So viele Ziffern dürfen zwischen gelesener und offizieller Setgröße abweichen, ohne dass
+# es als Widerspruch gilt (OCR: „167“ statt „187“).
+_TOTAL_DIGIT_TOLERANCE = 1
 PAGE_SET_POINTS = 0.15
 _MIN_CONTAINED_RATIO = 0.6
 _VARIANT_SUFFIX = re.compile(r"\s*\((?:Parallel|Reprint)\)$")
@@ -108,6 +116,8 @@ class Candidate:
     twin_points: float = 0.0
     twin_undecided: bool = False
     page_set_points: float = 0.0
+    # Gelesene Setgröße passt nicht zum Set der Karte (z. B. Nachdruck mit gleicher Grafik).
+    total_conflict: bool = False
     reasons: list[str] = field(default_factory=list)
 
     @property
@@ -126,6 +136,7 @@ class Candidate:
         score += NUMBER_POINTS if self.number_match else 0.0
         score += TOTAL_POINTS if self.total_match else 0.0
         score += SET_CODE_POINTS if self.set_code_match else 0.0
+        score -= CONFLICT_PENALTY if self.total_conflict else 0.0
         return score
 
     @property
@@ -143,11 +154,48 @@ class Candidate:
     @property
     def strong_evidence(self) -> bool:
         """Reicht das für einen sicheren Treffer (ohne Blick auf die Konkurrenz)?"""
+        if self.total_conflict:
+            return False
         if (self.inliers or 0) >= CONFIDENT_INLIERS:
             return True
         return self.number_match and (
             (self.total_match and self.name_score >= MIN_NAME_SIMILARITY) or self.set_code_match
         )
+
+
+def digit_distance(first: int, second: int) -> int:
+    """Abweichende Ziffern zweier Zahlen (gleich lang aufgefüllt): 167 ↔ 187 → 1."""
+    a, b = str(first), str(second)
+    width = max(len(a), len(b))
+    return sum(x != y for x, y in zip(a.zfill(width), b.zfill(width), strict=True))
+
+
+def total_conflict(text: TextFeatures, card: Card) -> int | None:
+    """Gelesene Setgröße, die dem Set der Karte widerspricht – oder ``None``.
+
+    Widerspruch nur, wenn *keine* gelesene Setgröße passt (auch nicht mit einer falsch
+    gelesenen Ziffer) und die Nummer selbst nicht übereinstimmt."""
+    official = card.card_set.card_count_official
+    if not official or any(hit.number == card.number_norm for hit in text.numbers):
+        return None
+    # Nur vollständig gelesene Setgrößen zählen: „001/032“ hat drei Stellen wie „102“;
+    # „212/38“ (abgeschnitten, eigentlich 217/187) widerspricht nichts.
+    totals = [
+        hit.total
+        for hit in text.numbers
+        if hit.total is not None and len(_printed_total(hit.raw)) >= len(str(official))
+    ]
+    if not totals or any(
+        digit_distance(total, official) <= _TOTAL_DIGIT_TOLERANCE for total in totals
+    ):
+        return None
+    return totals[0]
+
+
+def _printed_total(raw: str) -> str:
+    """Ziffern hinter dem Schrägstrich, wie gedruckt („001/032“ → „032“)."""
+    _, _, after = raw.partition("/")
+    return "".join(char for char in after if char.isdigit())
 
 
 def score_text(
@@ -172,6 +220,12 @@ def score_text(
             break
     if candidate.number_match and not candidate.total_match and not candidate.set_code_match:
         reasons.append(f"Nummer {card.number} passt")
+    if (read_total := total_conflict(text, card)) is not None:
+        candidate.total_conflict = True
+        reasons.append(
+            f"Gelesene Setgröße /{read_total:03d} passt nicht "
+            f"(Set hat {card_set.card_count_official} Karten) – bitte prüfen"
+        )
     set_code = card_set.external_id.casefold()
     if set_code in text.set_codes or set_code.replace("-", "") in text.set_codes:
         candidate.set_code_match = True

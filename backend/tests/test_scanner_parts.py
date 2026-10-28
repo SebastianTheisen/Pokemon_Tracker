@@ -505,6 +505,30 @@ def _card(name: str, number: str, *, language: str = "ja", set_id: str = "S12") 
     )
 
 
+def _set_card(name: str, number: str, official: int) -> Card:
+    card = _card(name, number, set_id=f"X{official}")
+    card.card_set.card_count_official = official
+    return card
+
+
+def test_read_set_size_contradicting_the_set_is_never_confident() -> None:
+    """Classic Collection 2023 („001/032“) hat dieselbe Grafik wie das Grundset 1996: Der
+    Bildabgleich allein fand die alte Karte und meldete sie als sicher."""
+    text = extract_text_features(lines("ヒトカゲ", "CLL 001/032"))
+    old = score_text(Candidate(_set_card("ヒトカゲ", "004", 102)), text)
+    old.catalog_inliers = 160
+
+    assert old.total_conflict
+    assert not old.strong_evidence
+    assert not is_confident([old])
+    assert any("passt nicht" in reason for reason in old.reasons)
+
+    # OCR-Fehler einer Ziffer („273/167“ statt „223/187“) ist kein Widerspruch.
+    misread = extract_text_features(lines("イーブイex", "273/167"))
+    eevee = score_text(Candidate(_set_card("イーブイex", "223", 187)), misread)
+    assert not eevee.total_conflict
+
+
 @pytest.mark.parametrize(
     ("ocr", "card_name", "expected"),
     [
