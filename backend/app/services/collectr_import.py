@@ -29,7 +29,7 @@ import re
 import unicodedata
 import uuid
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from typing import Literal
@@ -37,7 +37,16 @@ from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Card, CardSet, CollectionItem, Folder, Game, GradingCompany, User
+from app.models import (
+    Card,
+    CardSet,
+    CmProduct,
+    CollectionItem,
+    Folder,
+    Game,
+    GradingCompany,
+    User,
+)
 from app.services.card_names import translate_card_name
 from app.services.catalog_numbers import normalize_number
 from app.services.collection import CollectionService, ItemInput
@@ -65,6 +74,7 @@ BONUS_LANGUAGE = 0.05
 MATCHED_SCORE = 0.75  # ab hier gilt ein Treffer als zugeordnet …
 MATCHED_LEAD = 0.1  # … wenn der Zweite so weit dahinter liegt
 CHECK_SCORE = 0.35  # darunter taugt ein Kandidat nicht einmal zum Prüfen
+STRONG_SET = 0.75  # Setname gilt als passend (ohne englischen Kartennamen nötig)
 
 # „Espeon V (JP)“, „Sun & Moon Promos (JP)“, aber auch „Scarlet & Violet Promo JP“
 _JP_TAG = re.compile(r"\s*(?:\(JP\)|\bJP)\s*$", re.IGNORECASE)
@@ -189,11 +199,37 @@ def _similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, key_a, key_b).ratio()
 
 
-def english_card_name(card: Card) -> str:
-    """Englischer Name zum Vergleich mit Collectr (TCGplayer-Namen sind englisch)."""
+_CM_VERSION = re.compile(r"\s*\((?:V\.?\s*\d+|[A-Za-z0-9 .-]*\d{2,}[A-Za-z0-9 .-]*)\)\s*$")
+_LATIN = re.compile(r"[A-Za-z]")
+_LAST_WESTERN = 0x2FFF  # darüber: Kana, Kanji, Hangul
+
+
+def english_card_name(card: Card, cardmarket_name: str | None = None) -> str | None:
+    """Englischer Name zum Vergleich mit Collectr (TCGplayer-Namen sind englisch).
+
+    Pokémon-Namen übersetzt die App selbst; Trainer, Items und Stadien nicht („ナンジャモ“) –
+    dafür der englische Produktname bei Cardmarket („Iono (V.2)“ → „Iono“). ``None``, wenn es
+    keinen englischen Namen gibt: dann zählt der Name bei der Bewertung nicht mit.
+    """
     if card.language == "en":
         return card.name
-    return translate_card_name(card.name, card.language, "en") or card.name_en or card.name
+    for name in (
+        translate_card_name(card.name, card.language, "en"),
+        _CM_VERSION.sub("", cardmarket_name) if cardmarket_name else None,
+        card.name_en,
+    ):
+        if name and _LATIN.search(name) and not any(ord(c) > _LAST_WESTERN for c in name):
+            return name
+    return None
+
+
+def set_similarity(a: str, b: str) -> float:
+    """Wie :func:`_similarity`, Wortreihenfolge egal („Ultra Shiny GX“ = „GX Ultra Shiny“)."""
+
+    def words(text: str) -> str:
+        return " ".join(sorted(text.replace("&", " and ").split()))
+
+    return max(_similarity(a, b), _similarity(words(a), words(b)))
 
 
 def english_set_name(card_set: CardSet) -> str:
@@ -217,15 +253,28 @@ class CandidateScore:
     score: float
 
 
-def score_card(row: CollectrRow, card: Card) -> float:
-    score = WEIGHT_TOTAL * total_matches(row, card.card_set)
-    score += WEIGHT_SET * _similarity(row.set_name, english_set_name(card.card_set))
+def score_card(row: CollectrRow, card: Card, english_name: str | None = None) -> float:
+    total = WEIGHT_TOTAL * total_matches(row, card.card_set)
+    set_similar = set_similarity(row.set_name, english_set_name(card.card_set))
+    set_score = WEIGHT_SET * set_similar
+    language = BONUS_LANGUAGE if (card.language == "ja") == row.japanese else 0.0
+    if english_name is None:
+        # Ohne Namens-Gegenprobe zählt nur ein klar passender Setname („Sky Legend“ und
+        # „GG End“ ähneln sich zu 0,57 – gleiche Setgröße, falsches Set).
+        if set_similar < STRONG_SET:
+            set_score *= 0.5
+        # Kein englischer Name (z. B. japanischer Trainer ohne Cardmarket-Verknüpfung): Nummer,
+        # Setgröße und Setname tragen die Bewertung allein – sonst landet jede solche Karte
+        # unter „bitte prüfen“, obwohl alles andere passt.
+        if not row.total:
+            return round(0.5 * set_score + language, 3)  # Promo ohne Setgröße: zu unsicher
+        scale = (1.0 - BONUS_LANGUAGE) / (WEIGHT_TOTAL + WEIGHT_SET)
+        return round((total + set_score) * scale + language, 3)
     # Ohne Setgröße (Promos wie „085“) zählt der Name dafür mehr.
     name_weight = WEIGHT_NAME + (0.0 if row.total else WEIGHT_TOTAL)
-    score += name_weight * _similarity(row.name, english_card_name(card))
-    if (card.language == "ja") == row.japanese:
-        score += BONUS_LANGUAGE
-    return round(score, 3)
+    return round(
+        total + set_score + name_weight * _similarity(row.name, english_name) + language, 3
+    )
 
 
 RowStatus = Literal["matched", "check", "missing"]
@@ -239,10 +288,19 @@ class RowResult:
     matches: list[CandidateScore] = field(default_factory=list)
 
 
-def classify(index: int, row: CollectrRow, cards: Sequence[Card]) -> RowResult:
+def classify(
+    index: int,
+    row: CollectrRow,
+    cards: Sequence[Card],
+    cardmarket_names: Mapping[uuid.UUID, str] | None = None,
+) -> RowResult:
     """Kandidaten bewerten und einordnen: sicher zugeordnet, prüfen oder nicht gefunden."""
+    names = cardmarket_names or {}
     scored = sorted(
-        (CandidateScore(card, score_card(row, card)) for card in cards),
+        (
+            CandidateScore(card, score_card(row, card, english_card_name(card, names.get(card.id))))
+            for card in cards
+        ),
         key=lambda c: -c.score,
     )
     scored = [c for c in scored if c.score >= CHECK_SCORE][:MAX_MATCHES]
@@ -311,9 +369,35 @@ class CollectrImport:
         by_number = await self._cards_by_number(
             {norm for _, row in parsed if (norm := row.number_norm)}
         )
+        cardmarket_names = await self._cardmarket_names(
+            [card for cards in by_number.values() for card in cards]
+        )
         return [
-            classify(index, row, by_number.get(row.number_norm or "", [])) for index, row in parsed
+            classify(index, row, by_number.get(row.number_norm or "", []), cardmarket_names)
+            for index, row in parsed
         ]
+
+    async def _cardmarket_names(self, cards: Sequence[Card]) -> dict[uuid.UUID, str]:
+        """Englische Cardmarket-Namen der verknüpften Produkte (asiatische Karten)."""
+        product_of = {
+            card.id: product
+            for card in cards
+            if card.language != "en"
+            and (product := card.cardmarket_product_override or card.cardmarket_product_id)
+        }
+        if not product_of:
+            return {}
+        rows = await self._session.execute(
+            select(CmProduct.id_product, CmProduct.name).where(
+                CmProduct.id_product.in_(set(product_of.values()))
+            )
+        )
+        name_of: dict[int, str] = dict(rows.tuples().all())
+        return {
+            card_id: name_of[product]
+            for card_id, product in product_of.items()
+            if product in name_of
+        }
 
     async def _folder(self, name: str) -> Folder:
         name = _clean(name)[:80] or "Collectr"

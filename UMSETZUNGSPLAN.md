@@ -865,6 +865,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Collectr-Import vollständig prüfbar: Vorschau zeigt „Gelesen: N Kacheln · S Stück“ (zum Vergleich mit Collectr) und Kacheln ohne Kartennummer; nach dem Übernehmen Liste „Nicht übernommen“ mit Grund (keine Karte gewählt, Note fehlt, abgewählt, ohne Nummer). Gleiche Karte zweimal als eigener Eintrag: Lesezeichen zählt gleichzeitig sichtbare Doppel mit, Server fasst sie zu einer Position mit addierter Menge zusammen (vorher wäre eine verloren gegangen). Browser-Test 62/62 inkl. Doppel
 
+- [x] Collectr-Import Trainer-Ordner (erster echter Lauf: 31 zugeordnet, viele „bitte prüfen“, 2 nicht gefunden): Trainer-Namen übersetzt die App nicht („ナンジャモ“), der Name fehlte in der Bewertung → richtige Treffer knapp unter der Schwelle. Jetzt: englischer Name aus dem verknüpften Cardmarket-Produkt („Iono (V.2)“ → „Iono“); ohne englischen Namen tragen Nummer, Setgröße und Setname – aber nur ein klar passender Setname (≥ 0,75, Wortreihenfolge egal), sonst „prüfen“ (Sky Legend ≠ GG End, gleiche Setgröße). Offen: Lillie 080/SM-P und Sycamore 246/XY-P fehlen vermutlich im Katalog (Prüfung per psql)
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

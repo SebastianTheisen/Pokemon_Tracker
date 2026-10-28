@@ -10,7 +10,7 @@ from typing import Any
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.models import Card, CardSet
+from app.models import Card, CardSet, CmProduct
 from app.services.collectr_import import parse_row
 from tests.conftest import RegisterUser
 
@@ -273,3 +273,79 @@ async def test_collectr_preview_and_commit(
 async def test_collectr_import_needs_login(client: AsyncClient) -> None:
     response = await client.post(f"{API}/import/collectr/preview", json={"rows": []})
     assert response.status_code == 401
+
+
+async def test_trainer_cards_without_english_name(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Trainer-Ordner (Screenshots 28.10.): Trainer-Namen übersetzt die App nicht. Mit
+    Cardmarket-Namen zählt der Name, ohne ihn tragen Nummer, Setgröße und Setname – falsche
+    Kandidaten (anderes Set gleicher Größe, Pokémon statt Trainer) bleiben zum Prüfen."""
+    alice = await register_user("alice@example.com")
+    async with session_factory() as session:
+        session.add(CmProduct(id_product=700001, id_expansion=1, id_metacard=1, name="Iono (V.2)"))
+        specs = [
+            # (Set-Code, Setname, Größe, Nummer, Kartenname, Cardmarket-Produkt)
+            (
+                "SV-P",
+                "スカーレット&バイオレット プロモカード",
+                0,
+                "110",
+                "おいわいファンファーレ",
+                None,
+            ),
+            ("SV2a", "強化拡張パック ポケモンカード151", 165, "096", "ナンジャモ", 700001),
+            ("SV9a", "強化拡張パック 熱風のアリーナ", 63, "089", "ヒビキの冒険", None),
+            ("S1W", "拡張パック ソード", 60, "065", "ザシアンV", None),
+            ("SM10a", "強化拡張パック ジージーエンド", 54, "062", "コーチトレーナー", None),
+        ]
+        cards: dict[str, Card] = {}
+        for code, set_name, size, number, name, product in specs:
+            card_set = CardSet(
+                external_id=code, language="ja", name=set_name, card_count_official=size or None
+            )
+            session.add(card_set)
+            await session.flush()
+            card = Card(
+                external_id=f"{code}-{number}",
+                language="ja",
+                set_id=card_set.id,
+                number=number,
+                number_norm=number.lstrip("0"),
+                name=name,
+                cardmarket_product_id=product,
+            )
+            session.add(card)
+            cards[code] = card
+        await session.commit()
+
+    tiles = [
+        ["Celebration Fanfare (JP)", "Scarlet & Violet Promo JP", "Common • 110/SV-P",
+         "Near Mint • Normal", "Qty: 1"],
+        ["Iono (JP)", "Pokemon 151", "Secret Rare • 096/165", "Near Mint • Holofoil", "Qty: 1"],
+        ["Ethan's Adventure", "Hot Air Arena", "Special Art Rare • 089/063",
+         "Near Mint • Holofoil", "Qty: 1"],
+        ["Kahili (JP)", "Thunderclap Spark", "Secret Rare • 065/060", "Near Mint • Holofoil",
+         "Qty: 1"],
+        ["Jessie & James (JP)", "Sky Legend", "Secret Rare • 062/054", "Near Mint • Holofoil",
+         "Qty: 1"],
+    ]  # fmt: skip
+    response = await client.post(
+        f"{API}/import/collectr/preview", json={"rows": tiles}, headers=alice.headers
+    )
+    assert response.status_code == 200, response.text
+    rows = {row["index"]: row for row in response.json()["rows"]}
+
+    def outcome(index: int) -> tuple[str, str | None]:
+        row = rows[index]
+        return row["status"], row["matches"][0]["card"]["id"] if row["matches"] else None
+
+    assert outcome(0) == ("matched", str(cards["SV-P"].id))  # Promo-Kürzel + Setname
+    assert outcome(1) == ("matched", str(cards["SV2a"].id))  # Name über Cardmarket
+    # „Hot Air Arena“ (Collectr) vs. „Heat Wave Arena“: richtig vorgeschlagen, aber zu
+    # unähnlich für „sicher“ ohne Namens-Gegenprobe
+    assert outcome(2) == ("check", str(cards["SV9a"].id))
+    assert outcome(3)[0] == "check"  # Zacian V ist nicht Kahili
+    assert outcome(4)[0] == "check"  # GG End ist nicht Sky Legend
