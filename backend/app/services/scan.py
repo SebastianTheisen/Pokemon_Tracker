@@ -60,8 +60,6 @@ from app.scanner.runtime import ScannerRuntime
 from app.scanner.slab import SlabLabel
 from app.scanner.storage import ReferenceStore
 from app.scanner.text import (
-    LARGE_KANA,
-    SMALL_KANA,
     NameCandidate,
     TextFeatures,
     is_cjk_text,
@@ -98,8 +96,6 @@ PAGE_SET_MIN_CELLS = 2
 # dauerte auf dem Server über 2 Minuten – daher wenige Karten und ein Zeitlimit.
 PAGE_SET_IMAGE_LIMIT = 24
 PAGE_SET_IMAGE_SECONDS = 20.0
-# Zeichen, die der Vergleichsschlüssel (``compact_key``) entfernt – gleich in SQL.
-_COMPACT_SQL_CHARS = " .,'’`\"-·・"  # noqa: RUF001
 
 
 @dataclass(frozen=True)
@@ -329,11 +325,8 @@ class ScanService:
         return cards
 
     async def _cards_by_name(self, names: Iterable[NameCandidate]) -> list[Card]:
-        # Wie ``compact_key``: kleine Kana → große, Satzzeichen weg (translate löscht Zeichen
-        # ohne Gegenstück).
-        compact_name = func.translate(
-            func.lower(Card.name), SMALL_KANA + _COMPACT_SQL_CHARS, LARGE_KANA
-        )
+        # Gespeicherter Schlüssel wie ``compact_key`` (Trigramm-Index, Migration 0024).
+        compact_name = Card.name_key
         cards: list[Card] = []
         for name in list(names)[:NAME_QUERIES]:
             cjk = is_cjk_text(name.key)

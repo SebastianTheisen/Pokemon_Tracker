@@ -43,6 +43,8 @@ def normalize_text(text: str) -> str:
 # „リーフィア“) – im Vergleichsschlüssel zählen beide gleich. Dieselbe Zuordnung nutzt die
 # SQL-Suche (:data:`SMALL_KANA`, :data:`LARGE_KANA`).
 SMALL_KANA = "ァィゥェォッャュョヮヵヶぁぃぅぇぉっゃゅょゎ"
+# Zeichen, die der Vergleichsschlüssel entfernt – für SQL (``translate``) wie ``_COMPACT``.
+COMPACT_SQL_CHARS = " .,'’`\"-·・"  # noqa: RUF001
 LARGE_KANA = "アイウエオツヤユヨワカケあいうえおつやゆよわ"
 _KANA_SIZE = str.maketrans(SMALL_KANA, LARGE_KANA)
 

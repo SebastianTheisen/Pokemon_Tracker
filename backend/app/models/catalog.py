@@ -12,6 +12,7 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import (
+    Computed,
     Date,
     DateTime,
     Enum,
@@ -19,6 +20,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     func,
     text,
@@ -27,6 +29,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UuidPrimaryKeyMixin
+from app.scanner.text import COMPACT_SQL_CHARS, LARGE_KANA, SMALL_KANA
 
 
 class Game(enum.StrEnum):
@@ -104,6 +107,15 @@ class CardSet(UuidPrimaryKeyMixin, Base):
     cardmarket_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+# Gleiche Zuordnung wie ``app.scanner.text.compact_key`` (SMALL_KANA → LARGE_KANA, Zeichen ohne
+# Gegenstück entfallen). Bei Änderung neue Migration (Spalte neu berechnen).
+NAME_KEY_SQL = (
+    "translate(lower(name), '"
+    + (SMALL_KANA + COMPACT_SQL_CHARS).replace("'", "''")
+    + f"', '{LARGE_KANA}')"
+)
+
+
 class Card(UuidPrimaryKeyMixin, TimestampMixin, Base):
     """Eine Karte in einer Sprache – aus TCGdex importiert oder von Nutzern angelegt."""
 
@@ -127,6 +139,11 @@ class Card(UuidPrimaryKeyMixin, TimestampMixin, Base):
             text("lower(name_en) gin_trgm_ops"),
             postgresql_using="gin",
         ),
+        Index(
+            "ix_cards_name_key_trgm",
+            text("name_key gin_trgm_ops"),
+            postgresql_using="gin",
+        ),
         Index("ix_cards_number_norm", "number_norm"),
     )
 
@@ -141,6 +158,10 @@ class Card(UuidPrimaryKeyMixin, TimestampMixin, Base):
     # Englischer Name japanischer One-Piece-Karten (gleiche Kartennummer in der englischen
     # Liste); Pokémon-Namen übersetzt :mod:`app.services.card_names` ohne Spalte.
     name_en: Mapped[str | None] = mapped_column(String(200))
+    # Vergleichsschlüssel für die Scanner-Namenssuche (wie ``compact_key``: klein, kleine Kana
+    # als große, ohne Leer-/Satzzeichen) – gespeichert und mit Trigramm-Index, sonst durchsucht
+    # jede Anfrage alle Karten (Binder-Scan: 10 von 28 Sekunden).
+    name_key: Mapped[str | None] = mapped_column(Text, Computed(NAME_KEY_SQL, persisted=True))
     image_url: Mapped[str | None] = mapped_column(String(500))
     # Sprache des Bildes, wenn es von einer anderen Sprachfassung derselben Karte stammt
     # (z. B. englisches Bild für eine deutsche Karte, deren Bild bei TCGdex fehlt).
