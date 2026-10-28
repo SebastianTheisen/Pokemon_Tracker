@@ -27,7 +27,9 @@ Setgröße widerspricht      − 0,30  ``001/032`` gelesen, Set hat 102 Karten (
 Dieselbe Karte in einer anderen Sprache zählt nicht als Konkurrenz.
 
 Gleiches Motiv mit gleicher Nummer in mehreren Sets (Nachdrucke) und kein klarer
-Unterschied im Bild: nie sicher.
+Unterschied im Bild: nie sicher. Ebenso, wenn eine Karte aus einem anderen Set im Bildabgleich
+fast gleich gut abschneidet (gleiche Grafik, z. B. Grundset 1996 und Classic Collection 2023)
+und kein Text (Nummer + Setgröße/Setcode) den Treffer belegt.
 
 Sonst zeigt die App „Falsche Karte? Selbst suchen“ mit der Kandidatenliste.
 """
@@ -56,6 +58,8 @@ STRONG_LANGUAGE_PENALTY = 0.25
 HINT_LANGUAGE_PENALTY = 0.30
 WEAK_LANGUAGE_PENALTY = 0.05
 TWIN_POINTS = 0.20
+# Bildabgleich gilt nur als Beleg, wenn die beste andere Karte deutlich weniger Inlier hat.
+SAME_ARTWORK_RATIO = 0.7
 CONFLICT_PENALTY = 0.30
 # So viele Ziffern dürfen zwischen gelesener und offizieller Setgröße abweichen, ohne dass
 # es als Widerspruch gilt (OCR: „167“ statt „187“).
@@ -318,4 +322,20 @@ def is_confident(ranked: Sequence[Candidate]) -> bool:
     if best.twin_undecided or not best.strong_evidence or best.score < MIN_CONFIDENT_SCORE:
         return False
     competitor = next((c for c in ranked[1:] if c.identity != best.identity), None)
+    if competitor is not None and same_artwork(best, competitor):
+        return False
     return competitor is None or best.score - competitor.score >= CONFIDENT_MARGIN
+
+
+def text_proves(candidate: Candidate) -> bool:
+    """Nummer + Setgröße bzw. Setcode gelesen und passend (unabhängig vom Bild)."""
+    return candidate.number_match and (candidate.total_match or candidate.set_code_match)
+
+
+def same_artwork(best: Candidate, other: Candidate) -> bool:
+    """Andere Karte mit fast gleich gutem Bildabgleich und kein Textbeleg: Die Grafik allein
+    entscheidet nicht (Nachdrucke derselben Grafik in anderen Sets)."""
+    if text_proves(best) or best.card.set_id == other.card.set_id:
+        return False
+    best_inliers, other_inliers = best.inliers or 0, other.inliers or 0
+    return other_inliers >= CONFIDENT_INLIERS and other_inliers >= SAME_ARTWORK_RATIO * best_inliers

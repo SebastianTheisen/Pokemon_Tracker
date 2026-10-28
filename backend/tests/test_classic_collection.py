@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import date
 from typing import Any
 
@@ -238,3 +239,35 @@ async def test_scanner_prefers_classic_over_base_set_artwork(
     assert ranked[0].card.external_id == "CLL-002"
     assert ranked[1].total_conflict
     assert is_confident(ranked)
+
+
+def test_same_artwork_in_another_set_is_not_proof() -> None:
+    """Classic-Binder 28.10.: „フシギダネ“ ohne lesbare Nummer – Grundset und Classic haben die
+    gleiche Grafik, beide hohe Inlier. Das Bild allein darf dann nicht „sicher“ machen."""
+
+    def card(set_id: str, number: str, official: int) -> Card:
+        return Card(
+            language="ja",
+            number=number,
+            number_norm=number.lstrip("0"),
+            name="フシギダネ",
+            external_id=f"{set_id}-{number}",
+            set_id=uuid.uuid4(),
+            card_set=CardSet(
+                external_id=set_id, language="ja", name=set_id, card_count_official=official
+            ),
+        )
+
+    text = extract_text_features(lines("フシギダネ", "やどりぎのタネ"))
+    base = score_text(Candidate(card("expansion-pack", "1", 102), catalog_inliers=180), text)
+    classic = score_text(Candidate(card("CLF", "001", 32), catalog_inliers=150), text)
+    ranked = rank([base, classic])
+    assert not is_confident(ranked)
+
+    # Mit gelesener Nummer + Setgröße entscheidet der Text – dann sicher.
+    numbered = extract_text_features(lines("フシギダネ", "001/032"))
+    classic_read = score_text(Candidate(card("CLF", "001", 32), catalog_inliers=150), numbered)
+    base_read = score_text(
+        Candidate(card("expansion-pack", "1", 102), catalog_inliers=180), numbered
+    )
+    assert is_confident(rank([classic_read, base_read]))
