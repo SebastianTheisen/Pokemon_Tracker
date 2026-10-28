@@ -869,6 +869,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Collectr-Vorschau nachvollziehbar: Server speichert die letzte Vorschau je Nutzer (Rohzeilen vom Lesezeichen + Vorschläge mit Punktzahl) im Scanner-Volume; `deploy/phase8_collectr_last.sh [Filter]` zeigt sie an (z. B. „Kahili“ oder „check“). Anlass: „Kahili 065/060 → Zacian V“ – Zacian kommt aus dem Katalog (einzige Karte 065 in einem 60er-Set), nicht aus Collectr
 
+- [x] Collectr-Setnamen über TCGplayer-Kürzel: Collectr nutzt die Setnamen von TCGplayer („Hot Air Arena“ statt „Heat Wave Arena“). `services/tcgplayer_sets.py` lädt die Gruppen von tcgcsv (Kategorien 3 und 85, 1 Tag im Speicher) und ordnet Name → Kürzel (SV9a) → Set zu: Kürzel passt = Setname sicher; Kürzel gehört zu anderem Set = deutlicher Abzug (Sky Legend SM10b ≠ GG End SM10a). Ohne tcgcsv bleibt der Namensvergleich. Prüfung auf dem VPS: `deploy/spikes/tcgplayer_sets_check.py` (Format der Kürzel noch nicht am echten tcgcsv gemessen)
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

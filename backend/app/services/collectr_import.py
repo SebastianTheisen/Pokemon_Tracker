@@ -52,6 +52,8 @@ from app.services.catalog_numbers import normalize_number
 from app.services.collection import CollectionService, ItemInput
 from app.services.display_names import translated_set_title
 from app.services.errors import InvalidInputError
+from app.services.tcgplayer_sets import SetAliases, code_key
+from app.services.tcgplayer_sets import name_key as tcg_name_key
 
 LANGUAGES = ("ja", "en")
 MAX_ROWS = 1500
@@ -253,9 +255,29 @@ class CandidateScore:
     score: float
 
 
-def score_card(row: CollectrRow, card: Card, english_name: str | None = None) -> float:
+def set_alias_match(row: CollectrRow, card_set: CardSet, aliases: SetAliases) -> bool | None:
+    """Kennt TCGplayer den Setnamen aus Collectr? ``True``: Kürzel passt zum Set der Karte,
+    ``False``: gehört zu einem anderen Set, ``None``: Name unbekannt."""
+    codes = aliases.get(tcg_name_key(row.set_name))
+    if not codes:
+        return None
+    own = {code_key(card_set.external_id), code_key(card_set.code or "")} - {""}
+    return bool(own & codes)
+
+
+def score_card(
+    row: CollectrRow,
+    card: Card,
+    english_name: str | None = None,
+    aliases: SetAliases | None = None,
+) -> float:
     total = WEIGHT_TOTAL * total_matches(row, card.card_set)
     set_similar = set_similarity(row.set_name, english_set_name(card.card_set))
+    alias = set_alias_match(row, card.card_set, aliases or {})
+    if alias is True:  # „Hot Air Arena“ ist laut TCGplayer SV9a – sicher
+        set_similar = 1.0
+    elif alias is False:  # Setname gehört laut TCGplayer zu einem anderen Set
+        set_similar = min(set_similar, 0.2)
     set_score = WEIGHT_SET * set_similar
     language = BONUS_LANGUAGE if (card.language == "ja") == row.japanese else 0.0
     if english_name is None:
@@ -293,12 +315,16 @@ def classify(
     row: CollectrRow,
     cards: Sequence[Card],
     cardmarket_names: Mapping[uuid.UUID, str] | None = None,
+    aliases: SetAliases | None = None,
 ) -> RowResult:
     """Kandidaten bewerten und einordnen: sicher zugeordnet, prüfen oder nicht gefunden."""
     names = cardmarket_names or {}
     scored = sorted(
         (
-            CandidateScore(card, score_card(row, card, english_card_name(card, names.get(card.id))))
+            CandidateScore(
+                card,
+                score_card(row, card, english_card_name(card, names.get(card.id)), aliases),
+            )
             for card in cards
         ),
         key=lambda c: -c.score,
@@ -362,7 +388,9 @@ class CollectrImport:
             found[card.number_norm].append(card)
         return found
 
-    async def preview(self, rows: Sequence[Sequence[str]]) -> list[RowResult]:
+    async def preview(
+        self, rows: Sequence[Sequence[str]], aliases: SetAliases | None = None
+    ) -> list[RowResult]:
         if len(rows) > MAX_ROWS:
             raise InvalidInputError(f"Höchstens {MAX_ROWS} Karten auf einmal.")
         parsed = [(index, row) for index, lines in enumerate(rows) if (row := parse_row(lines))]
@@ -373,7 +401,9 @@ class CollectrImport:
             [card for cards in by_number.values() for card in cards]
         )
         return [
-            classify(index, row, by_number.get(row.number_norm or "", []), cardmarket_names)
+            classify(
+                index, row, by_number.get(row.number_norm or "", []), cardmarket_names, aliases
+            )
             for index, row in parsed
         ]
 

@@ -24,6 +24,7 @@ from app.services.collectr_import import (
     RowResult,
     RowStatus,
 )
+from app.services.tcgplayer_sets import set_aliases
 
 router = APIRouter(prefix="/import", tags=["import"])
 log = structlog.get_logger(__name__)
@@ -155,7 +156,7 @@ async def collectr_preview(
     body: CollectrPreviewIn, importer: Importer, user: CurrentUser, settings: SettingsDep
 ) -> CollectrPreviewOut:
     """Kacheln des Showcase auswerten und dem Katalog zuordnen (speichert nichts)."""
-    results = await importer.preview(body.rows)
+    results = await importer.preview(body.rows, await set_aliases(settings))
     out = CollectrPreviewOut(
         portfolio=body.portfolio, rows=[CollectrRowOut.build(r) for r in results]
     )

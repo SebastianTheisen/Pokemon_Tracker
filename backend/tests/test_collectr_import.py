@@ -8,15 +8,33 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import httpx
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.v1 import imports as imports_api
 from app.core.config import Settings
 from app.models import Card, CardSet, CmProduct
 from app.services.collectr_import import parse_row
+from app.services.tcgplayer_sets import build_aliases, code_key, name_key, reset_cache, set_aliases
 from tests.conftest import RegisterUser
 
 API = "/api/v1"
+
+ALIASES: dict[str, frozenset[str]] = {}
+
+
+@pytest.fixture(autouse=True)
+def _no_tcgcsv(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Setliste von TCGplayer ohne Netz: was der Test in ``ALIASES`` einträgt."""
+    ALIASES.clear()
+
+    async def fake(_settings: Settings) -> dict[str, frozenset[str]]:
+        return ALIASES
+
+    monkeypatch.setattr(imports_api, "set_aliases", fake)
+
 
 ESPEON = [
     "Espeon V (JP)",
@@ -360,3 +378,56 @@ async def test_trainer_cards_without_english_name(
     assert outcome(2) == ("check", str(cards["SV9a"].id))
     assert outcome(3)[0] == "check"  # Zacian V ist nicht Kahili
     assert outcome(4)[0] == "check"  # GG End ist nicht Sky Legend
+
+    # Mit der TCGplayer-Setliste: „Hot Air Arena“ = SV9a → sicher; „Sky Legend“ = SM10b → GG
+    # End (SM10a) fällt deutlich zurück
+    ALIASES.update(
+        build_aliases(
+            [
+                {"name": "SV9a: Hot Air Arena", "abbreviation": "SV9a"},
+                {"name": "SM10b: Sky Legend", "abbreviation": "SM10b"},
+            ]
+        )
+    )
+    again = await client.post(
+        f"{API}/import/collectr/preview", json={"rows": tiles}, headers=alice.headers
+    )
+    rows = {row["index"]: row for row in again.json()["rows"]}
+    assert outcome(2) == ("matched", str(cards["SV9a"].id))
+    assert outcome(4)[0] == "check"
+    assert rows[4]["matches"][0]["score"] < 0.6  # vorher 0.66
+
+
+def test_tcgplayer_set_keys() -> None:
+    assert name_key("SV9a: Hot Air Arena") == name_key("Hot Air Arena") == "hotairarena"
+    assert name_key("Scarlet & Violet Promo JP") == name_key("Scarlet and Violet Promo")
+    assert code_key("SV09") == code_key("sv9") == "sv9"
+    assert code_key("SM10b") == "sm10b"
+    aliases = build_aliases(
+        [
+            {"name": "SV9a: Hot Air Arena", "abbreviation": "SV9a"},
+            {"name": "Ohne Kürzel", "abbreviation": None},
+            {"name": None, "abbreviation": "X"},
+        ]
+    )
+    assert aliases == {"hotairarena": frozenset({"sv9a"})}
+
+
+async def test_set_aliases_downloads_once_and_survives_errors(settings: Settings) -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        group = {"name": "SV9a: Hot Air Arena", "abbreviation": "SV9a"}
+        return httpx.Response(200, json={"results": [group] if "85" in request.url.path else []})
+
+    reset_cache()
+    aliases = await set_aliases(settings, transport=httpx.MockTransport(handler))
+    assert aliases["hotairarena"] == frozenset({"sv9a"})
+    await set_aliases(settings, transport=httpx.MockTransport(handler))
+    assert len(calls) == 2  # zwei Kategorien, danach aus dem Speicher
+
+    reset_cache()
+    broken = httpx.MockTransport(lambda _request: httpx.Response(503))
+    assert await set_aliases(settings, transport=broken) == {}  # Namensvergleich bleibt
+    reset_cache()
