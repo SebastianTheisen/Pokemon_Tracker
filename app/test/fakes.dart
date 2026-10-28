@@ -957,6 +957,34 @@ class FakeApi extends Api {
     return ScanResult.fromJson(scanResult);
   }
 
+  /// Binder-Auftrag: zwei Felder; jede Abfrage meldet eine Karte mehr.
+  int binderPolls = 0;
+
+  Json _binderJob(int finished) => {
+    'job_id': 'job1',
+    'beta': true,
+    'method': '1x2',
+    'done': finished >= 2,
+    'error': null,
+    'finished': finished,
+    'cells': [
+      for (var column = 0; column < 2; column++)
+        {'row': 0, 'column': column, 'result': column < finished ? scanResult : null},
+    ],
+  };
+
+  @override
+  Future<BinderJob> startBinderJob(UploadImage image, {String layout = 'auto'}) async {
+    calls.add('binderJob:${image.filename}:$layout');
+    return BinderJob.fromJson(_binderJob(0));
+  }
+
+  @override
+  Future<BinderJob> binderJob(String id) async {
+    binderPolls++;
+    return BinderJob.fromJson(_binderJob(binderPolls));
+  }
+
   @override
   Future<ConfirmResult> confirmScan(
     String scanId,

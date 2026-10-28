@@ -6,7 +6,7 @@ import uuid
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, File, Query, Response, UploadFile, status
+from fastapi import APIRouter, File, Query, Request, Response, UploadFile, status
 
 from app.api.deps import CurrentUser, PsaServiceDep, ScanServiceDep, SettingsDep
 from app.core.config import CatalogLanguage, Settings
@@ -15,12 +15,14 @@ from app.scanner.binder import BinderLayout
 from app.schemas.catalog import CardOut
 from app.schemas.scan import (
     BatchItemOut,
+    BinderJobOut,
     BinderResultOut,
     ConfirmIn,
     ConfirmOut,
     PsaCertOut,
     ReferenceOut,
     ScanResultOut,
+    serialize_binder_cell,
 )
 from app.services.errors import InvalidInputError, NotFoundError, ServiceError
 from app.services.psa import PsaService
@@ -122,6 +124,42 @@ async def scan_binder(
         await _read_upload(file, settings), layout=layout, language_hint=language
     )
     return BinderResultOut.build(outcome)
+
+
+@router.post("/binder/jobs", status_code=status.HTTP_202_ACCEPTED)
+async def start_binder_job(
+    *,
+    request: Request,
+    service: ScanServiceDep,
+    user: CurrentUser,
+    settings: SettingsDep,
+    file: Annotated[UploadFile, File(description="Foto einer Binderseite")],
+    layout: Annotated[
+        BinderLayout, Query(description="auto, 3x3 (9er-Seite), 4x3 (12er-Seite quer), 2x2")
+    ] = "auto",
+    language: LanguageHint = None,
+) -> BinderJobOut:
+    """Binderseite (Beta) als Auftrag: liefert sofort die Felder; die Karten werden im
+    Hintergrund erkannt – Stand über ``GET /scan/binder/jobs/{job_id}``."""
+    page = await service.prepare_binder(await _read_upload(file, settings), layout=layout)
+    job = request.app.state.binder_jobs.start(
+        page,
+        user=user,
+        runtime=request.app.state.scanner,
+        session_factory=request.app.state.session_factory,
+        serialize=serialize_binder_cell,
+        language_hint=language,
+    )
+    return BinderJobOut.build(job)
+
+
+@router.get("/binder/jobs/{job_id}")
+async def binder_job(job_id: uuid.UUID, request: Request, user: CurrentUser) -> BinderJobOut:
+    """Stand eines Binder-Auftrags (nur eigene; verfällt nach 30 Minuten)."""
+    job = request.app.state.binder_jobs.get(job_id, user.id)
+    if job is None:
+        raise NotFoundError("Binder-Scan nicht gefunden (abgelaufen?).")
+    return BinderJobOut.build(job)
 
 
 @router.post("/{scan_id}/confirm")

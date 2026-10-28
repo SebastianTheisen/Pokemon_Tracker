@@ -753,6 +753,21 @@ class Api {
             as Json,
       );
 
+  /// Binder-Scan starten: liefert sofort die Felder, die Karten folgen ([binderJob]).
+  Future<BinderJob> startBinderJob(UploadImage image, {String layout = 'auto'}) async =>
+      BinderJob.fromJson(
+        (await _send(
+              'POST',
+              '/scan/binder/jobs',
+              body: FormData.fromMap({'file': _file(image)}),
+              query: {'layout': layout},
+            ))!
+            as Json,
+      );
+
+  Future<BinderJob> binderJob(String id) async =>
+      BinderJob.fromJson((await _send('GET', '/scan/binder/jobs/$id'))! as Json);
+
   Future<ConfirmResult> confirmScan(
     String scanId,
     String cardId, {

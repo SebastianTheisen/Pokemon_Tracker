@@ -1380,6 +1380,50 @@ class BinderResult {
   final List<BinderCell> cells;
 }
 
+/// Binder-Scan als Auftrag: Felder sofort, Ergebnisse nach und nach.
+class BinderJob {
+  const BinderJob({
+    required this.id,
+    required this.method,
+    required this.done,
+    required this.finished,
+    required this.cells,
+    this.error,
+  });
+
+  factory BinderJob.fromJson(Json json) => BinderJob(
+    id: json.str('job_id'),
+    method: json.str('method'),
+    done: json.flag('done'),
+    finished: json.integer('finished'),
+    error: json.strOrNull('error'),
+    cells: json.list('cells', BinderJobCell.fromJson),
+  );
+
+  final String id;
+  final String method;
+  final bool done;
+  final int finished;
+  final String? error;
+  final List<BinderJobCell> cells;
+}
+
+class BinderJobCell {
+  const BinderJobCell({required this.row, required this.column, this.result});
+
+  factory BinderJobCell.fromJson(Json json) => BinderJobCell(
+    row: json.integer('row'),
+    column: json.integer('column'),
+    result: json.objOrNull('result') == null ? null : ScanResult.fromJson(json.obj('result')),
+  );
+
+  final int row;
+  final int column;
+
+  /// ``null``: wird noch erkannt.
+  final ScanResult? result;
+}
+
 class ConfirmResult {
   const ConfirmResult({required this.referenceSaved, this.note});
 

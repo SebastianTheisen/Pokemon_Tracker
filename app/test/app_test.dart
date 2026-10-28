@@ -9,6 +9,7 @@ import 'package:kartenkiste/core/device/device.dart';
 import 'package:kartenkiste/core/prefs.dart';
 import 'package:kartenkiste/core/push/push_bridge.dart';
 import 'package:kartenkiste/core/theme.dart';
+import 'package:kartenkiste/features/scan/scan_screens.dart' show binderPollInterval;
 import 'package:kartenkiste/router.dart';
 import 'package:kartenkiste/widgets/slab_frame.dart';
 import 'package:kartenkiste/widgets/value_chart.dart';
@@ -1672,6 +1673,36 @@ void usabilityTests() {
     expect(api.calls.where((c) => c.startsWith('scan:')).length, 1);
     expect(find.text('Fertig (1)'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('Binder-Scan: Karten erscheinen nach und nach mit Fortschritt', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
+        .read(routerProvider);
+    unawaited(router.push('/scan/binder'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Foto'));
+    await tester.pump();
+    await tester.pump();
+    expect(api.calls, contains('binderJob:kamera.jpg:auto'));
+    expect(find.text('0 von 2 erkannt …'), findsOneWidget);
+    expect(find.byKey(const Key('binder-pending')), findsNWidgets(2));
+
+    await tester.pump(binderPollInterval);
+    await tester.pump();
+    expect(find.text('1 von 2 erkannt …'), findsOneWidget);
+    expect(find.byKey(const Key('binder-pending')), findsOneWidget);
+    expect(find.text('Nachtara VMAX'), findsOneWidget);
+
+    await tester.pump(binderPollInterval);
+    await tester.pump();
+    expect(find.byKey(const Key('binder-progress')), findsNothing);
+    expect(find.byKey(const Key('binder-pending')), findsNothing);
+    expect(find.text('Nachtara VMAX'), findsNWidgets(2));
+
+    await tester.pump(binderPollInterval * 3);
+    expect(api.binderPolls, 2); // fertig → keine weiteren Abfragen
   });
 
   testWidgets('Live-Scanner: Erkennung im Hintergrund, Bestätigung mit Ausschnitt', (tester) async {

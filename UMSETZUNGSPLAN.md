@@ -847,6 +847,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Japanische Classic Collection (CLL/CLF/CLK, je 32 Karten + Energien) fehlte – pokemon-card.com führt sie nicht; der Bildabgleich fand das Grundset 1996 mit gleicher Grafik und meldete „sicher“. Jetzt: Import aus tcgcsv.com (Nummer, Bild, englischer Name; Pokémon mit japanischem Namen aus der PokéAPI-Liste), Cardmarket-Ausgaben 5527–5529 über den Namen verknüpft (`classic-import`, täglich mit dem Cardmarket-Lauf). Zusätzlich: gelesene vollständige Setgröße, die dem Set widerspricht („/032“ gegen 102), macht einen Treffer nie „sicher“
 
+- [x] Binder-Scan zeigt Karten nach und nach: `POST /scan/binder/jobs` gibt sofort die Felder zurück (Auftrag im Speicher des API-Prozesses, 30 min, nur für den eigenen Nutzer), die App fragt alle 0,7 s `GET /scan/binder/jobs/{id}` ab. Sichere Karten erscheinen direkt nach ihrer Erkennung, unsichere nach dem Seiten-Abgleich; Fortschritt „3 von 9 erkannt …“, offene Felder mit „Erkenne …“. Gesamtdauer unverändert (~16 s für 9 Karten), erste Karte nach wenigen Sekunden. Das alte `POST /scan/binder` bleibt
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

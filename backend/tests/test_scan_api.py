@@ -7,6 +7,7 @@ Ein eigener Test am Ende nutzt die echte OCR.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import uuid
 from collections.abc import AsyncIterator
@@ -580,6 +581,51 @@ async def test_binder_cells_use_text_and_images(
     assert body["method"] == "konturen"
     winners = [c["result"]["best"]["card"]["external_id"] for c in body["cells"]]
     assert winners == ["S12-110", "S12-079", "S12-110", "S12-079"]
+
+
+async def test_binder_job_reports_cells_one_by_one(
+    client: AsyncClient,
+    admin: Account,
+    reader: ScriptedReader,
+    catalog: CardMap,
+    register_user: RegisterUser,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Binder-Scan als Auftrag: Felder sofort, Ergebnisse nach und nach – am Ende dieselben
+    Karten wie beim Scan in einem Aufruf. Fremde Nutzer sehen den Auftrag nicht."""
+    monkeypatch.setattr(reader, "read", lambda image, korean=False: lines("ルギアV"))
+    page = _binder_page(["03.jpg", "07.jpg", "03.jpg", "07.jpg"])
+    started = await client.post(
+        f"{API}/scan/binder/jobs",
+        files={"file": ("seite.jpg", page, "image/jpeg")},
+        headers=admin.headers,
+    )
+    assert started.status_code == 202, started.text
+    job = started.json()
+    assert job["method"] == "konturen"
+    assert [(c["row"], c["column"]) for c in job["cells"]] == [(0, 0), (0, 1), (1, 0), (1, 1)]
+
+    url = f"{API}/scan/binder/jobs/{job['job_id']}"
+    for _ in range(600):
+        state = (await client.get(url, headers=admin.headers)).json()
+        assert state["finished"] == sum(c["result"] is not None for c in state["cells"])
+        if state["done"]:
+            break
+        await asyncio.sleep(0.05)
+    assert state["done"] and state["error"] is None
+    winners = [c["result"]["best"]["card"]["external_id"] for c in state["cells"]]
+    assert winners == ["S12-110", "S12-079", "S12-110", "S12-079"]
+    # Bestätigen geht wie beim normalen Scan (Protokoll ist gespeichert).
+    first = state["cells"][0]["result"]
+    confirmed = await client.post(
+        f"{API}/scan/{first['scan_id']}/confirm",
+        json={"card_id": first["best"]["card"]["id"], "save_reference": False},
+        headers=admin.headers,
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+    stranger = await register_user("fremd@example.com")
+    assert (await client.get(url, headers=stranger.headers)).status_code == 404
 
 
 async def test_binder_page_set_decides_cells_without_number(

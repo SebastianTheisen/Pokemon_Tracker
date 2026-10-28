@@ -22,7 +22,7 @@ import asyncio
 import time
 import uuid
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -40,7 +40,7 @@ from app.scanner.analysis import (
     add_korean_pass,
     analyze_photo,
 )
-from app.scanner.binder import BinderLayout, binder_cells
+from app.scanner.binder import BinderCell, BinderLayout, binder_cells
 from app.scanner.imaging import (
     BINDER_MAX_SIDE,
     MAX_SIDE,
@@ -136,6 +136,14 @@ class BinderCellOutcome:
     row: int
     column: int
     outcome: ScanOutcome
+
+
+@dataclass(frozen=True)
+class BinderPage:
+    """Zerlegte Binderseite (vor der Erkennung)."""
+
+    method: str
+    cells: tuple[BinderCell, ...]
 
 
 @dataclass(frozen=True)
@@ -737,45 +745,56 @@ class ScanService:
             items.append(BatchItem(filename=filename, outcome=outcome))
         return items
 
-    async def scan_binder(
-        self, data: bytes, *, layout: BinderLayout = "auto", language_hint: str | None = None
-    ) -> BinderOutcome:
-        """Binderseite (Beta): Seite zerlegen, jede Zelle einzeln erkennen.
-
-        Zweiter Durchlauf: Stammen mehrere sicher erkannte Karten aus einem Set, werden die
-        unsicheren Zellen mit diesem Set als Hinweis neu bewertet – Binderseiten sind meist nach
-        Set sortiert, und in Hüllen ist die kleine Kartennummer oft unlesbar, der Name nicht.
-        """
-        binder_started = time.perf_counter()
+    async def prepare_binder(self, data: bytes, *, layout: BinderLayout = "auto") -> BinderPage:
+        """Binderseite laden und zerlegen (schnell) – Grenzen werden hier geprüft."""
         await self._check_rate_limit(1)
         page = await self._decode(data, max_side=BINDER_MAX_SIDE)
         with self._timed("split"):
             cells, method = await self.runtime.run_cpu(binder_cells, page, layout)
         await self._check_rate_limit(len(cells))
-        assessments = [
-            await self._assess(
+        return BinderPage(method=method, cells=tuple(cells))
+
+    async def recognize_binder(
+        self, page: BinderPage, *, language_hint: str | None = None
+    ) -> AsyncIterator[tuple[int, BinderCellOutcome]]:
+        """Jede Zelle erkennen; liefert (Index, Ergebnis), sobald eine Zelle fertig ist.
+
+        Sicher erkannte Zellen kommen sofort. Die übrigen erst nach dem zweiten Durchlauf:
+        Stammen die sicheren Karten aus einem Set (oder einer Serie), werden die unsicheren mit
+        diesem Set als Hinweis neu bewertet – Binderseiten sind meist sortiert, und in Hüllen ist
+        die kleine Kartennummer oft unlesbar, der Name nicht.
+        """
+        started = time.perf_counter()
+
+        async def finished(index: int, assessment: _Assessment) -> tuple[int, BinderCellOutcome]:
+            cell = page.cells[index]
+            with self._timed("finish"):
+                outcome = await self._finish(assessment, mode=ScanMode.BINDER)
+            return index, BinderCellOutcome(row=cell.row, column=cell.column, outcome=outcome)
+
+        assessments: list[_Assessment] = []
+        for index, cell in enumerate(page.cells):
+            assessment = await self._assess(
                 cell.image,
                 language_hint=language_hint,
                 # Geschätzte Zellen sind größer als die Karte – dort selbst zuschneiden.
                 find_crop=cell.estimated,
             )
-            for cell in cells
-        ]
+            assessments.append(assessment)
+            if assessment.confident:
+                yield await finished(index, assessment)
         page_sets = page_set(assessments)
         known = [
             a.evaluation.ranked[0].card
             for a in assessments
             if a.confident and a.evaluation.ranked[0].card.set_id in page_sets
         ]
-        if page_sets:
-            for assessment in assessments:
-                if assessment.confident:
-                    continue
+        for index, assessment in enumerate(assessments):
+            if assessment.confident:
+                continue
+            if page_sets:
                 assessment.evaluation = await self._evaluate(
-                    assessment.analysis,
-                    assessment.image,
-                    assessment.language_hint,
-                    page_sets,
+                    assessment.analysis, assessment.image, assessment.language_hint, page_sets
                 )
                 if not assessment.evaluation.ranked:
                     # Nichts lesbar (Spiegelung, Rand): Bild gegen das Set der Seite.
@@ -783,27 +802,30 @@ class ScanService:
                         assessment.analysis.features, page_sets, known
                     )
                     assessment.evaluation = _Evaluation(rescued, rescue=True)
+            yield await finished(index, assessment)
         log.info(
             "scan.binder",
-            method=method,
-            cells=len(cells),
+            method=page.method,
+            cells=len(page.cells),
             page_sets=sorted(str(set_id) for set_id in page_sets),
         )
-        with self._timed("finish"):
-            results = [
-                BinderCellOutcome(
-                    row=cell.row,
-                    column=cell.column,
-                    outcome=await self._finish(assessment, mode=ScanMode.BINDER),
-                )
-                for cell, assessment in zip(cells, assessments, strict=True)
-            ]
         log.info(
             "scan.binder_timing",
-            total_ms=round((time.perf_counter() - binder_started) * 1000),
+            total_ms=round((time.perf_counter() - started) * 1000),
             stages_ms={stage: round(sec * 1000) for stage, sec in self._timings.items()},
         )
-        return BinderOutcome(method=method, cells=tuple(results))
+
+    async def scan_binder(
+        self, data: bytes, *, layout: BinderLayout = "auto", language_hint: str | None = None
+    ) -> BinderOutcome:
+        """Binderseite (Beta) in einem Aufruf: zerlegen, alle Zellen erkennen."""
+        page = await self.prepare_binder(data, layout=layout)
+        results: dict[int, BinderCellOutcome] = {}
+        async for index, cell in self.recognize_binder(page, language_hint=language_hint):
+            results[index] = cell
+        return BinderOutcome(
+            method=page.method, cells=tuple(results[index] for index in sorted(results))
+        )
 
     # ------------------------------------------------------------------ Bestätigen
 

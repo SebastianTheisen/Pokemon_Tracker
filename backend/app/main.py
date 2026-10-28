@@ -28,6 +28,7 @@ from app.providers.psa import PsaClient
 from app.providers.tcgdex import TcgdexClient
 from app.scanner.ocr import RapidOcrReader, TextReader
 from app.scanner.runtime import ScannerRuntime
+from app.services.binder_jobs import BinderJobs
 from app.services.image_proxy import ImageProxy
 from app.services.price_health import SourceHealth
 from app.services.rate_limit import FailureLimiter
@@ -78,6 +79,7 @@ def create_app(
             app.state.scanner = ScannerRuntime(
                 settings, text_reader or RapidOcrReader(), image_client
             )
+            app.state.binder_jobs = BinderJobs()
             # eBay.de-Verkäufe auf Knopfdruck – nur mit Token in der .env.
             token = settings.apify_token.get_secret_value() if settings.apify_token else ""
             app.state.apify = (

@@ -11,8 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.providers.psa import PsaCert
 from app.schemas.catalog import CardOut
+from app.services.binder_jobs import BinderJob
 from app.services.display_names import card_display_name
-from app.services.scan import BatchItem, BinderOutcome, ScanMatch, ScanOutcome
+from app.services.scan import BatchItem, BinderCellOutcome, BinderOutcome, ScanMatch, ScanOutcome
 
 CONFIDENT_HINT = "Erkannt als {name}"
 UNSURE_HINT = "Falsche Karte? Selbst suchen"
@@ -140,6 +141,50 @@ class BinderCellOut(BaseModel):
     row: int
     column: int
     result: ScanResultOut
+
+
+class BinderJobCellOut(BaseModel):
+    row: int
+    column: int
+    result: ScanResultOut | None = Field(description="null = wird noch erkannt")
+
+
+class BinderJobOut(BaseModel):
+    """Binder-Scan als Auftrag: Felder sofort, Ergebnisse nach und nach (Stand abfragen)."""
+
+    job_id: uuid.UUID
+    beta: bool = True
+    method: str = Field(description="konturen, 3x3, 4x3 oder 2x2")
+    done: bool
+    error: str | None = None
+    finished: int = Field(description="So viele Felder sind fertig")
+    cells: list[BinderJobCellOut]
+
+    @classmethod
+    def build(cls, job: BinderJob) -> BinderJobOut:
+        results = dict(job.results)  # Momentaufnahme – der Auftrag läuft weiter
+        return cls(
+            job_id=job.id,
+            method=job.method,
+            done=job.done,
+            error=job.error,
+            finished=len(results),
+            cells=[
+                BinderJobCellOut(
+                    row=row,
+                    column=column,
+                    result=ScanResultOut.model_validate(results[index])
+                    if index in results
+                    else None,
+                )
+                for index, (row, column) in enumerate(job.cells)
+            ],
+        )
+
+
+def serialize_binder_cell(cell: BinderCellOutcome) -> dict[str, Any]:
+    """Ergebnis einer Zelle für den Auftrag (JSON-fertig, unabhängig von der Datenbank)."""
+    return ScanResultOut.build(cell.outcome).model_dump(mode="json")
 
 
 class BinderResultOut(BaseModel):

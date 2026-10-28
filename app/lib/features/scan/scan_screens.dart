@@ -989,6 +989,30 @@ class _ResultTile extends ConsumerWidget {
   }
 }
 
+/// So oft fragt die Binder-Seite den Stand ab.
+const binderPollInterval = Duration(milliseconds: 700);
+
+/// Feld, dessen Karte noch erkannt wird.
+class _PendingTile extends StatelessWidget {
+  const _PendingTile({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    key: const Key('binder-pending'),
+    leading: const SizedBox(
+      width: 40,
+      height: 56,
+      child: Center(
+        child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+      ),
+    ),
+    title: Text('Erkenne …', style: TextStyle(color: AppColors.textMuted)),
+    subtitle: Text(title, style: TextStyle(color: AppColors.textMuted)),
+  );
+}
+
 class BatchScanScreen extends ConsumerStatefulWidget {
   const BatchScanScreen({super.key});
 
@@ -1076,21 +1100,32 @@ class _BinderScanScreenState extends ConsumerState<BinderScanScreen> {
   };
 
   String _layout = 'auto';
-  BinderResult? _result;
+  BinderJob? _job;
   final _done = <int>{};
   bool _busy = false;
+  Timer? _poll;
 
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  /// Foto hochladen – die Felder stehen sofort da, die Karten erscheinen nach und nach.
   Future<void> _scan({required bool camera}) async {
     final image = await ref.read(imageSourceProvider).pick(camera: camera, maxSide: 3000);
     if (image == null) return;
+    _poll?.cancel();
     setState(() {
       _busy = true;
-      _result = null;
+      _job = null;
       _done.clear();
     });
     try {
-      final result = await ref.read(apiProvider).scanBinder(image, layout: _layout);
-      if (mounted) setState(() => _result = result);
+      final job = await ref.read(apiProvider).startBinderJob(image, layout: _layout);
+      if (!mounted) return;
+      setState(() => _job = job);
+      if (!job.done) _poll = Timer.periodic(binderPollInterval, (_) => _refresh());
     } on ApiException catch (error) {
       if (mounted) showMessage(context, error.message);
     } finally {
@@ -1098,13 +1133,35 @@ class _BinderScanScreenState extends ConsumerState<BinderScanScreen> {
     }
   }
 
+  bool _refreshing = false;
+
+  Future<void> _refresh() async {
+    final current = _job;
+    if (current == null || _refreshing) return;
+    _refreshing = true;
+    try {
+      final job = await ref.read(apiProvider).binderJob(current.id);
+      if (!mounted) return;
+      setState(() => _job = job);
+      if (job.done) {
+        _poll?.cancel();
+        if (job.error case final error?) showMessage(context, error);
+      }
+    } on ApiException catch (error) {
+      _poll?.cancel();
+      if (mounted) showMessage(context, error.message);
+    } finally {
+      _refreshing = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final result = _result;
+    final job = _job;
     return Scaffold(
       appBar: AppBar(title: const Text('Binder-Scan (Beta)')),
       body: _busy
-          ? const _Busy(label: 'Erkenne Binderseite – das dauert etwas …')
+          ? const _Busy(label: 'Lade Binderseite hoch …')
           : ListView(
               children: [
                 Padding(
@@ -1151,18 +1208,39 @@ class _BinderScanScreenState extends ConsumerState<BinderScanScreen> {
                     ],
                   ),
                 ),
-                if (result != null) ...[
+                if (job != null) ...[
                   SectionTitle(
-                    '${result.cells.length} Felder '
-                    '(${result.method == 'konturen' ? 'Karten erkannt' : 'Raster ${result.method}'})',
+                    '${job.cells.length} Felder '
+                    '(${job.method == 'konturen' ? 'Karten erkannt' : 'Raster ${job.method}'})',
                   ),
-                  for (final (index, cell) in result.cells.indexed)
-                    _ResultTile(
-                      title: 'Reihe ${cell.row + 1}, Platz ${cell.column + 1}',
-                      result: cell.result,
-                      done: _done.contains(index),
-                      onDone: () => setState(() => _done.add(index)),
+                  if (!job.done)
+                    Padding(
+                      key: const Key('binder-progress'),
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${job.finished} von ${job.cells.length} erkannt …',
+                            style: TextStyle(color: AppColors.textMuted),
+                          ),
+                          const SizedBox(height: 6),
+                          LinearProgressIndicator(
+                            value: job.cells.isEmpty ? null : job.finished / job.cells.length,
+                          ),
+                        ],
+                      ),
                     ),
+                  for (final (index, cell) in job.cells.indexed)
+                    if (cell.result case final result?)
+                      _ResultTile(
+                        title: 'Reihe ${cell.row + 1}, Platz ${cell.column + 1}',
+                        result: result,
+                        done: _done.contains(index),
+                        onDone: () => setState(() => _done.add(index)),
+                      )
+                    else
+                      _PendingTile(title: 'Reihe ${cell.row + 1}, Platz ${cell.column + 1}'),
                 ],
               ],
             ),
