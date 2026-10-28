@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -253,7 +253,7 @@ class ScanService:
         self.settings = runtime.settings
         self.user = user
         # Sekunden je Schritt (OCR, Text-Kandidaten, Bildabgleich …) – für die Fehlersuche.
-        self._timings: Counter[str] = Counter()
+        self._timings: defaultdict[str, float] = defaultdict(float)
 
     # ------------------------------------------------------------------ Grenzen
 
