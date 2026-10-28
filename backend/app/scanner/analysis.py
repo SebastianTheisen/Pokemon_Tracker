@@ -5,8 +5,10 @@ Reihenfolge (Plan 5.6, Schritte 2–4):
 1. OCR auf dem **ganzen** Bild (robust gegen Hände, Slabs, Hüllen, Screenshots).
 2. Kartenausschnitt suchen. Er dient als Referenzbild und – wenn auf dem ganzen Bild keine
    Nummer lesbar war – für eine zweite OCR (kleine Karten im Bild werden so größer).
-   Ist die Karte danach immer noch klein (Binder-Zellen), wird sie einmal vergrößert gelesen:
-   Die Nummer ist dort nur 10–15 Pixel hoch.
+   Ist die Karte klein (Binder-Zellen) und das Ergebnis unsicher, liest der Service sie
+   einmal vergrößert nach (:func:`add_enlarged_pass`): Die Nummer ist dort nur 10–15 Pixel
+   hoch. Erst bei Bedarf – meist entscheidet schon der Bildabgleich, und die zweite OCR
+   kostet je Karte gut eine Sekunde.
 3. Optional ein Durchlauf mit dem koreanischen Modell.
 4. SIFT-Merkmale des ganzen Bildes für den Bildabgleich.
 
@@ -63,10 +65,6 @@ def analyze_photo(
     if crop is not None and not text.numbers:
         lines += reader.read(crop)
         text = extract_text_features(lines)
-    card = crop if crop is not None else image
-    if not text.numbers and max(card.shape[:2]) < SMALL_CARD_SIDE:
-        lines += reader.read(upscale(card))
-        text = extract_text_features(lines)
     analysis = PhotoAnalysis(
         lines=tuple(lines),
         text=text,
@@ -74,6 +72,18 @@ def analyze_photo(
         crop=crop,
     )
     return add_korean_pass(analysis, image, reader) if korean else analysis
+
+
+def add_enlarged_pass(
+    analysis: PhotoAnalysis, image: UInt8Image, reader: TextReader
+) -> PhotoAnalysis | None:
+    """Kleine Karte ohne gelesene Nummer vergrößert nachlesen; ``None``, wenn das nichts
+    bringen kann (Nummer schon gelesen oder Karte groß genug)."""
+    card = analysis.crop if analysis.crop is not None else image
+    if analysis.text.numbers or max(card.shape[:2]) >= SMALL_CARD_SIDE:
+        return None
+    lines = (*analysis.lines, *reader.read(upscale(card)))
+    return replace(analysis, lines=lines, text=extract_text_features(lines))
 
 
 def upscale(image: UInt8Image, factor: float = UPSCALE_FACTOR) -> UInt8Image:

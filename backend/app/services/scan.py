@@ -32,7 +32,12 @@ from sqlalchemy import ColumnElement, delete, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Card, CardReferenceImage, CardSet, Game, ScanLog, ScanMode, User
-from app.scanner.analysis import PhotoAnalysis, add_korean_pass, analyze_photo
+from app.scanner.analysis import (
+    PhotoAnalysis,
+    add_enlarged_pass,
+    add_korean_pass,
+    analyze_photo,
+)
 from app.scanner.binder import BinderLayout, binder_cells
 from app.scanner.imaging import (
     BINDER_MAX_SIDE,
@@ -584,6 +589,13 @@ class ScanService:
             # Nur übernehmen, wenn es besser wird – das KO-Modell liest andere Schriften falsch.
             if _best_score(korean_evaluation) > _best_score(evaluation):
                 analysis, evaluation = korean, korean_evaluation
+        if not is_confident(evaluation.ranked):
+            # Kleine Karte (Binder-Zelle) ohne Nummer: vergrößert nachlesen – nur bei Bedarf.
+            enlarged = await self.runtime.run_cpu(add_enlarged_pass, analysis, image, reader)
+            if enlarged is not None:
+                enlarged_evaluation = await self._evaluate(enlarged, image, language_hint)
+                if _best_score(enlarged_evaluation) >= _best_score(evaluation):
+                    analysis, evaluation = enlarged, enlarged_evaluation
         return _Assessment(image, analysis, evaluation, started, language_hint)
 
     async def _finish(self, assessment: _Assessment, *, mode: ScanMode) -> ScanOutcome:

@@ -21,7 +21,7 @@ from PIL import Image
 
 from app.models import Card, CardSet
 from app.scanner import binder as binder_module
-from app.scanner.analysis import analyze_photo
+from app.scanner.analysis import add_enlarged_pass, analyze_photo
 from app.scanner.binder import binder_cells, split_grid
 from app.scanner.catalog_images import CatalogImageIndex, download_url
 from app.scanner.imaging import (
@@ -421,7 +421,8 @@ def test_binder_grid_uses_the_page_not_the_table() -> None:
 @pytest.mark.parametrize(("side", "reads"), [(600, 2), (1200, 1)])
 def test_small_cards_are_read_enlarged(side: int, reads: int) -> None:
     """Binder-Zellen: Ohne lesbare Nummer wird eine kleine Karte vergrößert nachgelesen
-    (echtes Foto: 3 → 5 von 9 Nummern); große Fotos nicht – das kostet nur Zeit."""
+    (echtes Foto: 3 → 5 von 9 Nummern); große Fotos nicht – das kostet nur Zeit. Der Service
+    ruft das nur bei unsicherem Ergebnis auf."""
     shapes: list[tuple[int, ...]] = []
 
     class Reader:
@@ -431,11 +432,16 @@ def test_small_cards_are_read_enlarged(side: int, reads: int) -> None:
 
     card = np.full((side, int(side * 0.716), 3), 200, np.uint8)
     analysis = analyze_photo(card, Reader(), find_crop=False)
+    assert len(shapes) == 1  # zuerst nur eine OCR
+    enlarged = add_enlarged_pass(analysis, card, Reader())
 
     assert len(shapes) == reads
     if reads == 2:
+        assert enlarged is not None
         assert shapes[1][0] == 2 * side
-        assert [hit.number for hit in analysis.text.numbers] == ["217"]
+        assert [hit.number for hit in enlarged.text.numbers] == ["217"]
+    else:
+        assert enlarged is None
 
 
 @pytest.mark.parametrize(
