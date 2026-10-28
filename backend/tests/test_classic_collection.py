@@ -23,7 +23,13 @@ from app.services.classic_collection import (
     render_report,
 )
 from app.services.display_names import card_display_name
-from app.services.scan_scoring import Candidate, is_confident, rank, score_text
+from app.services.scan_scoring import (
+    Candidate,
+    apply_page_set,
+    is_confident,
+    rank,
+    score_text,
+)
 from tests.scan_helpers import lines
 
 
@@ -298,3 +304,28 @@ def test_set_size_conflict_without_official_count() -> None:
     )
     text = extract_text_features(lines("ヒトカゲ", "001/032"))
     assert score_text(Candidate(base, catalog_inliers=200), text).total_conflict
+
+
+def test_weak_image_of_the_right_print_blocks_sure_result() -> None:
+    """Classic-Binder 28.10. (Bisasam): ohne lesbare Nummer, Grundset-Bild scharf (180 Inlier),
+    das kleine TCGplayer-Bild der Classic-Karte nur 60. Gleiche Karte, anderes Set – nicht sicher;
+    mit dem Seiten-Set (Serie Classic) rückt die Classic-Karte nach."""
+
+    def card(set_id: str, number: str) -> Card:
+        return Card(
+            language="ja",
+            number=number,
+            number_norm=number.lstrip("0"),
+            name="フシギダネ",
+            external_id=f"{set_id}-{number}",
+            set_id=uuid.uuid4(),
+            card_set=CardSet(external_id=set_id, language="ja", name=set_id),
+        )
+
+    text = extract_text_features(lines("フシギダネ", "やどりぎのタネ"))
+    base = score_text(Candidate(card("expansion-pack", "1"), catalog_inliers=180), text)
+    classic = score_text(Candidate(card("CLF", "001"), catalog_inliers=60), text)
+    assert not is_confident(rank([base, classic]))
+
+    apply_page_set([base, classic], {classic.card.set_id})
+    assert any("übrigen Karten der Seite" in reason for reason in classic.reasons)

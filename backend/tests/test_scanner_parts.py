@@ -444,33 +444,40 @@ def test_small_cards_are_read_enlarged(side: int, reads: int) -> None:
         assert enlarged is None
 
 
+SERIES = {"CLL": "Classic", "CLF": "Classic", "CLK": "Classic", "X": "Andere"}
+
+
 @pytest.mark.parametrize(
     ("confident_sets", "expected"),
     [
-        (["A", "A", "A", "A", "A", "A", "A", "A"], "A"),  # Set-Seite (echtes Foto: 8 sicher)
-        (["A", "A"], "A"),
-        (["A", "A", "B"], None),  # gemischte Seite: 2 von 3 reicht nicht
-        (["A", "A", "B", "C", "D"], None),
-        (["A", "A", "A", "B"], "A"),
-        (["A"], None),
-        ([], None),
+        (["A", "A", "A", "A", "A", "A", "A", "A"], {"A"}),  # Set-Seite (echtes Foto: 8 sicher)
+        (["A", "A"], {"A"}),
+        (["A", "A", "B"], set()),  # gemischte Seite: 2 von 3 reicht nicht
+        (["A", "A", "B", "C", "D"], set()),
+        (["A", "A", "A", "B"], {"A"}),
+        (["A"], set()),
+        ([], set()),
+        # Classic-Binder 28.10.: drei Sets, eine Serie – alle drei zählen.
+        (["CLL", "CLL", "CLL", "CLF", "CLF", "CLK", "CLK", "CLK"], {"CLL", "CLF", "CLK"}),
+        (["CLL", "CLF", "X"], set()),  # Serie nur in 2 von 3 – gemischt
     ],
 )
 def test_page_set_only_for_pages_that_show_one(
-    confident_sets: list[str], expected: str | None
+    confident_sets: list[str], expected: set[str]
 ) -> None:
     """Gemischte Binderseiten bekommen kein Seiten-Set (kein Bonus, keine Bild-Rettung)."""
-    ids = {name: uuid.uuid4() for name in "ABCD"}
+    ids = {name: uuid.uuid4() for name in ["A", "B", "C", "D", *SERIES]}
 
     def cell(set_name: str | None) -> Any:
-        card = SimpleNamespace(set_id=ids[set_name] if set_name else None)
+        card_set = SimpleNamespace(series_name=SERIES.get(set_name or ""))
+        card = SimpleNamespace(set_id=ids[set_name] if set_name else None, card_set=card_set)
         ranked = [SimpleNamespace(card=card)] if set_name else []
         return SimpleNamespace(
             confident=set_name is not None, evaluation=SimpleNamespace(ranked=ranked)
         )
 
     cells = [cell(name) for name in confident_sets] + [cell(None), cell(None)]
-    assert page_set(cells) == (ids[expected] if expected else None)
+    assert page_set(cells) == frozenset(ids[name] for name in expected)
 
 
 def test_page_neighbours_prefer_close_numbers() -> None:

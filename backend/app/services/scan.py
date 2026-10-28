@@ -194,18 +194,32 @@ def page_neighbours(cards: Sequence[Card], known: Sequence[Card], limit: int) ->
     return sorted(cards, key=lambda card: (card.id in known_ids, distance(card)))[:limit]
 
 
-def page_set(assessments: Sequence[_Assessment]) -> uuid.UUID | None:
-    """Set der Binderseite – nur wenn die Seite selbst es zeigt: mindestens
-    :data:`PAGE_SET_MIN_CELLS` sicher erkannte Zellen aus einem Set und mehr als zwei Drittel
-    aller sicheren Zellen. Gemischte Seiten (Karten ohne Bezug zueinander) bekommen keins –
-    dort wird jede Zelle wie ein Einzelscan erkannt."""
-    sets = Counter(a.evaluation.ranked[0].card.set_id for a in assessments if a.confident)
-    if not sets:
+def _dominant[T](counts: Counter[T]) -> T | None:
+    """Häufigster Wert, wenn er mindestens :data:`PAGE_SET_MIN_CELLS`-mal und in mehr als zwei
+    Dritteln der Fälle vorkommt."""
+    if not counts:
         return None
-    ((set_id, count),) = sets.most_common(1)
-    if count < PAGE_SET_MIN_CELLS or count * 3 <= sum(sets.values()) * 2:
+    ((value, count),) = counts.most_common(1)
+    if count < PAGE_SET_MIN_CELLS or count * 3 <= counts.total() * 2:
         return None
-    return set_id
+    return value
+
+
+def page_set(assessments: Sequence[_Assessment]) -> frozenset[uuid.UUID]:
+    """Set(s) der Binderseite – nur wenn die Seite selbst es zeigt: mehr als zwei Drittel der
+    sicher erkannten Zellen (mindestens :data:`PAGE_SET_MIN_CELLS`) aus einem Set, sonst aus
+    einer Serie (z. B. Classic Collection: CLL, CLF und CLK auf einer Seite) – dann zählen die
+    Sets dieser sicheren Zellen. Gemischte Seiten bekommen keins – dort wird jede Zelle wie ein
+    Einzelscan erkannt."""
+    best = [a.evaluation.ranked[0].card for a in assessments if a.confident]
+    if (set_id := _dominant(Counter(card.set_id for card in best))) is not None:
+        return frozenset({set_id})
+    series = _dominant(
+        Counter(card.card_set.series_name for card in best if card.card_set.series_name)
+    )
+    if series is None:
+        return frozenset()
+    return frozenset(card.set_id for card in best if card.card_set.series_name == series)
 
 
 def _best_score(evaluation: _Evaluation) -> float:
@@ -340,9 +354,11 @@ class ScanService:
             cards += (await self.session.scalars(statement)).unique()
         return cards
 
-    async def _page_set_cards(self, set_id: uuid.UUID, text: TextFeatures) -> list[Card]:
+    async def _page_set_cards(
+        self, set_ids: frozenset[uuid.UUID], text: TextFeatures
+    ) -> list[Card]:
         """Karten des Seiten-Sets, deren Name oder Nummer zum gelesenen Text passt."""
-        cards = (await self.session.scalars(select(Card).where(Card.set_id == set_id))).unique()
+        cards = (await self.session.scalars(select(Card).where(Card.set_id.in_(set_ids)))).unique()
         numbers = {hit.number for hit in text.numbers}
         return [
             card
@@ -355,12 +371,12 @@ class ScanService:
         self,
         text: TextFeatures,
         language_hint: str | None,
-        page_set_id: uuid.UUID | None = None,
+        page_sets: frozenset[uuid.UUID] = frozenset(),
     ) -> list[Candidate]:
         found: dict[uuid.UUID, Card] = {}
         cards = [*await self._cards_by_number(text), *await self._cards_by_name(text.names)]
-        if page_set_id is not None:
-            cards += await self._page_set_cards(page_set_id, text)
+        if page_sets:
+            cards += await self._page_set_cards(page_sets, text)
         for card in cards:
             found.setdefault(card.id, card)
         candidates = [
@@ -369,8 +385,8 @@ class ScanService:
         ]
         if language_hint is not None:
             candidates = [c for c in candidates if c.card.language == language_hint] or candidates
-        if page_set_id is not None:
-            apply_page_set(candidates, page_set_id)
+        if page_sets:
+            apply_page_set(candidates, page_sets)
         return rank(candidates)
 
     # ------------------------------------------------------------------ Bildabgleich
@@ -426,6 +442,9 @@ class ScanService:
                 candidate.reference_inliers = max(candidate.reference_inliers or 0, inliers)
         for candidate in top:
             add_image_reasons(candidate)
+        # Für die Fehlersuche (z. B. gleiche Grafik in mehreren Sets): die besten Bildwerte.
+        strongest = sorted(top, key=lambda c: -(c.inliers or 0))[:5]
+        log.info("scan.image", top=[(c.identity, c.inliers) for c in strongest])
 
     async def _rescue_by_references(self, query: ImageFeatures) -> list[Candidate]:
         """Kein lesbarer Text: nur gegen die eigenen (neuesten) Referenzbilder abgleichen."""
@@ -452,7 +471,7 @@ class ScanService:
         return rank(list(best.values()))
 
     async def _page_set_image_rescue(
-        self, query: ImageFeatures, set_id: uuid.UUID, known: Sequence[Card]
+        self, query: ImageFeatures, set_ids: frozenset[uuid.UUID], known: Sequence[Card]
     ) -> list[Candidate]:
         """Binder-Zelle ohne lesbaren Text: Bildabgleich gegen die Karten des Seiten-Sets mit
         Nummern nahe den sicher erkannten (Katalogbilder werden zwischengespeichert)."""
@@ -460,7 +479,7 @@ class ScanService:
             return []
         in_set = (
             await self.session.scalars(
-                select(Card).where(Card.set_id == set_id, Card.image_url.is_not(None))
+                select(Card).where(Card.set_id.in_(set_ids), Card.image_url.is_not(None))
             )
         ).unique()
         cards = page_neighbours(list(in_set), known, PAGE_SET_IMAGE_LIMIT)
@@ -485,7 +504,7 @@ class ScanService:
             for index, _kind, inliers in scores
             if inliers >= RESCUE_MIN_INLIERS
         ]
-        apply_page_set(found, set_id)
+        apply_page_set(found, set_ids)
         for candidate in found:
             add_image_reasons(candidate)
         return rank(found)
@@ -543,9 +562,9 @@ class ScanService:
         analysis: PhotoAnalysis,
         image: UInt8Image,
         language_hint: str | None,
-        page_set_id: uuid.UUID | None = None,
+        page_sets: frozenset[uuid.UUID] = frozenset(),
     ) -> _Evaluation:
-        ranked = await self._text_candidates(analysis.text, language_hint, page_set_id)
+        ranked = await self._text_candidates(analysis.text, language_hint, page_sets)
         if not ranked:
             return _Evaluation(await self._rescue_by_references(analysis.features), rescue=True)
         await self._image_match(ranked, analysis.features)
@@ -718,13 +737,13 @@ class ScanService:
             )
             for cell in cells
         ]
-        page_set_id = page_set(assessments)
+        page_sets = page_set(assessments)
         known = [
             a.evaluation.ranked[0].card
             for a in assessments
-            if a.confident and a.evaluation.ranked[0].card.set_id == page_set_id
+            if a.confident and a.evaluation.ranked[0].card.set_id in page_sets
         ]
-        if page_set_id is not None:
+        if page_sets:
             for assessment in assessments:
                 if assessment.confident:
                     continue
@@ -732,15 +751,20 @@ class ScanService:
                     assessment.analysis,
                     assessment.image,
                     assessment.language_hint,
-                    page_set_id,
+                    page_sets,
                 )
                 if not assessment.evaluation.ranked:
                     # Nichts lesbar (Spiegelung, Rand): Bild gegen das Set der Seite.
                     rescued = await self._page_set_image_rescue(
-                        assessment.analysis.features, page_set_id, known
+                        assessment.analysis.features, page_sets, known
                     )
                     assessment.evaluation = _Evaluation(rescued, rescue=True)
-        log.info("scan.binder", method=method, cells=len(cells), page_set=str(page_set_id))
+        log.info(
+            "scan.binder",
+            method=method,
+            cells=len(cells),
+            page_sets=sorted(str(set_id) for set_id in page_sets),
+        )
         results = [
             BinderCellOutcome(
                 row=cell.row,

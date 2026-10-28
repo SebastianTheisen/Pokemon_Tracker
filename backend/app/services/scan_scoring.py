@@ -37,7 +37,7 @@ Sonst zeigt die App „Falsche Karte? Selbst suchen“ mit der Kandidatenliste.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 
@@ -60,6 +60,11 @@ WEAK_LANGUAGE_PENALTY = 0.05
 TWIN_POINTS = 0.20
 # Bildabgleich gilt nur als Beleg, wenn die beste andere Karte deutlich weniger Inlier hat.
 SAME_ARTWORK_RATIO = 0.7
+# Gleicher Name in einem anderen Set: schon diese Inlier (und Anteil) machen das Bild fraglich –
+# ein schwaches Katalogbild der richtigen Fassung (TCGplayer, klein) verliert sonst gegen ein
+# scharfes der falschen (Classic-Binder 28.10.: Bisasam). Andere Grafiken liegen meist < 20.
+SAME_NAME_MIN_INLIERS = 25
+SAME_NAME_RATIO = 0.3
 CONFLICT_PENALTY = 0.30
 # So viele Ziffern dürfen zwischen gelesener und offizieller Setgröße abweichen, ohne dass
 # es als Widerspruch gilt (OCR: „167“ statt „187“).
@@ -250,12 +255,12 @@ def score_text(
     return candidate
 
 
-def apply_page_set(candidates: Sequence[Candidate], set_id: object) -> None:
-    """Binderseite: Karten aus dem Set, aus dem die sicher erkannten Nachbarn stammen, bekommen
-    :data:`PAGE_SET_POINTS`. Zählt nicht als starker Beleg – sicher wird es erst mit Nummer
-    oder Bildabgleich."""
+def apply_page_set(candidates: Sequence[Candidate], set_ids: Collection[object]) -> None:
+    """Binderseite: Karten aus den Sets, aus denen die sicher erkannten Nachbarn stammen,
+    bekommen :data:`PAGE_SET_POINTS`. Zählt nicht als starker Beleg – sicher wird es erst mit
+    Nummer oder Bildabgleich."""
     for candidate in candidates:
-        if candidate.card.set_id == set_id:
+        if candidate.card.set_id in set_ids:
             candidate.page_set_points = PAGE_SET_POINTS
             candidate.reasons.append("Gleiches Set wie die übrigen Karten der Seite")
 
@@ -327,12 +332,29 @@ def is_confident(ranked: Sequence[Candidate]) -> bool:
     competitor = next((c for c in ranked[1:] if c.identity != best.identity), None)
     if competitor is not None and same_artwork(best, competitor):
         return False
+    if any(same_name_artwork(best, other) for other in ranked[1:]):
+        return False
     return competitor is None or best.score - competitor.score >= CONFIDENT_MARGIN
 
 
 def text_proves(candidate: Candidate) -> bool:
     """Nummer + Setgröße bzw. Setcode gelesen und passend (unabhängig vom Bild)."""
     return candidate.number_match and (candidate.total_match or candidate.set_code_match)
+
+
+def same_name_artwork(best: Candidate, other: Candidate) -> bool:
+    """Gleiche Karte (Name) aus einem anderen Set schneidet im Bild nennenswert ab und kein
+    Text belegt den Treffer – vermutlich dieselbe Grafik nachgedruckt."""
+    if (
+        text_proves(best)
+        or best.card.set_id == other.card.set_id
+        or other.identity == best.identity
+    ):
+        return False
+    if name_base(compact_key(best.card.name)) != name_base(compact_key(other.card.name)):
+        return False
+    other_inliers = other.inliers or 0
+    return other_inliers >= max(SAME_NAME_MIN_INLIERS, SAME_NAME_RATIO * (best.inliers or 0))
 
 
 def same_artwork(best: Candidate, other: Candidate) -> bool:
