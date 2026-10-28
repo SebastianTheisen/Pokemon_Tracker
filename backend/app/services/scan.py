@@ -548,7 +548,8 @@ class ScanService:
                     cell.image,
                     mode=ScanMode.BINDER,
                     language_hint=language_hint,
-                    find_crop=False,
+                    # Geschätzte Zellen sind größer als die Karte – dort selbst zuschneiden.
+                    find_crop=cell.estimated,
                 ),
             )
             for cell in cells

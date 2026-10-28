@@ -549,7 +549,8 @@ async def test_binder_scan_grid(client: AsyncClient, admin: Account, catalog: Ca
     body = response.json()
 
     assert body["beta"] is True
-    assert body["method"] == "2x2"
+    # Kartenumrisse gefunden; das gewählte Raster (2×2) legt nur die erwartete Größe fest.
+    assert body["method"] == "konturen"
     assert [(c["row"], c["column"]) for c in body["cells"]] == [(0, 0), (0, 1), (1, 0), (1, 1)]
     # Ohne OCR-Text bleibt nur der Rettungsweg über eigene Referenzbilder → nichts erkannt,
     # aber jede Zelle hat einen eigenen bestätigbaren Scan.

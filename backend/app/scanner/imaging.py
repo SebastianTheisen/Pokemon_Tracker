@@ -129,7 +129,7 @@ def quad_ratio(corners: Quad) -> float:
     return short / long_ if long_ else 0.0
 
 
-def _edge_maps(image: UInt8Image) -> list[UInt8Image]:
+def edge_maps(image: UInt8Image) -> list[UInt8Image]:
     """Zwei Kantenstrategien: Canny (kontrastreich) und adaptive Schwelle (schwaches Licht)."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -154,7 +154,7 @@ def card_quads(
     min_area = min_area_fraction * image.shape[0] * image.shape[1]
     retrieval = cv2.RETR_LIST if nested else cv2.RETR_EXTERNAL
     found: list[tuple[float, Quad]] = []
-    for edges in _edge_maps(image):
+    for edges in edge_maps(image):
         contours, _ = cv2.findContours(edges, retrieval, cv2.CHAIN_APPROX_SIMPLE)
         for contour in sorted(contours, key=cv2.contourArea, reverse=True)[: limit * 4]:
             area = float(cv2.contourArea(contour))

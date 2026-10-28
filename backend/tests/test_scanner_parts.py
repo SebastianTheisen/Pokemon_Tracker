@@ -12,6 +12,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+import cv2
 import httpx
 import numpy as np
 import pytest
@@ -320,6 +321,64 @@ def test_binder_falls_back_to_grid() -> None:
     assert len(cells) == 9
     cells, method = binder_cells(blank, "4x3")
     assert (method, len(cells)) == ("4x3", 12)
+
+
+def _sleeved_page(crops: list[np.ndarray], *, margin: int, glare: bool) -> np.ndarray:
+    """3×3-Seite: Karten in Hüllen auf dunkler Seite, auf einem Tisch, optional Glanzstreifen
+    quer über mehrere Karten (wie bei Fotos durch Schutzhüllen)."""
+    card_h, card_w = crops[0].shape[:2]
+    gap = 26
+    page = np.full((3 * card_h + 4 * gap, 3 * card_w + 4 * gap, 3), 40, np.uint8)
+    for index in range(9):
+        row, column = divmod(index, 3)
+        y, x = gap + row * (card_h + gap), gap + column * (card_w + gap)
+        page[y : y + card_h, x : x + card_w] = crops[index % len(crops)]
+    scene = np.full((page.shape[0] + 2 * margin, page.shape[1] + 2 * margin, 3), 150, np.uint8)
+    scene[margin : margin + page.shape[0], margin : margin + page.shape[1]] = page
+    if glare:
+        overlay = scene.copy()
+        height, width = scene.shape[:2]
+        cv2.line(overlay, (0, int(height * 0.3)), (width, int(height * 0.55)), (255, 255, 255), 60)
+        scene = cv2.addWeighted(scene, 0.75, overlay, 0.25, 0)
+    return scene
+
+
+@pytest.mark.parametrize("margin", [0, 160])
+def test_binder_glare_keeps_every_card_in_place(margin: int) -> None:
+    """Ein Glanzstreifen verdeckt einige Kartenumrisse: Die Karten fehlen trotzdem nicht,
+    sondern werden an ihrer berechneten Stelle ausgeschnitten – mit richtiger Reihe/Spalte."""
+    names = ["03.jpg", "02.jpg", "05.jpg", "06.jpg", "07.jpg"]
+    crops = []
+    for name in names:
+        image = photo(name)
+        crop = card_crop(image)
+        crops.append(cv2.resize(crop if crop is not None else image, (420, 588)))
+    references = [extract_features(crop, max_features=2000) for crop in crops]
+
+    cells, method = binder_cells(_sleeved_page(crops, margin=margin, glare=True), "auto")
+
+    # Ohne Tisch: Umrisse + ergänzte Positionen; mit Tisch notfalls die geteilte Seite.
+    assert method == ("konturen" if margin == 0 else "3x3")
+    assert any(cell.estimated for cell in cells)  # verdeckte Umrisse fehlen nicht
+    assert sorted((cell.row, cell.column) for cell in cells) == [
+        (row, column) for row in range(3) for column in range(3)
+    ]
+    correct = 0
+    for cell in cells:
+        scores = [match_score(extract_features(cell.image), ref) for ref in references]
+        correct += int(np.argmax(scores)) == (cell.row * 3 + cell.column) % len(names)
+    assert correct >= 8
+
+
+def test_binder_grid_uses_the_page_not_the_table() -> None:
+    """Ohne Kartenumrisse: erst die Seite im Foto suchen, dann sie teilen."""
+    scene = np.full((1400, 1100, 3), 150, np.uint8)
+    cv2.rectangle(scene, (150, 120), (950, 1280), (40, 40, 40), -1)  # dunkle Binderseite
+    cells, method = binder_cells(scene, "auto")
+    assert (method, len(cells)) == ("3x3", 9)
+    # Ein Neuntel der Seite (800 × 1160), nicht des ganzen Fotos (1100 × 1400).
+    height, width = cells[0].image.shape[:2]
+    assert 230 < width < 270 and 340 < height < 390
 
 
 # ------------------------------------------------------------------ Punkte
