@@ -256,8 +256,9 @@ def total_matches(row: CollectrRow, card_set: CardSet) -> bool:
     if row.total.isdigit():
         size = int(row.total)
         return size in {card_set.card_count_official, card_set.card_count_total}
-    code = row.total.casefold()
-    return code in {card_set.external_id.casefold(), (card_set.code or "").casefold()}
+    # „SM-P“ (Collectr) = „SMP“ (Katalog): Bindestriche und führende Nullen egal
+    own = {code_key(card_set.external_id), code_key(card_set.code or "")} - {""}
+    return code_key(row.total) in own
 
 
 @dataclass(frozen=True)

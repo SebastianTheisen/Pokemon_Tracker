@@ -873,6 +873,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Collectr-Import, Trainer-Ordner 2. Lauf (40 zugeordnet / 7 prüfen / 2 nicht gefunden): (1) Portfolio-Name wurde mit „Sort by:Best MatchFilters“ gelesen → Lesezeichen nimmt das kleinste Element mit Namen, App und Server schneiden Bedienelemente ab; (2) bei vielen japanischen Sets fehlt im Katalog die Setgröße – sie zählte wie „passt nicht“. Bewertung jetzt gewichteter Durchschnitt nur der prüfbaren Merkmale; TCGplayer-Kürzel bestätigt auch die Setgröße; Vorschläge ab 0,25 (Nummer passt ja schon). Test mit den echten Fällen: Kahili → SM7a (nicht Zacian V), Jessie & James → SM10b, Klara → S5a zum Prüfen
 
+- [x] TCGplayer-Setliste am VPS gemessen: 681 Gruppen, 532 Namen, 438 Kürzel, davon 363 in Kartenkiste. Collectr nutzt aber teils eigene Namen („Hot Air Arena“, „Ultra Shiny GX“ – bei TCGplayer unbekannt) → bleiben „prüfen“ mit richtigem Vorschlag. Lillie 080/SM-P und Sycamore 246/XY-P „nicht gefunden“: Katalog schreibt „SMP“/„XYP“ → Setkürzel ohne Bindestrich vergleichen (Zuordnung und englische Setnamen), XY-P/BW-P/SMP2 in `set_names.json` ergänzt
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

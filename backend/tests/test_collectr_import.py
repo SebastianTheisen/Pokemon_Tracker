@@ -492,3 +492,41 @@ def test_clean_portfolio() -> None:
     assert clean_portfolio("Main Ordner") == "Main Ordner"
     assert clean_portfolio("  ") is None
     assert clean_portfolio(None) is None
+
+
+async def test_promo_codes_with_and_without_dash(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Lillie 080/SM-P und Sycamore 246/XY-P waren „nicht gefunden“: Der Katalog schreibt die
+    Promo-Sets „SMP“ und „XYP“ (ohne Bindestrich)."""
+    alice = await register_user("alice@example.com")
+    async with session_factory() as session:
+        cards: dict[str, Card] = {}
+        for code, number, name in (("SMP", "080", "リーリエ"), ("XYP", "246", "プラターヌ博士")):
+            card_set = CardSet(external_id=code, language="ja", name=f"{code} プロモ")
+            session.add(card_set)
+            await session.flush()
+            card = Card(
+                external_id=f"{code}-{number}",
+                language="ja",
+                set_id=card_set.id,
+                number=number,
+                number_norm=number.lstrip("0"),
+                name=name,
+            )
+            session.add(card)
+            cards[code] = card
+        await session.commit()
+    tiles = [
+        ["Lillie (JP)", "Sun & Moon Promos (JP)", "Promo • 080/SM-P", "Near Mint • Holofoil"],
+        ["Professor Sycamore (JP)", "XY Promos (JP)", "Rare • 246/XY-P", "Near Mint • Holofoil"],
+    ]
+    response = await client.post(
+        f"{API}/import/collectr/preview", json={"rows": tiles}, headers=alice.headers
+    )
+    rows = {row["index"]: row for row in response.json()["rows"]}
+    for index, code in ((0, "SMP"), (1, "XYP")):
+        assert rows[index]["status"] == "matched"
+        assert rows[index]["matches"][0]["card"]["id"] == str(cards[code].id)
