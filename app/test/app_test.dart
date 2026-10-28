@@ -1690,6 +1690,39 @@ void usabilityTests() {
     await tester.pump(const Duration(seconds: 3));
   });
 
+  testWidgets('Einstellungen: Sammlung zurücksetzen nur mit „LÖSCHEN“', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
+        .read(routerProvider);
+    unawaited(router.push('/settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byKey(const Key('reset-collection')), 300);
+    await tester.tap(find.byKey(const Key('reset-collection')));
+    await tester.pumpAndSettle();
+
+    FilledButton go() => tester.widget<FilledButton>(find.byKey(const Key('reset-go')));
+    expect(go().onPressed, isNull); // gesperrt
+    await tester.enterText(find.byKey(const Key('reset-confirm')), 'löschen');
+    await tester.pump();
+    expect(go().onPressed, isNull); // genau „LÖSCHEN“
+    await tester.enterText(find.byKey(const Key('reset-confirm')), 'LÖSCHEN');
+    await tester.ensureVisible(find.byKey(const Key('reset-wishlist')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('reset-wishlist')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('reset-go')));
+    await tester.pumpAndSettle();
+
+    expect(api.calls, contains('reset:true'));
+    expect(
+      find.text(
+        'Sammlung zurückgesetzt: 12 Positionen und 3 Ordner gelöscht, 4 Merklisten-Einträge.',
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('Collectr-Import: Vorschau, prüfen, Slabs auf PSA 10, übernehmen', (tester) async {
     final api = FakeApi(loggedIn: true);
     await pumpApp(tester, api);

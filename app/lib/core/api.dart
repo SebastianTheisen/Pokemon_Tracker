@@ -768,6 +768,16 @@ class Api {
   Future<BinderJob> binderJob(String id) async =>
       BinderJob.fromJson((await _send('GET', '/scan/binder/jobs/$id'))! as Json);
 
+  /// Ganze Sammlung löschen (Server verlangt das Bestätigungswort).
+  Future<ResetResult> resetCollection({bool includeWishlist = false}) async => ResetResult.fromJson(
+    (await _send(
+          'POST',
+          '/collection/reset',
+          body: {'confirm': 'LÖSCHEN', 'include_wishlist': includeWishlist},
+        ))!
+        as Json,
+  );
+
   /// Collectr-Showcase (Lesezeichen): Kacheln dem Katalog zuordnen, nichts speichern.
   Future<CollectrPreview> collectrPreview({
     required List<List<String>> rows,

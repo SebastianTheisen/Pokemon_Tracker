@@ -1424,6 +1424,21 @@ class BinderJobCell {
   final ScanResult? result;
 }
 
+/// Ergebnis von „Sammlung zurücksetzen“.
+class ResetResult {
+  const ResetResult({required this.items, required this.folders, required this.wishlist});
+
+  factory ResetResult.fromJson(Json json) => ResetResult(
+    items: json.integer('items'),
+    folders: json.integer('folders'),
+    wishlist: json.integer('wishlist'),
+  );
+
+  final int items;
+  final int folders;
+  final int wishlist;
+}
+
 // ------------------------------------------------------------ Collectr-Import
 
 /// Eine Kachel aus dem Collectr-Showcase mit den Treffern im Katalog.

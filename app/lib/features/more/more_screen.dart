@@ -12,6 +12,9 @@ import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
 import '../alerts/alerts_screen.dart';
+import '../collection/item_sheet.dart' show foldersProvider;
+import '../dashboard/dashboard_screen.dart' show invalidateCollection;
+import '../wishlist/wishlist_screen.dart' show wishlistProvider;
 import '../reports/reports.dart';
 import '../auth/auth_screens.dart';
 
@@ -286,6 +289,90 @@ class _PasswordDialogState extends State<_PasswordDialog> {
   );
 }
 
+/// Ganze Sammlung löschen – nur nach Eingabe von „LÖSCHEN“.
+Future<void> resetCollection(BuildContext context, WidgetRef ref) async {
+  // Ergebnis: null = abgebrochen, sonst „Merkliste mitlöschen?“
+  final wishlist = await showDialog<bool>(context: context, builder: (_) => const _ResetDialog());
+  if (wishlist == null || !context.mounted) return;
+  ResetResult? result;
+  final done = await runAction(context, () async {
+    result = await ref.read(apiProvider).resetCollection(includeWishlist: wishlist);
+  });
+  if (!done || !context.mounted) return;
+  invalidateCollection(ref);
+  ref
+    ..invalidate(foldersProvider)
+    ..invalidate(wishlistProvider);
+  showMessage(
+    context,
+    'Sammlung zurückgesetzt: ${result!.items} Positionen und ${result!.folders} Ordner gelöscht'
+    '${wishlist ? ', ${result!.wishlist} Merklisten-Einträge' : ''}.',
+  );
+}
+
+class _ResetDialog extends StatefulWidget {
+  const _ResetDialog();
+
+  @override
+  State<_ResetDialog> createState() => _ResetDialogState();
+}
+
+class _ResetDialogState extends State<_ResetDialog> {
+  final _confirm = TextEditingController();
+  bool _wishlist = false;
+
+  @override
+  void dispose() {
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Sammlung zurücksetzen?'),
+    content: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Gelöscht werden alle Karten und Produkte, alle Ordner (es bleibt der leere '
+            'Ordner „Sammlung“), der Wertverlauf und die Kaufpreise. Das lässt sich nicht '
+            'rückgängig machen.\n\n'
+            'Es bleiben: Konto, Preisalarme, gespeicherte Tauschvorgänge.\n\n'
+            'Tipp: Vorher unter Mehr → „Sammlung exportieren“ eine CSV-Sicherung anlegen.',
+          ),
+          CheckboxListTile(
+            key: const Key('reset-wishlist'),
+            contentPadding: EdgeInsets.zero,
+            value: _wishlist,
+            onChanged: (value) => setState(() => _wishlist = value ?? false),
+            title: const Text('Auch die Merkliste leeren'),
+          ),
+          TextField(
+            key: const Key('reset-confirm'),
+            controller: _confirm,
+            autocorrect: false,
+            decoration: const InputDecoration(labelText: 'Zum Bestätigen LÖSCHEN eingeben'),
+            onChanged: (_) => setState(() {}),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Abbrechen')),
+      FilledButton(
+        key: const Key('reset-go'),
+        style: FilledButton.styleFrom(backgroundColor: AppColors.loss),
+        onPressed: _confirm.text.trim() == 'LÖSCHEN'
+            ? () => Navigator.of(context).pop(_wishlist)
+            : null,
+        child: const Text('Alles löschen'),
+      ),
+    ],
+  );
+}
+
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -444,6 +531,14 @@ class SettingsScreen extends ConsumerWidget {
                 onTap: () => context.push('/settings/bookmarklet'),
               ),
             ],
+          ),
+          const SectionTitle('Gefahrenbereich'),
+          ListTile(
+            key: const Key('reset-collection'),
+            leading: Icon(Icons.delete_forever, color: AppColors.loss),
+            title: Text('Sammlung zurücksetzen', style: TextStyle(color: AppColors.loss)),
+            subtitle: const Text('Löscht alle Karten, Ordner und den Verlauf'),
+            onTap: () => resetCollection(context, ref),
           ),
         ],
       ),

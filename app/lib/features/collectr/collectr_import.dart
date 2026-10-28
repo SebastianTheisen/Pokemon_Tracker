@@ -155,51 +155,20 @@ class _CollectrImportScreenState extends ConsumerState<CollectrImportScreen> {
 
   Future<void> _editGrade(CollectrRow row) async {
     final choice = _choices[row.index]!;
-    var company = choice.company ?? 'PSA';
-    final grade = TextEditingController(text: choice.grade ?? '10');
-    final saved = await showDialog<bool>(
+    final picked = await showDialog<(String, String)>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialog) => AlertDialog(
-          title: Text(row.name),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                initialValue: company,
-                decoration: const InputDecoration(labelText: 'Firma'),
-                items: [
-                  for (final c in gradingCompanies) DropdownMenuItem(value: c, child: Text(c)),
-                ],
-                onChanged: (value) => setDialog(() => company = value ?? company),
-              ),
-              TextField(
-                controller: grade,
-                decoration: const InputDecoration(labelText: 'Note (z. B. 10, 9.5)'),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Abbrechen'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
+      builder: (_) => _GradeDialog(
+        title: row.name,
+        company: choice.company ?? 'PSA',
+        grade: choice.grade ?? '10',
       ),
     );
-    final value = grade.text.trim().replaceAll(',', '.');
-    grade.dispose();
-    if (saved == true && RegExp(r'^\d{1,2}(\.\d)?$').hasMatch(value)) {
+    if (picked != null && mounted) {
       setState(() {
         choice
-          ..company = company
-          ..grade = value;
+          ..company = picked.$1
+          ..grade = picked.$2
+          ..selected = true;
       });
     }
   }
@@ -400,6 +369,63 @@ class _CollectrImportScreenState extends ConsumerState<CollectrImportScreen> {
       onLongPress: () => _pick(row),
     );
   }
+}
+
+/// Firma und Note eines Slabs (gibt `(Firma, Note)` zurück, `null` bei Abbruch).
+class _GradeDialog extends StatefulWidget {
+  const _GradeDialog({required this.title, required this.company, required this.grade});
+
+  final String title;
+  final String company;
+  final String grade;
+
+  @override
+  State<_GradeDialog> createState() => _GradeDialogState();
+}
+
+class _GradeDialogState extends State<_GradeDialog> {
+  late String _company = widget.company;
+  late final _grade = TextEditingController(text: widget.grade);
+
+  @override
+  void dispose() {
+    _grade.dispose();
+    super.dispose();
+  }
+
+  String get _value => _grade.text.trim().replaceAll(',', '.');
+
+  bool get _valid => RegExp(r'^\d{1,2}(\.\d)?$').hasMatch(_value);
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.title),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        DropdownButtonFormField<String>(
+          initialValue: _company,
+          decoration: const InputDecoration(labelText: 'Firma'),
+          items: [for (final c in gradingCompanies) DropdownMenuItem(value: c, child: Text(c))],
+          onChanged: (value) => setState(() => _company = value ?? _company),
+        ),
+        TextField(
+          key: const Key('collectr-grade'),
+          controller: _grade,
+          decoration: const InputDecoration(labelText: 'Note (z. B. 10, 9.5)'),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          onChanged: (_) => setState(() {}),
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Abbrechen')),
+      FilledButton(
+        onPressed: _valid ? () => Navigator.of(context).pop((_company, _value)) : null,
+        child: const Text('OK'),
+      ),
+    ],
+  );
 }
 
 /// Karte wählen: die Kandidaten des Servers, sonst selbst suchen.

@@ -212,6 +212,31 @@ async def bulk_items(body: ItemsBulk, collection: Collection) -> ItemsBulkResult
     return ItemsBulkResult(count=len(copies))
 
 
+class ResetIn(BaseModel):
+    confirm: Literal["LÖSCHEN"] = Field(description="Schutz gegen versehentliches Auslösen.")
+    include_wishlist: bool = False
+
+
+class ResetOut(BaseModel):
+    items: int
+    folders: int
+    wishlist: int
+
+
+@router.post("/collection/reset")
+async def reset_collection(body: ResetIn, collection: Collection, user: CurrentUser) -> ResetOut:
+    """Ganze Sammlung löschen und zurücksetzen (nicht rückgängig zu machen)."""
+    result = await collection.reset(include_wishlist=body.include_wishlist)
+    log.info(
+        "collection.reset",
+        user_id=str(user.id),
+        items=result.items,
+        folders=result.folders,
+        wishlist=result.wishlist,
+    )
+    return ResetOut(items=result.items, folders=result.folders, wishlist=result.wishlist)
+
+
 @router.get("/collection/items/{item_id}")
 async def get_item(item_id: uuid.UUID, collection: Collection) -> ItemOut:
     return await _item_out(collection, item_id)

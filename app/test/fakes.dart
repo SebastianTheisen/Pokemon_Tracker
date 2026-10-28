@@ -957,6 +957,12 @@ class FakeApi extends Api {
     return ScanResult.fromJson(scanResult);
   }
 
+  @override
+  Future<ResetResult> resetCollection({bool includeWishlist = false}) async {
+    calls.add('reset:$includeWishlist');
+    return ResetResult(items: 12, folders: 3, wishlist: includeWishlist ? 4 : 0);
+  }
+
   /// Collectr-Vorschau: eine sichere Karte, eine zum Prüfen, ein Slab, eine nicht gefunden.
   Json? lastCollectrCommit;
 

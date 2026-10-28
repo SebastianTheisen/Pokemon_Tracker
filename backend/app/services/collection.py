@@ -74,6 +74,20 @@ class ItemInput:
     grade: str | None = None
 
 
+def _rowcount(result: object) -> int:
+    """Betroffene Zeilen eines DELETE (``CursorResult.rowcount``)."""
+    return int(getattr(result, "rowcount", 0) or 0)
+
+
+@dataclass(frozen=True)
+class ResetResult:
+    """Was beim Zurücksetzen gelöscht wurde."""
+
+    items: int
+    folders: int
+    wishlist: int
+
+
 @dataclass
 class ItemFilter:
     folder_id: uuid.UUID | None = None
@@ -547,6 +561,36 @@ class CollectionService:
         return len(items)
 
     # ------------------------------------------------------------ Bewertung
+
+    async def reset(self, *, include_wishlist: bool = False) -> ResetResult:
+        """Sammlung komplett zurücksetzen: alle Positionen, Ordner (danach wieder nur der
+        Standardordner), Verlauf und Tageswerte; auf Wunsch auch die Merkliste.
+
+        Konto, Preisalarme, gespeicherte Tauschvorgänge und eigene Referenzbilder bleiben.
+        """
+        owner = self._owner.id
+        folder_ids = select(Folder.id).where(Folder.user_id == owner)
+        items = await self._session.execute(
+            delete(CollectionItem).where(CollectionItem.user_id == owner)
+        )
+        await self._session.execute(delete(CollectionEvent).where(CollectionEvent.user_id == owner))
+        await self._session.execute(
+            delete(PortfolioSnapshot).where(PortfolioSnapshot.user_id == owner)
+        )
+        await self._session.execute(
+            delete(FolderSnapshot).where(FolderSnapshot.folder_id.in_(folder_ids))
+        )
+        folders = await self._session.execute(delete(Folder).where(Folder.user_id == owner))
+        wishlist = 0
+        if include_wishlist:
+            wishlist = _rowcount(
+                await self._session.execute(
+                    delete(WishlistItem).where(WishlistItem.user_id == owner)
+                )
+            )
+        self._session.expunge_all()
+        await self.list_folders()  # Standardordner wieder anlegen
+        return ResetResult(items=_rowcount(items), folders=_rowcount(folders), wishlist=wishlist)
 
     def _filtered(self, item_filter: ItemFilter) -> Select[CollectionItem]:
         statement = (
