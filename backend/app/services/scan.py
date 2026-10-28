@@ -22,7 +22,8 @@ import asyncio
 import time
 import uuid
 from collections import Counter
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -251,6 +252,8 @@ class ScanService:
         self.runtime = runtime
         self.settings = runtime.settings
         self.user = user
+        # Sekunden je Schritt (OCR, Text-Kandidaten, Bildabgleich …) – für die Fehlersuche.
+        self._timings: Counter[str] = Counter()
 
     # ------------------------------------------------------------------ Grenzen
 
@@ -572,13 +575,27 @@ class ScanService:
         language_hint: str | None,
         page_sets: frozenset[uuid.UUID] = frozenset(),
     ) -> _Evaluation:
-        ranked = await self._text_candidates(analysis.text, language_hint, page_sets)
+        with self._timed("text"):
+            ranked = await self._text_candidates(analysis.text, language_hint, page_sets)
         if not ranked:
-            return _Evaluation(await self._rescue_by_references(analysis.features), rescue=True)
-        await self._image_match(ranked, analysis.features)
+            with self._timed("rescue"):
+                rescued = await self._rescue_by_references(analysis.features)
+            return _Evaluation(rescued, rescue=True)
+        with self._timed("image"):
+            await self._image_match(ranked, analysis.features)
         ranked = rank(ranked)
-        await self._separate_twins(ranked, analysis.reference_image(image))
+        with self._timed("twins"):
+            await self._separate_twins(ranked, analysis.reference_image(image))
         return _Evaluation(rank(ranked))
+
+    @contextmanager
+    def _timed(self, stage: str) -> Iterator[None]:
+        """Dauer eines Schritts für das Protokoll (``scan.done`` bzw. ``scan.binder``)."""
+        started = time.perf_counter()
+        try:
+            yield
+        finally:
+            self._timings[stage] += time.perf_counter() - started
 
     # ------------------------------------------------------------------ Ablauf
 
@@ -601,24 +618,27 @@ class ScanService:
         started = time.perf_counter()
         reader = self.runtime.reader
         korean_allowed = self.settings.scanner_korean_ocr
-        analysis: PhotoAnalysis = await self.runtime.run_cpu(
-            lambda: analyze_photo(
-                image,
-                reader,
-                korean=korean_allowed and language_hint == "ko",
-                find_crop=find_crop,
+        with self._timed("ocr"):
+            analysis: PhotoAnalysis = await self.runtime.run_cpu(
+                lambda: analyze_photo(
+                    image,
+                    reader,
+                    korean=korean_allowed and language_hint == "ko",
+                    find_crop=find_crop,
+                )
             )
-        )
         evaluation = await self._evaluate(analysis, image, language_hint)
         if korean_allowed and self._korean_may_help(analysis, evaluation, language_hint):
-            korean = await self.runtime.run_cpu(add_korean_pass, analysis, image, reader)
+            with self._timed("ocr_korean"):
+                korean = await self.runtime.run_cpu(add_korean_pass, analysis, image, reader)
             korean_evaluation = await self._evaluate(korean, image, language_hint)
             # Nur übernehmen, wenn es besser wird – das KO-Modell liest andere Schriften falsch.
             if _best_score(korean_evaluation) > _best_score(evaluation):
                 analysis, evaluation = korean, korean_evaluation
         if not is_confident(evaluation.ranked):
             # Kleine Karte (Binder-Zelle) ohne Nummer: vergrößert nachlesen – nur bei Bedarf.
-            enlarged = await self.runtime.run_cpu(add_enlarged_pass, analysis, image, reader)
+            with self._timed("ocr_enlarged"):
+                enlarged = await self.runtime.run_cpu(add_enlarged_pass, analysis, image, reader)
             if enlarged is not None:
                 enlarged_evaluation = await self._evaluate(enlarged, image, language_hint)
                 if _best_score(enlarged_evaluation) >= _best_score(evaluation):
@@ -669,6 +689,7 @@ class ScanService:
             confident=confident,
             candidates=len(ranked),
             duration_ms=duration_ms,
+            stages_ms={stage: round(sec * 1000) for stage, sec in self._timings.items()},
         )
         return ScanOutcome(
             scan_id=scan_id,
@@ -732,9 +753,11 @@ class ScanService:
         unsicheren Zellen mit diesem Set als Hinweis neu bewertet – Binderseiten sind meist nach
         Set sortiert, und in Hüllen ist die kleine Kartennummer oft unlesbar, der Name nicht.
         """
+        binder_started = time.perf_counter()
         await self._check_rate_limit(1)
         page = await self._decode(data, max_side=BINDER_MAX_SIDE)
-        cells, method = await self.runtime.run_cpu(binder_cells, page, layout)
+        with self._timed("split"):
+            cells, method = await self.runtime.run_cpu(binder_cells, page, layout)
         await self._check_rate_limit(len(cells))
         assessments = [
             await self._assess(
@@ -773,14 +796,20 @@ class ScanService:
             cells=len(cells),
             page_sets=sorted(str(set_id) for set_id in page_sets),
         )
-        results = [
-            BinderCellOutcome(
-                row=cell.row,
-                column=cell.column,
-                outcome=await self._finish(assessment, mode=ScanMode.BINDER),
-            )
-            for cell, assessment in zip(cells, assessments, strict=True)
-        ]
+        with self._timed("finish"):
+            results = [
+                BinderCellOutcome(
+                    row=cell.row,
+                    column=cell.column,
+                    outcome=await self._finish(assessment, mode=ScanMode.BINDER),
+                )
+                for cell, assessment in zip(cells, assessments, strict=True)
+            ]
+        log.info(
+            "scan.binder_timing",
+            total_ms=round((time.perf_counter() - binder_started) * 1000),
+            stages_ms={stage: round(sec * 1000) for stage, sec in self._timings.items()},
+        )
         return BinderOutcome(method=method, cells=tuple(results))
 
     # ------------------------------------------------------------------ Bestätigen
