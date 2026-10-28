@@ -18,6 +18,7 @@ OCR-Durchlauf mit dem koreanischen Modell (Plan: „wenn der erste Durchlauf zu 
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from collections import Counter
@@ -85,8 +86,11 @@ REFERENCE_MAX_SIDE = 800
 RATE_WINDOW = timedelta(hours=1)
 # Binderseite: so viele sicher erkannte Zellen aus einem Set machen es zum Set der Seite.
 PAGE_SET_MIN_CELLS = 2
-# Zelle ganz ohne Text: Bildabgleich gegen höchstens so viele Karten des Seiten-Sets.
-PAGE_SET_IMAGE_LIMIT = 300
+# Zelle ganz ohne Text: Bildabgleich gegen die Karten des Seiten-Sets mit den nächsten Nummern
+# (Binder sind meist nach Nummer sortiert). Alle ~240 Bilder eines Sets beim ersten Mal zu laden
+# dauerte auf dem Server über 2 Minuten – daher wenige Karten und ein Zeitlimit.
+PAGE_SET_IMAGE_LIMIT = 24
+PAGE_SET_IMAGE_SECONDS = 20.0
 # Zeichen, die der Vergleichsschlüssel (``compact_key``) entfernt – gleich in SQL.
 _COMPACT_SQL_CHARS = " .,'’`\"-·・"  # noqa: RUF001
 
@@ -164,6 +168,25 @@ class _Assessment:
     @property
     def confident(self) -> bool:
         return is_confident(self.evaluation.ranked)
+
+
+def _number_value(card: Card) -> int | None:
+    digits = "".join(char for char in card.number_norm if char.isdigit())
+    return int(digits) if digits else None
+
+
+def page_neighbours(cards: Sequence[Card], known: Sequence[Card], limit: int) -> list[Card]:
+    """Karten mit Nummern nahe an den sicher erkannten der Seite; schon erkannte zuletzt."""
+    known_ids = {card.id for card in known}
+    numbers = [value for card in known if (value := _number_value(card)) is not None]
+
+    def distance(card: Card) -> float:
+        value = _number_value(card)
+        if value is None or not numbers:
+            return float("inf")
+        return min(abs(value - number) for number in numbers)
+
+    return sorted(cards, key=lambda card: (card.id in known_ids, distance(card)))[:limit]
 
 
 def page_set(assessments: Sequence[_Assessment]) -> uuid.UUID | None:
@@ -422,23 +445,26 @@ class ScanService:
         return rank(list(best.values()))
 
     async def _page_set_image_rescue(
-        self, query: ImageFeatures, set_id: uuid.UUID
+        self, query: ImageFeatures, set_id: uuid.UUID, known: Sequence[Card]
     ) -> list[Candidate]:
-        """Binder-Zelle ohne lesbaren Text: Bildabgleich gegen alle Karten des Seiten-Sets
-        (Katalogbilder werden einmal geladen und als Merkmale zwischengespeichert)."""
+        """Binder-Zelle ohne lesbaren Text: Bildabgleich gegen die Karten des Seiten-Sets mit
+        Nummern nahe den sicher erkannten (Katalogbilder werden zwischengespeichert)."""
         if len(query) == 0:
             return []
-        cards = list(
-            (
-                await self.session.scalars(
-                    select(Card)
-                    .where(Card.set_id == set_id, Card.image_url.is_not(None))
-                    .order_by(Card.number_norm)
-                    .limit(PAGE_SET_IMAGE_LIMIT)
-                )
-            ).unique()
-        )
-        catalog = await self.runtime.catalog_images.features_many(c.image_url for c in cards)
+        in_set = (
+            await self.session.scalars(
+                select(Card).where(Card.set_id == set_id, Card.image_url.is_not(None))
+            )
+        ).unique()
+        cards = page_neighbours(list(in_set), known, PAGE_SET_IMAGE_LIMIT)
+        try:
+            catalog = await asyncio.wait_for(
+                self.runtime.catalog_images.features_many(c.image_url for c in cards),
+                timeout=PAGE_SET_IMAGE_SECONDS,
+            )
+        except TimeoutError:
+            log.warning("scan.page_set_rescue_timeout", cards=len(cards))
+            return []
         pairs = [
             (index, "catalog", features)
             for index, features in enumerate(catalog)
@@ -679,6 +705,11 @@ class ScanService:
             for cell in cells
         ]
         page_set_id = page_set(assessments)
+        known = [
+            a.evaluation.ranked[0].card
+            for a in assessments
+            if a.confident and a.evaluation.ranked[0].card.set_id == page_set_id
+        ]
         if page_set_id is not None:
             for assessment in assessments:
                 if assessment.confident:
@@ -692,7 +723,7 @@ class ScanService:
                 if not assessment.evaluation.ranked:
                     # Nichts lesbar (Spiegelung, Rand): Bild gegen das Set der Seite.
                     rescued = await self._page_set_image_rescue(
-                        assessment.analysis.features, page_set_id
+                        assessment.analysis.features, page_set_id, known
                     )
                     assessment.evaluation = _Evaluation(rescued, rescue=True)
         log.info("scan.binder", method=method, cells=len(cells), page_set=str(page_set_id))

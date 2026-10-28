@@ -35,6 +35,7 @@ from app.scanner.matching import ImageFeatures, extract_features, match_score
 from app.scanner.storage import FeatureCache, PendingScans, ReferenceStore
 from app.scanner.text import LanguageGuess, extract_text_features
 from app.scanner.twins import TwinDecision, pick_twin
+from app.services.scan import page_neighbours
 from app.services.scan_scoring import (
     Candidate,
     is_confident,
@@ -434,6 +435,16 @@ def test_small_cards_are_read_enlarged(side: int, reads: int) -> None:
     if reads == 2:
         assert shapes[1][0] == 2 * side
         assert [hit.number for hit in analysis.text.numbers] == ["217"]
+
+
+def test_page_neighbours_prefer_close_numbers() -> None:
+    """Bild-Rettung im Binder: nur Karten mit Nummern nahe den sicher erkannten (statt aller
+    ~240 Bilder des Sets – das dauerte auf dem Server über 2 Minuten)."""
+    cards = [_card("x", f"{number:03d}", set_id="SV8a") for number in range(1, 238)]
+    known = [cards[201], cards[205]]  # 202 und 206 sicher erkannt
+    chosen = page_neighbours(cards, known, 6)
+    assert [card.number for card in chosen] == ["201", "203", "205", "207", "200", "204"]
+    assert all(card not in known for card in chosen)
 
 
 # ------------------------------------------------------------------ Punkte

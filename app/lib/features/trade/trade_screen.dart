@@ -306,7 +306,9 @@ class _Summary extends StatelessWidget {
             Text(
               diff == 0
                   ? 'Ausgeglichen'
-                  : '${signedMoney(value.difference)} ${diff > 0 ? 'für dich' : 'für den anderen'}',
+                  // Aus deiner Sicht: + = du bekommst mehr Wert, − = du gibst mehr Wert ab.
+                  : '${signedMoney(value.difference)} für dich · '
+                        '${diff > 0 ? 'du bekommst mehr' : 'du gibst mehr'}',
               key: const Key('trade-difference'),
               textAlign: TextAlign.center,
               style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w700),

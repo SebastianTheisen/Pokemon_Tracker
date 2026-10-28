@@ -852,13 +852,13 @@ void friendTests() {
     await tester.tap(find.byKey(const Key('showcase-open-trade')));
     await tester.pumpAndSettle();
     expect(api.calls, contains('evaluate:get:m1:1'));
-    expect(find.text('+50,00\u00a0€ für dich'), findsOneWidget);
+    expect(find.text('+50,00\u00a0€ für dich · du bekommst mehr'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('trade-add-mine')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('trade-pick-i2')));
     await tester.pumpAndSettle();
-    expect(find.text('+20,00\u00a0€ für dich'), findsOneWidget); // 50 − 30
+    expect(find.text('+20,00\u00a0€ für dich · du bekommst mehr'), findsOneWidget); // 50 − 30
 
     await tester.tap(find.byKey(const Key('trade-save')));
     await tester.pumpAndSettle();
@@ -901,7 +901,7 @@ void friendTests() {
     await tester.tap(find.text('Zum Tausch'));
     await tester.pumpAndSettle();
     expect(api.calls, contains('evaluate:give:i1:1'));
-    expect(find.text('−30,00\u00a0€ für den anderen'), findsOneWidget);
+    expect(find.text('−30,00\u00a0€ für dich · du gibst mehr'), findsOneWidget);
   });
 }
 
