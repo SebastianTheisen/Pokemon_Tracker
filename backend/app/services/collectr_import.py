@@ -353,7 +353,10 @@ def classify(
     if not scored:
         return RowResult(index, row, "missing")
     best = scored[0]
-    lead = best.score - scored[1].score if len(scored) > 1 else 1.0
+    # „(JP)“ steht ausdrücklich da: die englische Fassung derselben Karte (gleiche Nummer,
+    # gleicher Name) ist dann kein Gegenkandidat (Briar SV7 1,00 vs. sv07 0,95).
+    rivals = [c for c in scored[1:] if not row.japanese or c.card.language == best.card.language]
+    lead = best.score - rivals[0].score if rivals else 1.0
     status: RowStatus = (
         "matched" if best.score >= MATCHED_SCORE and lead >= MATCHED_LEAD else "check"
     )

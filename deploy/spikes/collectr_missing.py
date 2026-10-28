@@ -41,11 +41,12 @@ async def main() -> None:
                                             c.cardmarket_product_id) = p.id_product) AS cards
                     FROM cm_products p
                     LEFT JOIN cm_expansions e ON e.id_expansion = p.id_expansion
-                    WHERE p.game = 'pokemon' AND p.name ILIKE :name
+                    WHERE p.game = 'pokemon'
+                      AND translate(lower(p.name), 'éè', 'ee') LIKE :name
                     ORDER BY p.id_expansion DESC LIMIT 25
                     """
                 ),
-                {"name": f"%{NAME}%"},
+                {"name": f"%{NAME.lower().replace('é', 'e')}%"},  # „Pokémon“ = „Pokemon“
             )
         ).all()
         for row in products:
@@ -79,6 +80,18 @@ async def main() -> None:
                     f"- {row.external_id} ({row.language}) {row.name} · Größe "
                     f"{row.official}/{row.total} · {row.number} {row.card}"
                 )
+        print("\n## XY11-Sets im Katalog\n")
+        for row in (
+            await session.execute(
+                text(
+                    "SELECT external_id, name, release_date, cardmarket_expansion_id AS cm, "
+                    "(SELECT count(*) FROM cards c WHERE c.set_id = s.id) AS karten "
+                    "FROM card_sets s WHERE external_id ILIKE 'XY11%'"
+                )
+            )
+        ).all():
+            print(f"- {row.external_id} {row.name} ({row.release_date}) · {row.karten} Karten"
+                  f" · Cardmarket-Ausgabe {row.cm}")  # fmt: skip
         print("\n## Neueste japanische Sets im Katalog\n")
         for row in (
             await session.execute(

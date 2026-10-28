@@ -530,3 +530,35 @@ async def test_promo_codes_with_and_without_dash(
     for index, code in ((0, "SMP"), (1, "XYP")):
         assert rows[index]["status"] == "matched"
         assert rows[index]["matches"][0]["card"]["id"] == str(cards[code].id)
+
+
+async def test_jp_tag_ignores_english_printing(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Briar (JP) · Stellar Miracle 132/102: japanisch 1,00, englisch 0,95 – war „prüfen“."""
+    alice = await register_user("alice@example.com")
+    async with session_factory() as session:
+        cards: dict[str, Card] = {}
+        for code, language, name in (("SV7", "ja", "ブライア"), ("sv07", "en", "Briar")):
+            card_set = CardSet(
+                external_id=code, language=language, name="Stellar Miracle",
+                card_count_official=102,
+            )  # fmt: skip
+            session.add(card_set)
+            await session.flush()
+            card = Card(
+                external_id=f"{code}-132", language=language, set_id=card_set.id,
+                number="132", number_norm="132", name=name,
+            )  # fmt: skip
+            session.add(card)
+            cards[language] = card
+        await session.commit()
+    tile = ["Briar (JP)", "Stellar Miracle", "Special Art Rare • 132/102", "Near Mint • Holofoil"]
+    response = await client.post(
+        f"{API}/import/collectr/preview", json={"rows": [tile]}, headers=alice.headers
+    )
+    row = response.json()["rows"][0]
+    assert row["status"] == "matched"
+    assert row["matches"][0]["card"]["id"] == str(cards["ja"].id)

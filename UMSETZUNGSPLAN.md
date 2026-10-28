@@ -875,6 +875,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] TCGplayer-Setliste am VPS gemessen: 681 Gruppen, 532 Namen, 438 Kürzel, davon 363 in Kartenkiste. Collectr nutzt aber teils eigene Namen („Hot Air Arena“, „Ultra Shiny GX“ – bei TCGplayer unbekannt) → bleiben „prüfen“ mit richtigem Vorschlag. Lillie 080/SM-P und Sycamore 246/XY-P „nicht gefunden“: Katalog schreibt „SMP“/„XYP“ → Setkürzel ohne Bindestrich vergleichen (Zuordnung und englische Setnamen), XY-P/BW-P/SMP2 in `set_names.json` ergänzt
 
+- [x] Collectr-Import, Trainer-Ordner 3. Lauf: 44 zugeordnet / 5 prüfen. Briar (JP) war „prüfen“ (SV7 1,00 vs. englische sv07 0,95) → bei „(JP)“ zählt die andere Sprache nicht als Gegenkandidat. Pokémon Ranger (Cruel Traitor 058/054): Katalog kennt nur XY11-Br (vermutlich Fever-Burst Fighter) – Cruel-Traitor-Pack fehlt wohl; offen, Prüfung per `deploy/spikes/collectr_missing.py` (sucht jetzt auch „Pokémon“ mit Akzent, zeigt XY11-Sets)
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).
