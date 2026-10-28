@@ -10,6 +10,7 @@ import 'features/admin/admin_screens.dart';
 import 'features/auth/auth_screens.dart';
 import 'features/card/card_detail_screen.dart';
 import 'features/cardmarket/cardmarket_import.dart';
+import 'features/collectr/collectr_import.dart';
 import 'features/cardmarket/ebay_import.dart';
 import 'features/collection/collection_screen.dart';
 import 'features/friends/friends_screens.dart';
@@ -119,6 +120,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/cardmarket-import',
         builder: (_, state) => CardmarketImportScreen(data: state.uri.queryParameters['d']),
+      ),
+      GoRoute(
+        path: '/collectr-import',
+        builder: (_, state) => CollectrImportScreen(data: state.uri.queryParameters['d']),
       ),
       GoRoute(
         path: '/ebay-import',

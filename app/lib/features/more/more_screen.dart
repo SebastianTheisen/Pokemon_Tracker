@@ -432,6 +432,17 @@ class SettingsScreen extends ConsumerWidget {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.push('/settings/bookmarklet'),
               ),
+              const SectionTitle('Sammlung aus Collectr übernehmen'),
+              ListTile(
+                key: const Key('collectr-help'),
+                leading: const Icon(Icons.move_down),
+                title: const Text('Collectr-Showcase importieren'),
+                subtitle: const Text(
+                  'Mit demselben Lesezeichen: Showcase öffnen, Portfolio wählen, antippen',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/settings/bookmarklet'),
+              ),
             ],
           ),
         ],

@@ -1,5 +1,8 @@
 // Cardmarket-Angebote übernehmen: Lesezeichen „An Kartenkiste senden“ und Import-Seite.
 //
+// Dasselbe Lesezeichen liest auf app.getcollectr.com ein öffentliches Showcase aus (scrollt
+// selbst bis unten, sammelt alle Kacheln) und öffnet /#/collectr-import?d=<Daten>.
+//
 // Ablauf: In der Karte öffnet „Cardmarket-Angebote“ die gefilterte Angebotsseite (Sprache +
 // Mindestzustand, Sprungmarke #kartenkiste=<Karten-ID>). Dort liest das Lesezeichen die
 // sichtbaren Angebote aus und öffnet Kartenkiste unter /#/cardmarket-import?d=<Daten>.
@@ -30,6 +33,19 @@ String bookmarkletCode(String appOrigin) {
       '''
 (()=>{const A=${jsonEncode(appOrigin)};const r=[];let k='cardmarket';
 const T=(e,s)=>{const x=e.querySelector(s);return x?x.textContent.trim().replace(/\\s+/g,' '):''};
+if(/(^|\\.)getcollectr\\.com\$/.test(location.hostname)){
+const B=document.createElement('div');B.style.cssText='position:fixed;top:10px;left:10px;right:10px;z-index:2147483647;background:#1e293b;color:#fff;padding:12px;border-radius:10px;font:15px sans-serif';document.body.appendChild(B);
+const M=new Map();const X=/^[+\\-−▲▼]?\\s*\\\$|%\\)?\$/;
+const G=()=>{document.querySelectorAll('body *').forEach(e=>{if(e.childElementCount===0&&/^Qty:/.test(e.textContent.trim())){let t=e;while(t&&t!==document.body&&!t.querySelector('img'))t=t.parentElement;
+if(t&&t!==document.body){const l=t.innerText.split('\\n').map(x=>x.trim()).filter(x=>x&&!X.test(x)).slice(0,14).map(x=>x.slice(0,200));const k=l.join('|');if(!M.has(k))M.set(k,l)}}})};
+let n=-1,q=0,i=0;const S=()=>{G();B.textContent='Kartenkiste: sammle Karten … '+M.size;
+const end=window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-5;if(end&&M.size===n){q++}else{q=0}n=M.size;i++;
+if(q<3&&i<600){window.scrollBy(0,window.innerHeight*2);setTimeout(S,600);return}
+let p='';document.querySelectorAll('body *').forEach(e=>{if(!p&&e.childElementCount<4&&/^\\s*Portfolio:/.test(e.textContent))p=e.textContent.replace(/^\\s*Portfolio:\\s*/,'').trim()});
+B.remove();if(!M.size){alert('Kartenkiste: Keine Karten gefunden. Bitte das Showcase öffnen und erneut tippen.');return}
+const d={p:p.slice(0,80),u:location.href.split('#')[0],r:[...M.values()].slice(0,1500)};
+const b=btoa(unescape(encodeURIComponent(JSON.stringify(d)))).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+\$/,'');
+location.href=A+'/#/collectr-import?d='+b};window.scrollTo(0,0);setTimeout(S,400);return}
 if(/(^|\\.)ebay\\./.test(location.hostname)){k='ebay';
 document.querySelectorAll('li.s-item,li.s-card').forEach(e=>{
 const t=T(e,'.s-item__title,.s-card__title');const p=T(e,'.s-item__price,.s-card__price');
@@ -388,6 +404,17 @@ class BookmarkletSetupScreen extends StatelessWidget {
             '→ Seite laden lassen → Lesezeichen „An Kartenkiste senden“ öffnen → Vorschau '
             'prüfen und speichern.\n\n'
             'Auf dem iPhone öffnet sich Kartenkiste dabei in Safari: dort einmal anmelden.',
+          ),
+          const SectionTitle('Sammlung aus Collectr übernehmen'),
+          const Text(
+            'In Collectr dein Showcase teilen (öffentlicher Link) und in Safari öffnen → oben '
+            'bei „Portfolio“ den Ordner wählen → Lesezeichen „An Kartenkiste senden“ antippen. '
+            'Es scrollt die Seite selbst bis unten und sammelt alle Karten ein (bei vielen '
+            'Karten dauert das etwa eine Minute). Danach zeigt Kartenkiste die Zuordnung: '
+            'prüfen, Ordner bestätigen, übernehmen.\n\n'
+            'Das für jedes Portfolio einmal wiederholen. Ein zweiter Durchlauf legt nichts '
+            'doppelt an. Versiegelte Produkte werden nicht übernommen.\n\n'
+            'Ein schon angelegtes Lesezeichen bitte einmal neu einrichten (Code oben kopieren).',
           ),
           const SectionTitle('Code'),
           SelectableText(code, style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),

@@ -1,0 +1,469 @@
+// Collectr-Showcase übernehmen: Vorschau der Karten aus dem Lesezeichen, Zuordnung prüfen,
+// in einen Ordner übernehmen.
+//
+// Das Lesezeichen „An Kartenkiste senden“ liest auf app.getcollectr.com die Kacheln des
+// gewählten Portfolios und öffnet /#/collectr-import?d=<Daten> (Base64url-JSON: Portfolio
+// `p`, Seitenadresse `u`, Kacheln `r` als Textzeilen). Der Server ordnet zu; gespeichert wird
+// erst nach Bestätigung. Ein zweiter Durchlauf legt nichts doppelt an.
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../core/api.dart';
+import '../../core/providers.dart';
+import '../../core/theme.dart';
+import '../../models/models.dart';
+import '../../widgets/common.dart';
+import '../collection/item_sheet.dart' show foldersProvider, gradingCompanies;
+import '../dashboard/dashboard_screen.dart' show invalidateCollection;
+import '../search/search_screen.dart';
+
+/// Inhalt des Lesezeichens für Collectr.
+class CollectrPayload {
+  const CollectrPayload({required this.rows, this.portfolio});
+
+  final String? portfolio;
+  final List<List<String>> rows;
+
+  static CollectrPayload? decode(String? data) {
+    if (data == null || data.isEmpty) return null;
+    try {
+      final json = jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(data))));
+      if (json is! Map<String, Object?> || json['r'] is! List) return null;
+      final portfolio = json['p'];
+      return CollectrPayload(
+        portfolio: portfolio is String && portfolio.trim().isNotEmpty ? portfolio.trim() : null,
+        rows: [
+          for (final row in json['r']! as List)
+            if (row is List) [for (final line in row) '$line'],
+        ],
+      );
+    } on FormatException {
+      return null;
+    }
+  }
+}
+
+/// Auswahl je Kachel: übernehmen? welche Karte? Slab-Angaben.
+class _Choice {
+  _Choice({required this.card, required this.selected});
+
+  CardInfo? card;
+  bool selected;
+  String? company;
+  String? grade;
+}
+
+class CollectrImportScreen extends ConsumerStatefulWidget {
+  const CollectrImportScreen({required this.data, super.key});
+
+  final String? data;
+
+  @override
+  ConsumerState<CollectrImportScreen> createState() => _CollectrImportScreenState();
+}
+
+class _CollectrImportScreenState extends ConsumerState<CollectrImportScreen> {
+  late final CollectrPayload? _payload = CollectrPayload.decode(widget.data);
+  late final _folder = TextEditingController(text: _payload?.portfolio ?? 'Collectr');
+  CollectrPreview? _preview;
+  final _choices = <int, _Choice>{};
+  String? _error;
+  bool _saving = false;
+  CollectrCommitResult? _result;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _folder.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final payload = _payload;
+    if (payload == null) return;
+    try {
+      final preview = await ref
+          .read(apiProvider)
+          .collectrPreview(rows: payload.rows, portfolio: payload.portfolio);
+      if (!mounted) return;
+      setState(() {
+        _preview = preview;
+        for (final row in preview.rows) {
+          _choices[row.index] = _Choice(
+            card: row.matches.firstOrNull,
+            selected: row.status == 'matched',
+          );
+        }
+      });
+    } on ApiException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    }
+  }
+
+  List<CollectrRow> _rows(String status) =>
+      _preview?.rows.where((row) => row.status == status).toList() ?? const [];
+
+  bool _ready(CollectrRow row) {
+    final choice = _choices[row.index]!;
+    return choice.card != null && (!row.graded || choice.grade != null);
+  }
+
+  Iterable<CollectrRow> get _toImport => (_preview?.rows ?? const <CollectrRow>[]).where(
+    (row) => _choices[row.index]!.selected && _ready(row),
+  );
+
+  int get _missingGrades => (_preview?.rows ?? const <CollectrRow>[])
+      .where(
+        (row) => row.graded && _choices[row.index]!.selected && _choices[row.index]!.grade == null,
+      )
+      .length;
+
+  void _gradeAll(String company, String grade) => setState(() {
+    for (final row in _preview!.rows.where((row) => row.graded)) {
+      _choices[row.index]!
+        ..company = company
+        ..grade = grade;
+    }
+  });
+
+  Future<void> _pick(CollectrRow row) async {
+    final card = await showModalBottomSheet<CardInfo>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) => SizedBox(
+        height: MediaQuery.sizeOf(sheetContext).height * 0.85,
+        child: _PickSheet(row: row),
+      ),
+    );
+    if (card != null) {
+      setState(() {
+        _choices[row.index]!
+          ..card = card
+          ..selected = true;
+      });
+    }
+  }
+
+  Future<void> _editGrade(CollectrRow row) async {
+    final choice = _choices[row.index]!;
+    var company = choice.company ?? 'PSA';
+    final grade = TextEditingController(text: choice.grade ?? '10');
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialog) => AlertDialog(
+          title: Text(row.name),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: company,
+                decoration: const InputDecoration(labelText: 'Firma'),
+                items: [
+                  for (final c in gradingCompanies) DropdownMenuItem(value: c, child: Text(c)),
+                ],
+                onChanged: (value) => setDialog(() => company = value ?? company),
+              ),
+              TextField(
+                controller: grade,
+                decoration: const InputDecoration(labelText: 'Note (z. B. 10, 9.5)'),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final value = grade.text.trim().replaceAll(',', '.');
+    grade.dispose();
+    if (saved == true && RegExp(r'^\d{1,2}(\.\d)?$').hasMatch(value)) {
+      setState(() {
+        choice
+          ..company = company
+          ..grade = value;
+      });
+    }
+  }
+
+  Future<void> _commit() async {
+    final rows = _toImport.toList();
+    final folderName = _folder.text.trim();
+    if (rows.isEmpty || folderName.isEmpty) return;
+    setState(() => _saving = true);
+    try {
+      final result = await ref
+          .read(apiProvider)
+          .collectrCommit(
+            folderName: folderName,
+            items: [
+              for (final row in rows)
+                {
+                  'card_id': _choices[row.index]!.card!.id,
+                  'quantity': row.quantity,
+                  'variant': row.variant,
+                  if (!row.graded) 'condition': row.condition ?? 'NM',
+                  if (row.graded) 'grading_company': _choices[row.index]!.company ?? 'PSA',
+                  if (row.graded) 'grade': _choices[row.index]!.grade,
+                },
+            ],
+          );
+      if (!mounted) return;
+      invalidateCollection(ref);
+      ref.invalidate(foldersProvider);
+      setState(() => _result = result);
+    } on ApiException catch (error) {
+      if (mounted) showMessage(context, error.message);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final payload = _payload;
+    final preview = _preview;
+    final result = _result;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Collectr übernehmen')),
+      body: payload == null
+          ? const EmptyView(
+              icon: Icons.link_off,
+              message:
+                  'Keine Daten vom Lesezeichen. Bitte das Collectr-Showcase öffnen und das '
+                  'Lesezeichen „An Kartenkiste senden“ antippen.',
+            )
+          : _error != null
+          ? EmptyView(icon: Icons.error_outline, message: _error!)
+          : preview == null
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 12),
+                  Text('Ordne ${payload.rows.length} Karten zu …'),
+                ],
+              ),
+            )
+          : result != null
+          ? _Done(result: result)
+          : _buildPreview(preview),
+      bottomNavigationBar: preview == null || result != null
+          ? null
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: FilledButton.icon(
+                  key: const Key('collectr-commit'),
+                  onPressed: _saving || _toImport.isEmpty ? null : _commit,
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.library_add),
+                  label: Text('${_toImport.length} Karten übernehmen'),
+                ),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildPreview(CollectrPreview preview) {
+    final matched = _rows('matched');
+    final check = _rows('check');
+    final missing = _rows('missing');
+    final graded = preview.rows.where((row) => row.graded).length;
+    final skippedTiles = (_payload?.rows.length ?? 0) - preview.rows.length;
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 24),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: TextField(
+            key: const Key('collectr-folder'),
+            controller: _folder,
+            decoration: const InputDecoration(
+              labelText: 'In Ordner',
+              helperText: 'Gibt es den Ordner noch nicht, wird er angelegt.',
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Text(
+            '${matched.length} zugeordnet · ${check.length} bitte prüfen · '
+            '${missing.length} nicht gefunden'
+            '${skippedTiles > 0 ? ' · $skippedTiles ohne Kartennummer übersprungen' : ''}',
+            style: TextStyle(color: AppColors.textMuted),
+          ),
+        ),
+        if (graded > 0)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      '$graded gegradete Karten – Firma und Note stehen bei Collectr nur im '
+                      'Bild.${_missingGrades > 0 ? ' Bei $_missingGrades fehlt die Note noch.' : ''}',
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      key: const Key('collectr-grade-all'),
+                      onPressed: () => _gradeAll('PSA', '10'),
+                      child: const Text('Alle auf PSA 10 setzen'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        if (check.isNotEmpty) ...[
+          SectionTitle('Bitte prüfen (${check.length})'),
+          for (final row in check) _tile(row),
+        ],
+        if (missing.isNotEmpty) ...[
+          SectionTitle('Nicht gefunden (${missing.length})'),
+          for (final row in missing) _tile(row),
+        ],
+        if (matched.isNotEmpty) ...[
+          SectionTitle('Zugeordnet (${matched.length})'),
+          for (final row in matched) _tile(row),
+        ],
+      ],
+    );
+  }
+
+  Widget _tile(CollectrRow row) {
+    final choice = _choices[row.index]!;
+    final card = choice.card;
+    final details = [
+      row.setName,
+      ?row.number,
+      if (row.japanese) 'JP',
+      if (row.graded)
+        choice.grade == null ? 'Note fehlt' : '${choice.company ?? 'PSA'} ${choice.grade}'
+      else
+        ?row.condition,
+      if (row.variant == 'reverse') 'Reverse',
+      '${row.quantity}×',
+    ].join(' · ');
+    return ListTile(
+      key: Key('collectr-row-${row.index}'),
+      leading: CardImage(url: card?.image(), width: 40),
+      title: Text(row.name),
+      subtitle: Text(
+        card == null
+            ? '$details\nKeine Karte gewählt – antippen zum Suchen'
+            : '$details\n→ ${card.displayName} · ${card.subtitle}',
+        style: TextStyle(color: AppColors.textMuted),
+      ),
+      isThreeLine: true,
+      trailing: Checkbox(
+        value: choice.selected && _ready(row),
+        onChanged: card == null
+            ? null
+            : (value) {
+                if (row.graded && choice.grade == null && value == true) {
+                  _editGrade(row);
+                  return;
+                }
+                setState(() => choice.selected = value ?? false);
+              },
+      ),
+      onTap: row.graded && card != null ? () => _editGrade(row) : () => _pick(row),
+      onLongPress: () => _pick(row),
+    );
+  }
+}
+
+/// Karte wählen: die Kandidaten des Servers, sonst selbst suchen.
+class _PickSheet extends StatelessWidget {
+  const _PickSheet({required this.row});
+
+  final CollectrRow row;
+
+  @override
+  Widget build(BuildContext context) {
+    if (row.matches.isEmpty) {
+      return CardSearch(autofocus: true, onSelect: (card) => Navigator.of(context).pop(card));
+    }
+    return ListView(
+      children: [
+        SectionTitle('${row.name} · ${row.setName} · ${row.number ?? ''}'),
+        for (final card in row.matches)
+          ListTile(
+            leading: CardImage(url: card.image(), width: 40),
+            title: Text(card.displayName),
+            subtitle: Text('${card.subtitle} · ${card.language.toUpperCase()}'),
+            onTap: () => Navigator.of(context).pop(card),
+          ),
+        ListTile(
+          leading: const Icon(Icons.search),
+          title: const Text('Selbst suchen'),
+          onTap: () async {
+            final navigator = Navigator.of(context);
+            final card = await showModalBottomSheet<CardInfo>(
+              context: context,
+              isScrollControlled: true,
+              useSafeArea: true,
+              builder: (sheetContext) => SizedBox(
+                height: MediaQuery.sizeOf(sheetContext).height * 0.85,
+                child: CardSearch(
+                  autofocus: true,
+                  onSelect: (card) => Navigator.of(sheetContext).pop(card),
+                ),
+              ),
+            );
+            if (card != null) navigator.pop(card);
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _Done extends StatelessWidget {
+  const _Done({required this.result});
+
+  final CollectrCommitResult result;
+
+  @override
+  Widget build(BuildContext context) => EmptyView(
+    icon: Icons.check_circle,
+    message:
+        '${result.added} Karten in „${result.folder.name}“ übernommen.'
+        '${result.skipped > 0 ? ' ${result.skipped} lagen dort schon und wurden übersprungen.' : ''}\n\n'
+        'Für den nächsten Ordner: in Collectr oben das Portfolio wechseln und das Lesezeichen '
+        'erneut antippen.',
+    action: FilledButton(
+      onPressed: () => context.go('/collection'),
+      child: const Text('Zur Sammlung'),
+    ),
+  );
+}

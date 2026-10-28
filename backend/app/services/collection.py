@@ -395,15 +395,16 @@ class CollectionService:
             )
         )
 
-    async def add_item(self, data: ItemInput) -> CollectionItem:
-        """Neue Position. Holt bei Karten vorher aktuelle Preise (für den Startwert)."""
+    async def add_item(self, data: ItemInput, *, refresh_prices: bool = True) -> CollectionItem:
+        """Neue Position. Holt bei Karten vorher aktuelle Preise (für den Startwert) –
+        ``refresh_prices=False`` beim Massenimport (Startwert aus gespeicherten Preisen)."""
         card, _product = await self._validate(data)
         folder = (
             await self._own_folder(data.folder_id)
             if data.folder_id
             else (await self.list_folders())[0]
         )
-        if card is not None and data.grading_company is None:
+        if card is not None and data.grading_company is None and refresh_prices:
             await self._prices.refresh(card)
         item = CollectionItem(
             id=uuid.uuid4(),

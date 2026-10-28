@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1687,6 +1688,53 @@ void usabilityTests() {
     expect(api.calls.where((c) => c.startsWith('scan:')).length, 1);
     expect(find.text('Fertig (1)'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('Collectr-Import: Vorschau, prüfen, Slabs auf PSA 10, übernehmen', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    final payload = base64Url.encode(
+      utf8.encode(
+        jsonEncode({
+          'p': 'Main Ordner',
+          'u': 'https://app.getcollectr.com/showcase/profile/x',
+          'r': [
+            for (var i = 0; i < 4; i++) ['Karte $i', 'Eevee Heroes', 'Secret Rare • 08$i/069'],
+          ],
+        }),
+      ),
+    );
+    final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
+        .read(routerProvider);
+    unawaited(router.push('/collectr-import?d=$payload'));
+    await tester.pumpAndSettle();
+
+    expect(api.calls, contains('collectrPreview:4:Main Ordner'));
+    expect(find.text('Main Ordner'), findsOneWidget); // Ordnername aus Collectr
+    expect(find.text('2 zugeordnet · 1 bitte prüfen · 1 nicht gefunden'), findsOneWidget);
+    expect(find.text('1 Karten übernehmen'), findsOneWidget); // Slab ohne Note fehlt noch
+
+    await tester.tap(find.byKey(const Key('collectr-grade-all')));
+    await tester.pump();
+    expect(find.text('2 Karten übernehmen'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('collectr-row-1'))); // „bitte prüfen“ → wählen
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Espeon V'));
+    await tester.pumpAndSettle();
+    expect(find.text('3 Karten übernehmen'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('collectr-commit')));
+    await tester.pumpAndSettle();
+    final commit = api.lastCollectrCommit!;
+    expect(commit['folder_name'], 'Main Ordner');
+    final items = commit['items']! as List<Json>;
+    expect(items.map((i) => i['card_id']), ['c1', 'c3', 'c1']);
+    expect(items[0]['quantity'], 2);
+    expect(items[2]['grading_company'], 'PSA');
+    expect(items[2]['grade'], '10');
+    expect(items[2].containsKey('condition'), isFalse);
+    expect(find.textContaining('3 Karten in „Main Ordner“ übernommen.'), findsOneWidget);
   });
 
   testWidgets('Binder-Scan: Karten erscheinen nach und nach mit Fortschritt', (tester) async {

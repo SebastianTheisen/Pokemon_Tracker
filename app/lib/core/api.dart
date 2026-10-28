@@ -768,6 +768,28 @@ class Api {
   Future<BinderJob> binderJob(String id) async =>
       BinderJob.fromJson((await _send('GET', '/scan/binder/jobs/$id'))! as Json);
 
+  /// Collectr-Showcase (Lesezeichen): Kacheln dem Katalog zuordnen, nichts speichern.
+  Future<CollectrPreview> collectrPreview({
+    required List<List<String>> rows,
+    String? portfolio,
+  }) async => CollectrPreview.fromJson(
+    (await _send('POST', '/import/collectr/preview', body: {'portfolio': portfolio, 'rows': rows}))!
+        as Json,
+  );
+
+  /// Ausgewählte Karten in den Ordner übernehmen (wird bei Bedarf angelegt).
+  Future<CollectrCommitResult> collectrCommit({
+    required String folderName,
+    required List<Json> items,
+  }) async => CollectrCommitResult.fromJson(
+    (await _send(
+          'POST',
+          '/import/collectr/commit',
+          body: {'folder_name': folderName, 'items': items},
+        ))!
+        as Json,
+  );
+
   Future<ConfirmResult> confirmScan(
     String scanId,
     String cardId, {

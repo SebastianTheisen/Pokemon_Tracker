@@ -957,6 +957,64 @@ class FakeApi extends Api {
     return ScanResult.fromJson(scanResult);
   }
 
+  /// Collectr-Vorschau: eine sichere Karte, eine zum Prüfen, ein Slab, eine nicht gefunden.
+  Json? lastCollectrCommit;
+
+  @override
+  Future<CollectrPreview> collectrPreview({
+    required List<List<String>> rows,
+    String? portfolio,
+  }) async {
+    calls.add('collectrPreview:${rows.length}:$portfolio');
+    Json row(int index, String status, {bool graded = false, List<Json>? matches}) => {
+      'index': index,
+      'name': 'Karte $index',
+      'set_name': 'Eevee Heroes',
+      'rarity': 'Secret Rare',
+      'number': '08$index/069',
+      'condition': graded ? null : 'NM',
+      'variant': 'normal',
+      'quantity': index == 0 ? 2 : 1,
+      'graded': graded,
+      'japanese': true,
+      'status': status,
+      'matches':
+          matches ??
+          [
+            {'card': cardJson(), 'score': 0.9},
+          ],
+    };
+    return CollectrPreview.fromJson({
+      'portfolio': portfolio,
+      'rows': [
+        row(0, 'matched'),
+        row(
+          1,
+          'check',
+          matches: [
+            {'card': cardJson(id: 'c2', name: 'Umbreon VMAX'), 'score': 0.6},
+            {'card': cardJson(id: 'c3', name: 'Espeon V'), 'score': 0.55},
+          ],
+        ),
+        row(2, 'matched', graded: true),
+        row(3, 'missing', matches: []),
+      ],
+    });
+  }
+
+  @override
+  Future<CollectrCommitResult> collectrCommit({
+    required String folderName,
+    required List<Json> items,
+  }) async {
+    lastCollectrCommit = {'folder_name': folderName, 'items': items};
+    return CollectrCommitResult.fromJson({
+      'folder': {'id': 'f9', 'name': folderName, 'sort_order': 3, 'shared': false},
+      'added': items.length,
+      'skipped': 0,
+    });
+  }
+
   /// Binder-Auftrag: zwei Felder (das zweite unsicher); jede Abfrage meldet eine Karte mehr.
   int binderPolls = 0;
 

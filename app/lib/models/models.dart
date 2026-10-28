@@ -1424,6 +1424,84 @@ class BinderJobCell {
   final ScanResult? result;
 }
 
+// ------------------------------------------------------------ Collectr-Import
+
+/// Eine Kachel aus dem Collectr-Showcase mit den Treffern im Katalog.
+class CollectrRow {
+  const CollectrRow({
+    required this.index,
+    required this.name,
+    required this.setName,
+    required this.variant,
+    required this.quantity,
+    required this.graded,
+    required this.japanese,
+    required this.status,
+    required this.matches,
+    this.rarity,
+    this.number,
+    this.condition,
+  });
+
+  factory CollectrRow.fromJson(Json json) => CollectrRow(
+    index: json.integer('index'),
+    name: json.str('name'),
+    setName: json.str('set_name'),
+    rarity: json.strOrNull('rarity'),
+    number: json.strOrNull('number'),
+    condition: json.strOrNull('condition'),
+    variant: json.str('variant'),
+    quantity: json.integer('quantity'),
+    graded: json.flag('graded'),
+    japanese: json.flag('japanese'),
+    status: json.str('status'),
+    matches: [
+      for (final match in json.list('matches', (m) => m)) CardInfo.fromJson(match.obj('card')),
+    ],
+  );
+
+  final int index;
+  final String name;
+  final String setName;
+  final String? rarity;
+  final String? number;
+  final String? condition;
+  final String variant;
+  final int quantity;
+  final bool graded;
+  final bool japanese;
+
+  /// `matched` (eindeutig), `check` (bitte prüfen) oder `missing` (nicht gefunden).
+  final String status;
+  final List<CardInfo> matches;
+}
+
+class CollectrPreview {
+  const CollectrPreview({required this.rows, this.portfolio});
+
+  factory CollectrPreview.fromJson(Json json) => CollectrPreview(
+    portfolio: json.strOrNull('portfolio'),
+    rows: json.list('rows', CollectrRow.fromJson),
+  );
+
+  final String? portfolio;
+  final List<CollectrRow> rows;
+}
+
+class CollectrCommitResult {
+  const CollectrCommitResult({required this.folder, required this.added, required this.skipped});
+
+  factory CollectrCommitResult.fromJson(Json json) => CollectrCommitResult(
+    folder: Folder.fromJson(json.obj('folder')),
+    added: json.integer('added'),
+    skipped: json.integer('skipped'),
+  );
+
+  final Folder folder;
+  final int added;
+  final int skipped;
+}
+
 class ConfirmResult {
   const ConfirmResult({required this.referenceSaved, this.note});
 
