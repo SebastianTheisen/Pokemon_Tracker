@@ -36,7 +36,8 @@ def extended(product: dict[str, Any], name: str) -> str:
 
 async def tcgcsv(base: str) -> None:
     out.append("## 1) tcgcsv.com, Kategorie 85 (Pokémon Japan)\n")
-    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+    headers = {"User-Agent": get_settings().http_user_agent}  # ohne Kennung: keine Daten
+    async with httpx.AsyncClient(timeout=60, follow_redirects=True, headers=headers) as client:
         groups = (await client.get(f"{base}/85/groups")).json()["results"]
         hits = [g for g in groups if PATTERN.search(f"{g['name']} {g.get('abbreviation') or ''}")]
         out.append(f"{len(groups)} Gruppen, davon passend: {len(hits)}\n")
@@ -77,6 +78,28 @@ async def cardmarket() -> None:
             out.append(
                 f"- Ausgabe {row.id_expansion}: {row.n} Produkte, "
                 f"z. B. „{row.beispiel}“ … „{row.bis}“"
+            )
+        # Japanische Classic-Decks: alle Einzelkarten (Reihenfolge der Produkt-IDs).
+        for expansion in (5528, 5527, 5529):
+            singles = (
+                await session.execute(
+                    text(
+                        """
+                        SELECT p.id_product, p.name, p.date_added, p.category_name,
+                               g.metrics->>'trend' AS trend
+                        FROM cm_products p LEFT JOIN cm_prices g ON g.id_product = p.id_product
+                        WHERE p.id_expansion = :expansion
+                        ORDER BY p.id_product
+                        """
+                    ),
+                    {"expansion": expansion},
+                )
+            ).all()
+            out.append(f"\n### Ausgabe {expansion}: {len(singles)} Produkte\n")
+            out.extend(
+                f"- {row.id_product} {row.name} [{row.category_name}] "
+                f"({row.date_added}, Trend {row.trend})"
+                for row in singles
             )
     await engine.dispose()
 
