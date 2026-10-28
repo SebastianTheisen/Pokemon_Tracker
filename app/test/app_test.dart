@@ -1703,6 +1703,22 @@ void usabilityTests() {
 
     await tester.pump(binderPollInterval * 3);
     expect(api.binderPolls, 2); // fertig → keine weiteren Abfragen
+
+    // Am Ende: alle sicheren auf einmal übernehmen, die unsichere bleibt zum Prüfen.
+    expect(find.text('Alle sicheren übernehmen (1)'), findsOneWidget);
+    expect(find.text('1 Karte bitte einzeln prüfen (antippen).'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('scan-add-all')));
+    await tester.pump();
+    await tester.pump();
+    expect(api.calls.where((c) => c == 'addItem').length, 1);
+    expect(api.calls.where((c) => c.startsWith('confirm:')).length, 1);
+    expect(find.text('1 Karte übernommen'), findsOneWidget);
+    expect(find.byKey(const Key('scan-add-all')), findsNothing);
+    expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1)); // Hinweis fährt ein
+    await tester.tap(find.text('Rückgängig'));
+    await tester.pump();
+    expect(api.calls.where((c) => c.startsWith('deleteItem:')).length, 1);
   });
 
   testWidgets('Live-Scanner: Erkennung im Hintergrund, Bestätigung mit Ausschnitt', (tester) async {

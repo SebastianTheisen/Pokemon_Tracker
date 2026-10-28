@@ -957,7 +957,7 @@ class FakeApi extends Api {
     return ScanResult.fromJson(scanResult);
   }
 
-  /// Binder-Auftrag: zwei Felder; jede Abfrage meldet eine Karte mehr.
+  /// Binder-Auftrag: zwei Felder (das zweite unsicher); jede Abfrage meldet eine Karte mehr.
   int binderPolls = 0;
 
   Json _binderJob(int finished) => {
@@ -969,7 +969,14 @@ class FakeApi extends Api {
     'finished': finished,
     'cells': [
       for (var column = 0; column < 2; column++)
-        {'row': 0, 'column': column, 'result': column < finished ? scanResult : null},
+        {
+          'row': 0,
+          'column': column,
+          // Feld 2 ist unsicher („bitte prüfen“).
+          'result': column >= finished
+              ? null
+              : (column == 0 ? scanResult : scanJson(confident: false)),
+        },
     ],
   };
 

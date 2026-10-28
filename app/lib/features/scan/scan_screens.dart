@@ -80,6 +80,26 @@ Future<bool> addScanToWishlist(
   return ok;
 }
 
+/// Bestätigt den Treffer und legt die Karte mit Standardwerten an (NM, 1×; Slab mit Note).
+Future<CollectionItem> addScannedCard(
+  Api api,
+  ScanResult result,
+  CardInfo card, {
+  String? folderId,
+}) async {
+  final grading = result.grading;
+  await api.confirmScan(result.scanId, card.id);
+  return api.addItem({
+    'card_id': card.id,
+    'folder_id': ?folderId,
+    'quantity': 1,
+    if (grading == null) 'condition': 'NM',
+    if (grading != null)
+      'grading_company': gradingCompanies.contains(grading.company) ? grading.company : 'OTHER',
+    if (grading?.grade != null) 'grade': grading!.grade,
+  });
+}
+
 /// Ergebnis eines Scans: großes Kartenbild, Preis, ein Knopf „Hinzufügen“.
 /// Alternativen, Suche und Begründungen nur auf Wunsch.
 class ScanResultView extends ConsumerStatefulWidget {
@@ -131,7 +151,6 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
   Future<void> _quickAdd() async {
     final card = _selected;
     if (card == null) return;
-    final grading = widget.result.grading;
     setState(() => _busy = true);
     final api = ref.read(apiProvider);
     final folderId = effectiveFolderId(
@@ -140,16 +159,7 @@ class _ScanResultViewState extends ConsumerState<ScanResultView> {
     );
     CollectionItem? item;
     final ok = await runAction(context, () async {
-      await api.confirmScan(widget.result.scanId, card.id);
-      item = await api.addItem({
-        'card_id': card.id,
-        'folder_id': ?folderId,
-        'quantity': 1,
-        if (grading == null) 'condition': 'NM',
-        if (grading != null)
-          'grading_company': gradingCompanies.contains(grading.company) ? grading.company : 'OTHER',
-        if (grading?.grade != null) 'grade': grading!.grade,
-      });
+      item = await addScannedCard(api, widget.result, card, folderId: folderId);
     });
     if (!mounted) return;
     setState(() {
@@ -989,6 +999,118 @@ class _ResultTile extends ConsumerWidget {
   }
 }
 
+/// Stapel/Binder: alle sicheren, noch offenen Treffer auf einmal in die Sammlung
+/// (Standardwerte wie „Hinzufügen“, gewählter Ordner). Unsichere bleiben zum Prüfen stehen.
+class _AddAllBar extends ConsumerStatefulWidget {
+  const _AddAllBar({required this.results, required this.done, required this.onAdded});
+
+  /// Feldnummer → Ergebnis (nur fertig erkannte Felder).
+  final Map<int, ScanResult> results;
+  final Set<int> done;
+  final void Function(Iterable<int> indices) onAdded;
+
+  @override
+  ConsumerState<_AddAllBar> createState() => _AddAllBarState();
+}
+
+class _AddAllBarState extends ConsumerState<_AddAllBar> {
+  bool _busy = false;
+
+  Iterable<int> _open({required bool confident}) => widget.results.entries
+      .where(
+        (e) =>
+            !widget.done.contains(e.key) && e.value.best != null && e.value.confident == confident,
+      )
+      .map((e) => e.key);
+
+  Future<void> _addAll() async {
+    final indices = _open(confident: true).toList();
+    if (indices.isEmpty) return;
+    setState(() => _busy = true);
+    final api = ref.read(apiProvider);
+    final folders = ref.read(foldersProvider).value ?? const <Folder>[];
+    final folderId = effectiveFolderId(ref.read(folderChoiceProvider), folders);
+    final folderName = folders.length > 1
+        ? folders.where((folder) => folder.id == folderId).firstOrNull?.name
+        : null;
+    final added = <int, CollectionItem>{};
+    await runAction(context, () async {
+      for (final index in indices) {
+        final result = widget.results[index]!;
+        added[index] = await addScannedCard(api, result, result.best!.card, folderId: folderId);
+      }
+    });
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (added.isEmpty) return;
+    unawaited(HapticFeedback.mediumImpact());
+    invalidateCollection(ref);
+    widget.onAdded(added.keys);
+    final items = added.values.toList();
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            '${items.length} ${items.length == 1 ? 'Karte' : 'Karten'} übernommen'
+            '${folderName == null ? '' : ' → $folderName'}',
+          ),
+          action: SnackBarAction(
+            label: 'Rückgängig',
+            onPressed: () async {
+              for (final item in items) {
+                await api.deleteItem(item.id);
+              }
+              invalidateCollection(ref);
+            },
+          ),
+        ),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sure = _open(confident: true).length;
+    final unsure = _open(confident: false).length;
+    if (sure == 0 && unsure == 0) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (sure > 0) ...[
+            const Center(child: FolderPicker()),
+            const SizedBox(height: 4),
+            FilledButton.icon(
+              key: const Key('scan-add-all'),
+              onPressed: _busy ? null : _addAll,
+              icon: _busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.library_add),
+              label: Text('Alle sicheren übernehmen ($sure)'),
+            ),
+          ],
+          if (unsure > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                unsure == 1
+                    ? '1 Karte bitte einzeln prüfen (antippen).'
+                    : '$unsure Karten bitte einzeln prüfen (antippen).',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.warning),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// So oft fragt die Binder-Seite den Stand ab.
 const binderPollInterval = Duration(milliseconds: 700);
 
@@ -1062,16 +1184,25 @@ class _BatchScanScreenState extends ConsumerState<BatchScanScreen> {
                 label: const Text('Fotos auswählen'),
               ),
             )
-          : ListView.separated(
-              itemCount: items.length,
-              separatorBuilder: (_, _) => const Divider(indent: 72),
-              itemBuilder: (context, index) => _ResultTile(
-                title: items[index].filename,
-                result: items[index].result,
-                error: items[index].error,
-                done: _done.contains(index),
-                onDone: () => setState(() => _done.add(index)),
-              ),
+          : ListView(
+              padding: const EdgeInsets.only(top: 8, bottom: 88),
+              children: [
+                _AddAllBar(
+                  results: {for (final (index, item) in items.indexed) index: ?item.result},
+                  done: _done,
+                  onAdded: (indices) => setState(() => _done.addAll(indices)),
+                ),
+                for (final (index, item) in items.indexed) ...[
+                  if (index > 0) const Divider(indent: 72),
+                  _ResultTile(
+                    title: item.filename,
+                    result: item.result,
+                    error: item.error,
+                    done: _done.contains(index),
+                    onDone: () => setState(() => _done.add(index)),
+                  ),
+                ],
+              ],
             ),
       floatingActionButton: items == null
           ? null
@@ -1230,6 +1361,12 @@ class _BinderScanScreenState extends ConsumerState<BinderScanScreen> {
                           ),
                         ],
                       ),
+                    ),
+                  if (job.done)
+                    _AddAllBar(
+                      results: {for (final (index, cell) in job.cells.indexed) index: ?cell.result},
+                      done: _done,
+                      onAdded: (indices) => setState(() => _done.addAll(indices)),
                     ),
                   for (final (index, cell) in job.cells.indexed)
                     if (cell.result case final result?)
