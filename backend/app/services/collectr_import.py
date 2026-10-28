@@ -267,14 +267,27 @@ class CandidateScore:
     score: float
 
 
+_SET_ALTERNATIVES = re.compile(r"^\((.+)\)$")
+
+
+def set_names_of(row: CollectrRow) -> list[str]:
+    """Setnamen aus Collectr, Alternativen getrennt: „(Cruel Traitor,Ruthless Rebel)“ →
+    [„Cruel Traitor“, „Ruthless Rebel“]."""
+    match = _SET_ALTERNATIVES.match(row.set_name.strip())
+    if match is None:
+        return [row.set_name]
+    names = [name.strip() for name in match.group(1).split(",") if name.strip()]
+    return names or [row.set_name]
+
+
 def set_alias_match(row: CollectrRow, card_set: CardSet, aliases: SetAliases) -> bool | None:
     """Kennt TCGplayer den Setnamen aus Collectr? ``True``: Kürzel passt zum Set der Karte,
     ``False``: gehört zu einem anderen Set, ``None``: Name unbekannt."""
-    codes = aliases.get(tcg_name_key(row.set_name))
-    if not codes:
-        return None
     own = {code_key(card_set.external_id), code_key(card_set.code or "")} - {""}
-    return bool(own & codes)
+    known = [codes for name in set_names_of(row) if (codes := aliases.get(tcg_name_key(name)))]
+    if not known:
+        return None
+    return any(own & codes for codes in known)
 
 
 def score_card(
@@ -289,7 +302,9 @@ def score_card(
     gibt es keinen englischen Kartennamen (japanische Trainer), fällt das Merkmal heraus.
     """
     card_set = card.card_set
-    set_similar = set_similarity(row.set_name, english_set_name(card_set))
+    set_similar = max(
+        set_similarity(name, english_set_name(card_set)) for name in set_names_of(row)
+    )
     alias = set_alias_match(row, card_set, aliases or {})
     if alias is True:  # „Hot Air Arena“ ist laut TCGplayer SV9a – sicher
         set_similar = 1.0

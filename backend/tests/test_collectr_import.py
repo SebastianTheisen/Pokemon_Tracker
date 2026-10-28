@@ -562,3 +562,49 @@ async def test_jp_tag_ignores_english_printing(
     row = response.json()["rows"][0]
     assert row["status"] == "matched"
     assert row["matches"][0]["card"]["id"] == str(cards["ja"].id)
+
+
+async def test_set_name_alternatives_in_brackets(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Pokémon Ranger (JP) · „(Cruel Traitor,Ruthless Rebel)“ · 058/054: Collectr schreibt zwei
+    Namen in Klammern. Laut TCGplayer ist „Cruel Traitor“ XY11-Br (Kartenvergleich 29.10.) –
+    gleiche Nummer gibt es auch in XY11-Bb (Fever-Burst Fighter) und SM9b (Setgröße 54)."""
+    alice = await register_user("alice@example.com")
+    ALIASES.update(
+        build_aliases(
+            [
+                {"name": "XY11-Br: Cruel Traitor", "abbreviation": "XY11-Br"},
+                {"name": "XY11-Bb: Fever-Burst Fighter", "abbreviation": "XY11-Bb"},
+            ]
+        )
+    )
+    async with session_factory() as session:
+        cards: dict[str, Card] = {}
+        for code, size, name in (
+            ("XY11-Br", None, "ポケモンレンジャー"),
+            ("XY11-Bb", None, "ポケモンレンジャー"),
+            ("SM9b", 54, "ルカリオ&メルメタルGX"),
+        ):
+            card_set = CardSet(external_id=code, language="ja", name=code, card_count_official=size)
+            session.add(card_set)
+            await session.flush()
+            card = Card(
+                external_id=f"{code}-058", language="ja", set_id=card_set.id,
+                number="058", number_norm="58", name=name,
+            )  # fmt: skip
+            session.add(card)
+            cards[code] = card
+        await session.commit()
+    tile = [
+        "Pokemon Ranger (JP)", "(Cruel Traitor,Ruthless Rebel)", "Super Rare • 058/054",
+        "Near Mint • 1st Edition Holofoil", "Qty: 1",
+    ]  # fmt: skip
+    response = await client.post(
+        f"{API}/import/collectr/preview", json={"rows": [tile]}, headers=alice.headers
+    )
+    row = response.json()["rows"][0]
+    assert row["matches"][0]["card"]["id"] == str(cards["XY11-Br"].id)
+    assert row["status"] == "matched"

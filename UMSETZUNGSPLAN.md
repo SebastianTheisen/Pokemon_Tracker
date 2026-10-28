@@ -877,6 +877,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Collectr-Import, Trainer-Ordner 3. Lauf: 44 zugeordnet / 5 prüfen. Briar (JP) war „prüfen“ (SV7 1,00 vs. englische sv07 0,95) → bei „(JP)“ zählt die andere Sprache nicht als Gegenkandidat. Pokémon Ranger (Cruel Traitor 058/054): Katalog kennt nur XY11-Br (vermutlich Fever-Burst Fighter) – Cruel-Traitor-Pack fehlt wohl; offen, Prüfung per `deploy/spikes/collectr_missing.py` (sucht jetzt auch „Pokémon“ mit Akzent, zeigt XY11-Sets)
 
+- [x] Namenlose japanische Sets (Name = Kürzel, z. B. „XY11-Br“) per Kartenvergleich mit TCGplayer bestimmt (`deploy/spikes/unnamed_sets.py`: Nummer + englischer Name gegen alle Gruppen von Kategorie 85): XY11-Br = Cruel Traitor (45/53), XY11-Bb = Fever-Burst Fighter (45/53), XY8-Bb/Br, XY1-Bx/By, XY5-Bg/Bt, XY6–XY10 u. a. → in `set_names.json` (Anzeige, Suche, Import). Die leeren Hüllen XY11a/XY11b (0 Karten) bleiben. Collectr-Setnamen „(Cruel Traitor,Ruthless Rebel)“ werden in Alternativen zerlegt → Pokémon Ranger 058/054 → XY11-Br sicher
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).
