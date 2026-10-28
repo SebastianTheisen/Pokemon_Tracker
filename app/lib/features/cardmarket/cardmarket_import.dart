@@ -42,7 +42,7 @@ const Z=()=>{let z=0;M.forEach(v=>z+=v.n);return z};
 let n=-1,q=0,i=0;const S=()=>{G();const z=Z();B.textContent='Kartenkiste: sammle Karten … '+z;
 const end=window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-5;if(end&&z===n){q++}else{q=0}n=z;i++;
 if(q<3&&i<600){window.scrollBy(0,window.innerHeight*2);setTimeout(S,600);return}
-let p='';document.querySelectorAll('body *').forEach(e=>{if(!p&&e.childElementCount<4&&/^\\s*Portfolio:/.test(e.textContent))p=e.textContent.replace(/^\\s*Portfolio:\\s*/,'').trim()});
+let p='';document.querySelectorAll('body *').forEach(e=>{const t=e.textContent;if(!/^\\s*Portfolio:/.test(t))return;const v=t.replace(/^\\s*Portfolio:\\s*/,'').trim();if(v&&(!p||v.length<p.length))p=v});
 B.remove();if(!M.size){alert('Kartenkiste: Keine Karten gefunden. Bitte das Showcase öffnen und erneut tippen.');return}
 const r2=[];M.forEach(v=>{for(let j=0;j<v.n;j++)r2.push(v.l)});
 const d={p:p.slice(0,80),u:location.href.split('#')[0],r:r2.slice(0,1500)};

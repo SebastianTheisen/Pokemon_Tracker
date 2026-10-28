@@ -20,6 +20,11 @@ import '../collection/item_sheet.dart' show foldersProvider, gradingCompanies;
 import '../dashboard/dashboard_screen.dart' show invalidateCollection;
 import '../search/search_screen.dart';
 
+/// Portfolio-Name ohne mitgelesene Bedienelemente
+/// („Trainer OrdnerSort by:Best MatchFilters“ → „Trainer Ordner“).
+String cleanPortfolio(String text) =>
+    text.replaceFirst(RegExp(r'\s*(Sort by|Filters|Sortieren).*$', dotAll: true), '').trim();
+
 /// Inhalt des Lesezeichens für Collectr.
 class CollectrPayload {
   const CollectrPayload({required this.rows, this.portfolio});
@@ -32,9 +37,9 @@ class CollectrPayload {
     try {
       final json = jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(data))));
       if (json is! Map<String, Object?> || json['r'] is! List) return null;
-      final portfolio = json['p'];
+      final portfolio = json['p'] is String ? cleanPortfolio(json['p']! as String) : '';
       return CollectrPayload(
-        portfolio: portfolio is String && portfolio.trim().isNotEmpty ? portfolio.trim() : null,
+        portfolio: portfolio.isEmpty ? null : portfolio,
         rows: [
           for (final row in json['r']! as List)
             if (row is List) [for (final line in row) '$line'],

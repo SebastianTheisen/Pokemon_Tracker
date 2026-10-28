@@ -871,6 +871,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Collectr-Setnamen über TCGplayer-Kürzel: Collectr nutzt die Setnamen von TCGplayer („Hot Air Arena“ statt „Heat Wave Arena“). `services/tcgplayer_sets.py` lädt die Gruppen von tcgcsv (Kategorien 3 und 85, 1 Tag im Speicher) und ordnet Name → Kürzel (SV9a) → Set zu: Kürzel passt = Setname sicher; Kürzel gehört zu anderem Set = deutlicher Abzug (Sky Legend SM10b ≠ GG End SM10a). Ohne tcgcsv bleibt der Namensvergleich. Prüfung auf dem VPS: `deploy/spikes/tcgplayer_sets_check.py` (Format der Kürzel noch nicht am echten tcgcsv gemessen)
 
+- [x] Collectr-Import, Trainer-Ordner 2. Lauf (40 zugeordnet / 7 prüfen / 2 nicht gefunden): (1) Portfolio-Name wurde mit „Sort by:Best MatchFilters“ gelesen → Lesezeichen nimmt das kleinste Element mit Namen, App und Server schneiden Bedienelemente ab; (2) bei vielen japanischen Sets fehlt im Katalog die Setgröße – sie zählte wie „passt nicht“. Bewertung jetzt gewichteter Durchschnitt nur der prüfbaren Merkmale; TCGplayer-Kürzel bestätigt auch die Setgröße; Vorschläge ab 0,25 (Nummer passt ja schon). Test mit den echten Fällen: Kahili → SM7a (nicht Zacian V), Jessie & James → SM10b, Klara → S5a zum Prüfen
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

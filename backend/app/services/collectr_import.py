@@ -75,7 +75,9 @@ WEIGHT_NAME = 0.25
 BONUS_LANGUAGE = 0.05
 MATCHED_SCORE = 0.75  # ab hier gilt ein Treffer als zugeordnet …
 MATCHED_LEAD = 0.1  # … wenn der Zweite so weit dahinter liegt
-CHECK_SCORE = 0.35  # darunter taugt ein Kandidat nicht einmal zum Prüfen
+# Darunter taugt ein Kandidat nicht einmal zum Prüfen. Niedrig, weil die Kartennummer schon
+# passt – ein Vorschlag zum Antippen hilft mehr als „nicht gefunden“.
+CHECK_SCORE = 0.25
 STRONG_SET = 0.75  # Setname gilt als passend (ohne englischen Kartennamen nötig)
 
 # „Espeon V (JP)“, „Sun & Moon Promos (JP)“, aber auch „Scarlet & Violet Promo JP“
@@ -109,6 +111,15 @@ class CollectrRow:
     @property
     def number_norm(self) -> str | None:
         return normalize_number(self.number) if self.number else None
+
+
+_PORTFOLIO_TAIL = re.compile(r"\s*(?:Sort by|Filters|Sortieren).*$", re.DOTALL)
+
+
+def clean_portfolio(name: str | None) -> str | None:
+    """Portfolio-Name ohne mitgelesene Bedienelemente („Trainer OrdnerSort by:…“)."""
+    cleaned = _PORTFOLIO_TAIL.sub("", name or "").strip()
+    return cleaned or None
 
 
 def _clean(line: str) -> str:
@@ -271,32 +282,40 @@ def score_card(
     english_name: str | None = None,
     aliases: SetAliases | None = None,
 ) -> float:
-    total = WEIGHT_TOTAL * total_matches(row, card.card_set)
-    set_similar = set_similarity(row.set_name, english_set_name(card.card_set))
-    alias = set_alias_match(row, card.card_set, aliases or {})
+    """Punktzahl 0…1 als gewichteter Durchschnitt der Merkmale, die sich *prüfen* lassen.
+
+    Unbekanntes zählt nicht als Fehltreffer: fehlt im Katalog die Setgröße eines Sets oder
+    gibt es keinen englischen Kartennamen (japanische Trainer), fällt das Merkmal heraus.
+    """
+    card_set = card.card_set
+    set_similar = set_similarity(row.set_name, english_set_name(card_set))
+    alias = set_alias_match(row, card_set, aliases or {})
     if alias is True:  # „Hot Air Arena“ ist laut TCGplayer SV9a – sicher
         set_similar = 1.0
     elif alias is False:  # Setname gehört laut TCGplayer zu einem anderen Set
         set_similar = min(set_similar, 0.2)
-    set_score = WEIGHT_SET * set_similar
-    language = BONUS_LANGUAGE if (card.language == "ja") == row.japanese else 0.0
-    if english_name is None:
+
+    parts: list[tuple[float, float]] = []  # (Gewicht, Wert)
+    sizes_known = bool(card_set.card_count_official or card_set.card_count_total)
+    if alias is True and row.total:
+        parts.append((WEIGHT_TOTAL, 1.0))  # Set bestätigt + gleiche Nummer = diese Karte
+    elif row.total and (sizes_known or not row.total.isdigit()):
+        parts.append((WEIGHT_TOTAL, float(total_matches(row, card_set))))
+    if english_name is not None:
+        # Ohne Setgröße (Promos wie „085“) zählt der Name dafür mehr.
+        name_weight = WEIGHT_NAME + (0.0 if row.total else WEIGHT_TOTAL)
+        parts.append((name_weight, _similarity(row.name, english_name)))
+    elif set_similar < STRONG_SET:
         # Ohne Namens-Gegenprobe zählt nur ein klar passender Setname („Sky Legend“ und
         # „GG End“ ähneln sich zu 0,57 – gleiche Setgröße, falsches Set).
-        if set_similar < STRONG_SET:
-            set_score *= 0.5
-        # Kein englischer Name (z. B. japanischer Trainer ohne Cardmarket-Verknüpfung): Nummer,
-        # Setgröße und Setname tragen die Bewertung allein – sonst landet jede solche Karte
-        # unter „bitte prüfen“, obwohl alles andere passt.
-        if not row.total:
-            return round(0.5 * set_score + language, 3)  # Promo ohne Setgröße: zu unsicher
-        scale = (1.0 - BONUS_LANGUAGE) / (WEIGHT_TOTAL + WEIGHT_SET)
-        return round((total + set_score) * scale + language, 3)
-    # Ohne Setgröße (Promos wie „085“) zählt der Name dafür mehr.
-    name_weight = WEIGHT_NAME + (0.0 if row.total else WEIGHT_TOTAL)
-    return round(
-        total + set_score + name_weight * _similarity(row.name, english_name) + language, 3
-    )
+        set_similar *= 0.5
+    parts.append((WEIGHT_SET, set_similar))
+
+    weight = sum(w for w, _ in parts)
+    score = sum(w * v for w, v in parts) / weight * (1.0 - BONUS_LANGUAGE)
+    if (card.language == "ja") == row.japanese:
+        score += BONUS_LANGUAGE
+    return round(score, 3)
 
 
 RowStatus = Literal["matched", "check", "missing"]

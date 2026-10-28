@@ -23,6 +23,7 @@ from app.services.collectr_import import (
     ImportItem,
     RowResult,
     RowStatus,
+    clean_portfolio,
 )
 from app.services.tcgplayer_sets import set_aliases
 
@@ -156,6 +157,7 @@ async def collectr_preview(
     body: CollectrPreviewIn, importer: Importer, user: CurrentUser, settings: SettingsDep
 ) -> CollectrPreviewOut:
     """Kacheln des Showcase auswerten und dem Katalog zuordnen (speichert nichts)."""
+    body.portfolio = clean_portfolio(body.portfolio)
     results = await importer.preview(body.rows, await set_aliases(settings))
     out = CollectrPreviewOut(
         portfolio=body.portfolio, rows=[CollectrRowOut.build(r) for r in results]

@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.api.v1 import imports as imports_api
 from app.core.config import Settings
 from app.models import Card, CardSet, CmProduct
-from app.services.collectr_import import parse_row
+from app.services.collectr_import import clean_portfolio, parse_row
 from app.services.tcgplayer_sets import build_aliases, code_key, name_key, reset_cache, set_aliases
 from tests.conftest import RegisterUser
 
@@ -431,3 +431,64 @@ async def test_set_aliases_downloads_once_and_survives_errors(settings: Settings
     broken = httpx.MockTransport(lambda _request: httpx.Response(503))
     assert await set_aliases(settings, transport=broken) == {}  # Namensvergleich bleibt
     reset_cache()
+
+
+async def test_sets_without_known_size(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Trainer-Ordner, 2. Lauf (28.10.): Bei vielen japanischen Sets fehlt im Katalog die
+    Setgröße. Die richtige Karte stand vorn, kam aber nicht über die Schwelle – eine
+    unbekannte Setgröße zählte wie „passt nicht“."""
+    alice = await register_user("alice@example.com")
+    async with session_factory() as session:
+        specs = [
+            # (Set, Setgröße im Katalog, Nummer, Name)
+            ("SM7a", None, "065", "カヒリ"),
+            ("S1W", 60, "065", "ザシアンV"),
+            ("SM10b", None, "062", "ムサシとコジロウ"),
+            ("SM10a", None, "062", "コーチトレーナー"),
+            ("S5a", None, "082", "クララ"),
+        ]
+        cards: dict[str, Card] = {}
+        for code, size, number, name in specs:
+            card_set = CardSet(external_id=code, language="ja", name=code, card_count_official=size)
+            session.add(card_set)
+            await session.flush()
+            card = Card(
+                external_id=f"{code}-{number}",
+                language="ja",
+                set_id=card_set.id,
+                number=number,
+                number_norm=number.lstrip("0"),
+                name=name,
+            )
+            session.add(card)
+            cards[code] = card
+        await session.commit()
+
+    tiles = [
+        ["Kahili (JP)", "Thunderclap Spark", "Secret Rare • 065/060", "Near Mint • Holofoil"],
+        ["Jessie & James (JP)", "Sky Legend", "Secret Rare • 062/054", "Near Mint • Holofoil"],
+        ["Klara (JP)", "Matchless Fighter", "Secret Rare • 082/070", "Near Mint • Holofoil"],
+    ]
+    response = await client.post(
+        f"{API}/import/collectr/preview", json={"rows": tiles}, headers=alice.headers
+    )
+    rows = {row["index"]: row for row in response.json()["rows"]}
+
+    def outcome(index: int) -> tuple[str, str]:
+        return rows[index]["status"], rows[index]["matches"][0]["card"]["id"]
+
+    assert outcome(0) == ("matched", str(cards["SM7a"].id))  # nicht Zacian V (S1W)
+    assert outcome(1) == ("matched", str(cards["SM10b"].id))  # „Sky Legends“, nicht GG End
+    # „Matchless Fighter“ (TCGplayer) vs. „Peerless Fighters“: vorgeschlagen, zum Prüfen
+    assert outcome(2) == ("check", str(cards["S5a"].id))
+
+
+def test_clean_portfolio() -> None:
+    assert clean_portfolio("Trainer OrdnerSort by:Best MatchFilters") == "Trainer Ordner"
+    assert clean_portfolio("Main Ordner") == "Main Ordner"
+    assert clean_portfolio("  ") is None
+    assert clean_portfolio(None) is None
