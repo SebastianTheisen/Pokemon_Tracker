@@ -53,15 +53,21 @@ def _escape_like(term: str) -> str:
 
 
 def _name_condition(term: str) -> ColumnElement[bool]:
-    lowered = func.lower(Card.name)
-    return or_(
-        lowered.like(f"%{_escape_like(term)}%", escape="\\"),
-        literal(term).op("<%")(lowered),  # pg_trgm: Wort-Ähnlichkeit ≥ Schwelle (0,6)
-    )
+    # Auch der englische Name japanischer One-Piece-Karten („roger“ findet „ゴール・D・ロジャー“).
+    conditions = []
+    for lowered in (func.lower(Card.name), func.lower(Card.name_en)):
+        conditions += [
+            lowered.like(f"%{_escape_like(term)}%", escape="\\"),
+            literal(term).op("<%")(lowered),  # pg_trgm: Wort-Ähnlichkeit ≥ Schwelle (0,6)
+        ]
+    return or_(*conditions)
 
 
 def _name_score(term: str) -> ColumnElement[float]:
-    return func.word_similarity(literal(term), func.lower(Card.name))
+    return func.greatest(
+        func.word_similarity(literal(term), func.lower(Card.name)),
+        func.coalesce(func.word_similarity(literal(term), func.lower(Card.name_en)), 0),
+    )
 
 
 def _ordered(statement: Select[Card], limit: int) -> Select[Card]:
@@ -201,7 +207,7 @@ async def _search_onepiece_number(
 def _name_matches(card: Card, name: str) -> bool:
     """Grenzt Kürzel-Treffer ein: Name (auch übersetzt, z. B. „ブラッキー“ ↔ „Nachtara“)."""
     wanted = name.casefold()
-    names = [card.name, translate_card_name(card.name, card.language) or ""]
+    names = [card.name, card.name_en or "", translate_card_name(card.name, card.language) or ""]
     return any(wanted in candidate.casefold() for candidate in names if candidate)
 
 

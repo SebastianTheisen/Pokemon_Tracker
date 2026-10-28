@@ -33,7 +33,7 @@ from typing import Any
 
 import httpx
 import structlog
-from sqlalchemy import delete, exists, func, select
+from sqlalchemy import delete, exists, func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -263,6 +263,7 @@ class ImportReport:
     link: LinkReport | None = None
     dry_run: bool = False
     sets_removed: int = 0
+    english_names: int = 0
 
 
 async def remove_empty_sets(session: AsyncSession) -> int:
@@ -274,6 +275,42 @@ async def remove_empty_sets(session: AsyncSession) -> int:
         .returning(CardSet.external_id)
     )
     return len(removed.all())
+
+
+# Englische Namen für japanische Karten und Sets: gleiche Kartennummer (ohne Fassung _p1/_r1,
+# die Zählung der Parallel-Fassungen weicht zwischen den Listen ab) bzw. gleiches Set-Kürzel.
+# Der Zusatz „(Parallel)“/„(Reprint)“ der japanischen Karte bleibt erhalten.
+# Gleiche Abfrage in Migration 0023 (Erstbefüllung).
+ENGLISH_CARD_NAMES_SQL = r"""
+UPDATE cards AS ja
+SET name_en = en.base || coalesce(substring(ja.name from '( \((Parallel|Reprint)\))$'), '')
+FROM card_sets AS ja_set,
+     (SELECT DISTINCT ON (regexp_replace(c.external_id, '_[pr][0-9]+$', ''))
+             regexp_replace(c.external_id, '_[pr][0-9]+$', '') AS code,
+             regexp_replace(c.name, ' \((Parallel|Reprint)\)$', '') AS base
+      FROM cards AS c JOIN card_sets AS s ON s.id = c.set_id
+      WHERE s.game = 'onepiece' AND c.language = 'en' AND c.external_id IS NOT NULL
+      ORDER BY regexp_replace(c.external_id, '_[pr][0-9]+$', ''), c.external_id) AS en
+WHERE ja_set.id = ja.set_id AND ja_set.game = 'onepiece' AND ja.language <> 'en'
+  AND regexp_replace(ja.external_id, '_[pr][0-9]+$', '') = en.code
+  AND ja.name_en IS DISTINCT FROM
+      en.base || coalesce(substring(ja.name from '( \((Parallel|Reprint)\))$'), '')
+"""
+ENGLISH_SET_NAMES_SQL = """
+UPDATE card_sets AS ja SET name_en = en.name
+FROM card_sets AS en
+WHERE ja.game = 'onepiece' AND en.game = 'onepiece' AND ja.language <> 'en'
+  AND en.language = 'en' AND en.external_id = ja.external_id
+  AND ja.name_en IS DISTINCT FROM en.name
+"""
+
+
+async def fill_english_names(session: AsyncSession) -> int:
+    """Englische Namen japanischer One-Piece-Karten und -Sets setzen. Gibt die Anzahl
+    geänderter Karten zurück."""
+    cards = await session.execute(text(ENGLISH_CARD_NAMES_SQL))
+    await session.execute(text(ENGLISH_SET_NAMES_SQL))
+    return int(getattr(cards, "rowcount", 0) or 0)
 
 
 def _import_order(series: Sequence[Series]) -> list[Series]:
@@ -319,6 +356,7 @@ class OnePieceCatalog:
             async with self._session_factory() as session:
                 report.sets_removed = await remove_empty_sets(session)
                 report.link = await link_onepiece(session)
+                report.english_names = await fill_english_names(session)
                 await session.commit()
         return report
 
@@ -618,5 +656,6 @@ def render_report(report: ImportReport) -> str:
             + (f" ({', '.join(link.sets_unlinked[:15])})" if link.sets_unlinked else ""),
             f"- Karten mit Produkt: {link.cards_linked}, ohne: {link.cards_unlinked}",
             f"- Leere Sets entfernt: {report.sets_removed}",
+            f"- Englische Namen gesetzt/geändert: {report.english_names}",
         ]
     return "\n".join(lines) + "\n"

@@ -82,9 +82,12 @@ _VARIANT_SUFFIX = re.compile(r"\s*\((?:Parallel|Reprint)\)$")
 
 def build_search(card: Card, grading: str | None) -> EbaySearch:
     """Suchbegriff für eine Karte, z. B. „Glurak ex 183/165“ oder „… PSA 10“."""
-    name = (
-        translate_card_name(card.name, card.language) if card.card_set.game == "pokemon" else None
-    ) or _VARIANT_SUFFIX.sub("", card.name)  # „(Parallel)“ steht in keinem Angebotstitel
+    if card.card_set.game == "pokemon":
+        translated = translate_card_name(card.name, card.language)
+    else:
+        translated = card.name_en  # Angebote japanischer One-Piece-Karten: englischer Titel
+    # „(Parallel)“ steht in keinem Angebotstitel.
+    name = _VARIANT_SUFFIX.sub("", translated or card.name)
     number = card.number.strip()
     official = card.card_set.card_count_official
     if number.isdigit() and official:

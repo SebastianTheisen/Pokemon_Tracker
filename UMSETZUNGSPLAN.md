@@ -841,6 +841,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 - [x] Nebenbei gefunden: Standardordner wurde bei parallelen ersten Anfragen doppelt angelegt → 500. Jetzt konfliktfrei (Test reproduziert den Fehler vorher)
 - [x] Binder-Scan mit echtem Foto (9 japanische SV8a-SAR in Toploadern): Scheinvierecke aus Glanz ragten über den Bildrand und verdrängten die Karten → werden verworfen; kleine Karten ohne lesbare Nummer werden vergrößert nachgelesen (Nummern 3 → 5 von 9); kleine/große Kana („リーフイア“ = „リーフィア“) und als „X“/„E“ gelesenes ex-Logo stören die Namenssuche nicht mehr; Set der Seite aus den sicheren Zellen hilft den unsicheren. Ende-zu-Ende gegen Mini-Katalog mit Fallen: **5/9 → 9/9 auf Platz 1**, davon 4 Gleichstand mit der RR-Fassung (entscheidet im Betrieb der Bildabgleich). Synthetisch 86/87 → 87/87
 
+- [x] One Piece: japanische Karten und Sets zeigen den englischen Namen (gleiche Kartennummer in der englischen Liste, z. B. „ゴール・D・ロジャー (Parallel)“ → „Gol D. Roger (Parallel)“, Original klein darunter). Spalte `name_en` (Migration 0023, Erstbefüllung für den Bestand, danach bei jedem Import), Suche findet japanische Karten auch über den englischen Namen, eBay-Suche nutzt ihn. Deutsch: Es gibt keine deutsche One-Piece-Kartenliste als Quelle
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

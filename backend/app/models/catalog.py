@@ -77,6 +77,9 @@ class CardSet(UuidPrimaryKeyMixin, Base):
         String(16), server_default=text("'pokemon'"), index=True, nullable=False
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Englischer Name japanischer One-Piece-Sets (aus der englischen Kartenliste, gleiches
+    # Kürzel); Pokémon übersetzt :mod:`app.services.set_names`.
+    name_en: Mapped[str | None] = mapped_column(String(200))
     series_name: Mapped[str | None] = mapped_column(String(200))
     # Offizielles Kürzel, wie es auf der Karte steht („PFL“, „SVI“) – für die Suche „PFL077“.
     code: Mapped[str | None] = mapped_column(String(16))
@@ -117,6 +120,11 @@ class Card(UuidPrimaryKeyMixin, TimestampMixin, Base):
             text("lower(name) gin_trgm_ops"),
             postgresql_using="gin",
         ),
+        Index(
+            "ix_cards_name_en_trgm",
+            text("lower(name_en) gin_trgm_ops"),
+            postgresql_using="gin",
+        ),
         Index("ix_cards_number_norm", "number_norm"),
     )
 
@@ -128,6 +136,9 @@ class Card(UuidPrimaryKeyMixin, TimestampMixin, Base):
     number: Mapped[str] = mapped_column(String(32), nullable=False)
     number_norm: Mapped[str] = mapped_column(String(32), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Englischer Name japanischer One-Piece-Karten (gleiche Kartennummer in der englischen
+    # Liste); Pokémon-Namen übersetzt :mod:`app.services.card_names` ohne Spalte.
+    name_en: Mapped[str | None] = mapped_column(String(200))
     image_url: Mapped[str | None] = mapped_column(String(500))
     # Sprache des Bildes, wenn es von einer anderen Sprachfassung derselben Karte stammt
     # (z. B. englisches Bild für eine deutsche Karte, deren Bild bei TCGdex fehlt).

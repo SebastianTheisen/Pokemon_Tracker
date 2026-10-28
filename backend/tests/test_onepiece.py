@@ -27,6 +27,7 @@ from app.services.onepiece_catalog import (
     OnePieceCatalog,
     Series,
     best_expansion,
+    fill_english_names,
     parse_cards,
     parse_series,
     product_code,
@@ -283,6 +284,48 @@ async def test_import_creates_sets_cards_and_links_cardmarket(
     assert cards[("en", "op-OP01-120_p2")].cardmarket_product_id is None
 
 
+async def test_japanese_cards_get_english_names(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+) -> None:
+    """Japanische Karten zeigen den englischen Namen (gleiche Kartennummer) und werden über
+    ihn gefunden; Parallel-Fassungen behalten den Zusatz, auch bei anderer Zählung (_p3)."""
+    user = await register_user("nami@example.com")
+    await import_all(session_factory, settings)
+    async with session_factory() as session:
+        ja_set = await session.scalar(
+            select(CardSet).where(CardSet.external_id == "op-OP01", CardSet.language == "ja")
+        )
+        assert ja_set is not None
+        assert ja_set.name_en == "Romance Dawn"
+        session.add(
+            Card(
+                external_id="op-OP01-001_p3",
+                language="ja",
+                set_id=ja_set.id,
+                number="OP01-001",
+                number_norm="OP01-001",
+                name="ロロノア・ゾロ (Parallel)",
+            )
+        )
+        await session.flush()
+        assert await fill_english_names(session) == 1  # nur die neue Karte
+        await session.commit()
+
+    response = await client.get(
+        f"{API}/cards/search", params={"q": "zoro", "language": "ja"}, headers=user.headers
+    )
+    assert response.status_code == 200, response.text
+    found = {hit["card"]["external_id"]: hit["card"] for hit in response.json()}
+    assert found["op-OP01-001"]["name"] == "ロロノア・ゾロ"
+    assert found["op-OP01-001"]["translated_name"] == "Roronoa Zoro"
+    assert found["op-OP01-001_p3"]["translated_name"] == "Roronoa Zoro (Parallel)"
+    assert found["op-OP01-001"]["card_set"]["translated_name"] == "Romance Dawn"
+    assert "name_en" not in found["op-OP01-001"]  # nur intern
+
+
 async def test_dry_run_stores_nothing(
     session_factory: async_sessionmaker[AsyncSession], settings: Settings
 ) -> None:
@@ -407,7 +450,10 @@ async def test_search_and_collection_filter_by_game(
         await client.get(f"{API}/sets", params={"game": "onepiece"}, headers=user.headers)
     ).json()
     assert {s["external_id"] for s in sets} == {"op-OP01", "op-PRB01"}
-    assert all(s["game"] == "onepiece" and s["translated_name"] is None for s in sets)
+    assert all(s["game"] == "onepiece" for s in sets)
+    # Englische Sets brauchen keine Übersetzung, das japanische OP01 heißt „Romance Dawn“.
+    assert {(s["language"], s["translated_name"]) for s in sets} >= {("en", None)}
+    assert all(s["translated_name"] in {None, "Romance Dawn"} for s in sets)
 
 
 async def test_sealed_images_never_cross_games_or_touch_singles(

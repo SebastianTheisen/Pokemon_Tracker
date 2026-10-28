@@ -26,14 +26,16 @@ class SetOut(BaseModel):
     card_count_official: int | None
     card_count_total: int | None
     logo_url: str | None
+    name_en: str | None = Field(default=None, exclude=True)
     symbol_url: str | None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def translated_name(self) -> str | None:
-        """Englischer Name japanischer (koreanischer, taiwanischer) Pokémon-Sets."""
+        """Englischer Name asiatischer Sets (Pokémon übersetzt, One Piece aus der englischen
+        Kartenliste)."""
         if self.game != Game.POKEMON.value:
-            return None
+            return self.name_en
         return translated_set_name(self.external_id, self.language, self.name)
 
 
@@ -45,13 +47,15 @@ class SetSummary(BaseModel):
     language: str
     name: str
     game: str = Game.POKEMON.value
+    name_en: str | None = Field(default=None, exclude=True)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def translated_name(self) -> str | None:
-        """Englischer Name japanischer (koreanischer, taiwanischer) Pokémon-Sets."""
+        """Englischer Name asiatischer Sets (Pokémon übersetzt, One Piece aus der englischen
+        Kartenliste)."""
         if self.game != Game.POKEMON.value:
-            return None
+            return self.name_en
         return translated_set_name(self.external_id, self.language, self.name)
 
 
@@ -71,14 +75,16 @@ class CardOut(BaseModel):
     )
     illustrator: str | None = None
     source: CardSource
+    name_en: str | None = Field(default=None, exclude=True)
     card_set: SetSummary
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def translated_name(self) -> str | None:
-        """Deutscher Name bei japanischen, koreanischen und chinesischen Pokémon-Karten."""
+        """Deutscher Name bei japanischen, koreanischen und chinesischen Pokémon-Karten,
+        englischer bei japanischen One-Piece-Karten (eine deutsche Liste gibt es nicht)."""
         if self.card_set.game != Game.POKEMON.value:
-            return None  # sucht Pokémon-Namen im Text – bei anderen Spielen Unsinn
+            return self.name_en  # Pokémon-Namen im Text suchen wäre hier Unsinn
         return translate_card_name(self.name, self.language)
 
 
