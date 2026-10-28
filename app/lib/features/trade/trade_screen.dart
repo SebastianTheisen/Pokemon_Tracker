@@ -64,6 +64,8 @@ void addItemToTrade(BuildContext context, WidgetRef ref, CollectionItem item, St
     ..showSnackBar(
       SnackBar(
         content: Text('${item.title} → ${side == 'give' ? '„Ich gebe“' : '„Ich bekomme“'}'),
+        // Mit Knopf blieb der Hinweis sonst stehen, bis man ihn wegtippt.
+        persist: false,
         action: SnackBarAction(
           label: 'Zum Tausch',
           onPressed: () => GoRouter.of(context).push('/trade'),

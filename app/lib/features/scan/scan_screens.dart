@@ -1055,6 +1055,9 @@ class _AddAllBarState extends ConsumerState<_AddAllBar> {
             '${items.length} ${items.length == 1 ? 'Karte' : 'Karten'} übernommen'
             '${folderName == null ? '' : ' → $folderName'}',
           ),
+          duration: const Duration(seconds: 6),
+          // Mit Knopf blieb der Hinweis sonst stehen, bis man ihn wegtippt.
+          persist: false,
           action: SnackBarAction(
             label: 'Rückgängig',
             onPressed: () async {

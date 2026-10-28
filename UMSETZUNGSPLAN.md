@@ -851,6 +851,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Binder- und Stapel-Scan: Knopf „Alle sicheren übernehmen (N)“ mit Ordnerwahl – legt alle sicheren, noch offenen Treffer mit Standardwerten an (wie „Hinzufügen“: 1×, NM bzw. Slab mit Note) und bestätigt die Scans; „Rückgängig“ entfernt sie wieder. Unsichere bleiben stehen („2 Karten bitte einzeln prüfen“)
 
+- [x] Hinweise mit Knopf („Rückgängig“, „Zum Tausch“, „Einschalten“) blieben seit Flutter 3.29 stehen, bis man sie wegtippt (auch über Seitenwechsel) → blenden sich wieder von selbst aus (`persist: false`, Rückgängig 6 s). Test prüft das
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

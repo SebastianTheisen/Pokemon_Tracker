@@ -635,6 +635,20 @@ void filterTests() {
     expect(api.calls, contains('deleteItem:i1'));
   });
 
+  testWidgets('Hinweis mit „Rückgängig“ verschwindet von selbst', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    await pumpApp(tester, api);
+    await searchNachtara(tester);
+
+    await tester.tap(find.byKey(const Key('quick-add-c1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Nachtara VMAX hinzugefügt'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 7));
+    await tester.pumpAndSettle();
+    expect(find.text('Nachtara VMAX hinzugefügt'), findsNothing);
+    expect(api.calls, isNot(contains('deleteItem:i1')));
+  });
+
   testWidgets('Suche: langer Druck auf „+“ → Schnellmenü (Merkliste)', (tester) async {
     final api = FakeApi(loggedIn: true);
     await pumpApp(tester, api);

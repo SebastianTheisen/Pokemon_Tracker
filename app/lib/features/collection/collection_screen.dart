@@ -952,6 +952,8 @@ Future<void> showItemActions(
         SnackBar(
           content: Text('„${item.title}“ entfernt'),
           duration: const Duration(seconds: 6),
+          // Mit Knopf blieb der Hinweis sonst stehen, bis man ihn wegtippt.
+          persist: false,
           action: SnackBarAction(
             key: const Key('undo-delete'),
             label: 'Rückgängig',

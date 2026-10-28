@@ -389,6 +389,8 @@ Future<PriceAlert?> showAlertSheet(
             if (!subscribed) 'Mitteilungen sind noch aus.',
           ].join(' '),
         ),
+        // Mit Knopf blieb der Hinweis sonst stehen, bis man ihn wegtippt.
+        persist: false,
         action: subscribed
             ? null
             : SnackBarAction(
