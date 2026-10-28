@@ -582,6 +582,73 @@ async def test_binder_cells_use_text_and_images(
     assert winners == ["S12-110", "S12-079", "S12-110", "S12-079"]
 
 
+async def test_binder_page_set_decides_cells_without_number(
+    client: AsyncClient,
+    admin: Account,
+    reader: ScriptedReader,
+    catalog: CardMap,
+    session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Echtes Binderfoto (28.10.): In Toploadern ist die Nummer oft unlesbar, der Name nicht.
+    Zwei Zellen sind sicher SV8a – die dritte („リーフイアEX“, nur Name) bekommt deshalb die
+    SV8a-Karte statt der gleichnamigen aus dem neueren Set."""
+    sv8a = catalog[("SV8a-217", "ja")].card_set
+    async with session_factory() as session:
+        newer = CardSet(
+            external_id="SV9",
+            language="ja",
+            name="Neueres Set",
+            card_count_official=100,
+            release_date=date(2025, 1, 24),
+        )
+        session.add(newer)
+        await session.flush()
+        for set_id, number in ((sv8a.id, "205"), (newer.id, "010")):
+            session.add(
+                Card(
+                    external_id=f"{'SV8a' if set_id == sv8a.id else 'SV9'}-{number}",
+                    language="ja",
+                    set_id=set_id,
+                    number=number,
+                    number_norm=number,
+                    name="リーフィアex",
+                )
+            )
+        await session.commit()
+
+    sources = {"05.jpg": lines("ブラッキーex", "217/187"), "06.jpg": lines("リーフイアEX")}
+    means = {
+        name: np.asarray(Image.open(io.BytesIO(crop_jpeg(name))).convert("RGB")).mean(axis=(0, 1))
+        for name in ("05.jpg", "06.jpg", "02.jpg")
+    }
+
+    def read(image: np.ndarray, *, korean: bool = False) -> list[Any]:
+        # Zelle am mittleren Farbwert erkennen (BGR → RGB); 02.jpg bleibt ohne Text.
+        mean = image[:, :, ::-1].reshape(-1, 3).mean(axis=0)
+        name = min(means, key=lambda key: float(np.linalg.norm(means[key] - mean)))
+        return list(sources.get(name, []))
+
+    monkeypatch.setattr(reader, "read", read)
+    page = _binder_page(["05.jpg", "05.jpg", "06.jpg", "02.jpg"])
+    response = await client.post(
+        f"{API}/scan/binder",
+        files={"file": ("seite.jpg", page, "image/jpeg")},
+        headers=admin.headers,
+    )
+    assert response.status_code == 200, response.text
+    results = [cell["result"] for cell in response.json()["cells"]]
+
+    assert [r["best"]["card"]["external_id"] for r in results[:2]] == ["SV8a-217", "SV8a-217"]
+    assert all(r["confident"] for r in results[:2])
+    leafeon = results[2]
+    assert leafeon["best"]["card"]["external_id"] == "SV8a-205"
+    assert "Gleiches Set wie die übrigen Karten der Seite" in leafeon["best"]["reasons"]
+    assert "SV9-010" in [a["card"]["external_id"] for a in leafeon["alternatives"]]
+    assert not leafeon["confident"]  # nur Name + Set – sicher erst mit Nummer oder Bild
+    assert results[3]["best"] is None
+
+
 # ------------------------------------------------------------------ Grenzen und Schutz
 
 

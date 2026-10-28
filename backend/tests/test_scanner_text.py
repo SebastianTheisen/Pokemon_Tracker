@@ -85,6 +85,12 @@ def test_normalize_and_keys() -> None:
     assert name_base("teamrocketsmewtuex") == "teamrocketsmewtu"
     assert name_base("ルギアv") == "ルギア"
     assert name_base("v") == "v"
+    # Echtes Binderfoto (28.10.): kleine Kana als große gelesen, „ex“ als „X“/„EX“/„E“.
+    assert compact_key("シヤワーズ") == compact_key("シャワーズ")
+    assert name_base(compact_key("リーフイアEX")) == name_base(compact_key("リーフィアex"))
+    assert name_base(compact_key("サンダースX")) == "サンダース"
+    assert name_base(compact_key("グレイァE")) == "グレイア"
+    assert name_base("pikachu") == "pikachu"  # lateinische Namen bleiben
     assert clean_name("BASIS Glurak KP120") == "Glurak"
     assert clean_name("HP80 ルギア") == "ルギア"
 

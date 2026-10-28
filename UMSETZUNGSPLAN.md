@@ -839,6 +839,7 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 - [x] Binder-Scan: Glanzstreifen verdeckten Kartenumrisse → Karten fielen weg, Reihe/Spalte verrutschten. Raster wird jetzt aus den gefundenen Karten vervollständigt, ohne Umrisse wird erst die Seite im Foto gesucht. Messung synthetisch (`docs/phase8/binder.md`, `deploy/spikes/binder_bench.py`): 62/87 → 86/87. Offen: 2–3 echte Fotos von Binderseiten
 - [x] Slabs als Slab: gegradete Karten erscheinen in Raster, Startseite und Liste in einer Acryl-Hülle mit Etikett der Firma (PSA rot/weiß, Beckett silber bzw. Black Label gold/schwarz, CGC blau, SGC schwarz, TAG, ACE) mit Einstufung („GEM MT“) und Note – nachempfunden, ohne Logos
 - [x] Nebenbei gefunden: Standardordner wurde bei parallelen ersten Anfragen doppelt angelegt → 500. Jetzt konfliktfrei (Test reproduziert den Fehler vorher)
+- [x] Binder-Scan mit echtem Foto (9 japanische SV8a-SAR in Toploadern): Scheinvierecke aus Glanz ragten über den Bildrand und verdrängten die Karten → werden verworfen; kleine Karten ohne lesbare Nummer werden vergrößert nachgelesen (Nummern 3 → 5 von 9); kleine/große Kana („リーフイア“ = „リーフィア“) und als „X“/„E“ gelesenes ex-Logo stören die Namenssuche nicht mehr; Set der Seite aus den sicheren Zellen hilft den unsicheren. Ende-zu-Ende gegen Mini-Katalog mit Fallen: **5/9 → 9/9 auf Platz 1**, davon 4 Gleichstand mit der RR-Fassung (entscheidet im Betrieb der Bildabgleich). Synthetisch 86/87 → 87/87
 
 ## 10. Qualitätssicherung
 

@@ -37,7 +37,7 @@ _PAGE_MIN_AREA = 0.3
 MAX_CARDS = 12
 _SIZE_TOLERANCE = 0.5  # Fläche höchstens ±50 % vom Median
 _OVERLAP_LIMIT = 0.3
-_REFERENCE_CANDIDATES = 4
+_OUTSIDE_TOLERANCE = 0.01  # Viereck darf höchstens so weit (Anteil der Bildgröße) hinausragen
 
 
 @dataclass(frozen=True)
@@ -86,6 +86,14 @@ def _box(corners: Quad) -> tuple[float, float, float, float]:
         float(corners[:, 1].min()),
         float(corners[:, 0].max()),
         float(corners[:, 1].max()),
+    )
+
+
+def _inside(box: tuple[float, float, float, float], width: int, height: int) -> bool:
+    margin_x, margin_y = _OUTSIDE_TOLERANCE * width, _OUTSIDE_TOLERANCE * height
+    x0, y0, x1, y1 = box
+    return (
+        x0 >= -margin_x and y0 >= -margin_y and x1 <= width + margin_x and y1 <= height + margin_y
     )
 
 
@@ -176,9 +184,19 @@ def detect_cards(image: UInt8Image, grid: tuple[int, int] | None = None) -> list
     Vierecke es gibt – die größte Gruppe sind die Karten. ``grid`` (Spalten, Reihen) ist das
     erwartete Raster; ohne Angabe 3×3 hochkant bzw. 4×3 quer.
     """
-    quads = card_quads(image, min_area_fraction=0.02, limit=MAX_CARDS * 3, nested=True)
+    height, width = image.shape[:2]
+    # Glanzstreifen erzeugen große Scheinvierecke, die über den Bildrand hinausragen (Ersatz-
+    # Rechteck um eine offene Kontur). Echte Karten liegen im Bild – sonst verdrängt so ein
+    # Schein-Viereck in der Auswahl alle Karten, die es „überlappt“ (echtes Binderfoto 28.10.).
+    quads = [
+        (area, corners)
+        for area, corners in card_quads(
+            image, min_area_fraction=0.02, limit=MAX_CARDS * 3, nested=True
+        )
+        if _inside(_box(corners), width, height)
+    ]
     best: list[Quad] = []
-    for area, _ in quads[:_REFERENCE_CANDIDATES]:
+    for area, _ in quads:
         selected = _select_similar(quads, area)
         if len(selected) > len(best):
             best = selected
@@ -189,7 +207,6 @@ def detect_cards(image: UInt8Image, grid: tuple[int, int] | None = None) -> list
     card_w = float(np.median([b[2] - b[0] for b in boxes]))
     card_h = float(np.median([b[3] - b[1] for b in boxes]))
     centers = [((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) for b in boxes]
-    height, width = image.shape[:2]
     columns_wanted, rows_wanted = grid or ((4, 3) if width > height else (3, 3))
 
     column_lines = _lines([c[0] for c in centers], card_w * _GAP_GUESS)

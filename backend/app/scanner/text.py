@@ -39,17 +39,30 @@ def normalize_text(text: str) -> str:
     return _LONG_VOWEL.sub("ー", text)
 
 
+# Kleine Kana (ィ, ャ, ッ …) liest die OCR auf Fotos oft als große („リーフイア“ statt
+# „リーフィア“) – im Vergleichsschlüssel zählen beide gleich. Dieselbe Zuordnung nutzt die
+# SQL-Suche (:data:`SMALL_KANA`, :data:`LARGE_KANA`).
+SMALL_KANA = "ァィゥェォッャュョヮヵヶぁぃぅぇぉっゃゅょゎ"
+LARGE_KANA = "アイウエオツヤユヨワカケあいうえおつやゆよわ"
+_KANA_SIZE = str.maketrans(SMALL_KANA, LARGE_KANA)
+
+
 def compact_key(text: str) -> str:
-    """Vergleichsschlüssel: normalisiert, ohne Leerraum/Satzzeichen, Groß/Klein egal."""
-    return _COMPACT.sub("", normalize_text(text)).casefold()
+    """Vergleichsschlüssel: normalisiert, ohne Leerraum/Satzzeichen, Groß/Klein und
+    kleine/große Kana egal."""
+    return _COMPACT.sub("", normalize_text(text)).casefold().translate(_KANA_SIZE)
 
 
 _NAME_SUFFIX = re.compile(r"(?:vmax|vstar|v-union|vunion|gx|ex|v|break|prime|legend|lvx|[★☆*δ])$")
+# Asiatische Namen enden nie auf Buchstaben außer dem Logo – die OCR macht aus „ex“ aber
+# gern „X“, „E“ oder „OX“. Bis zu drei lateinische Zeichen nach Kana/Kanji fallen weg.
+_CJK_LATIN_TAIL = re.compile(r"(?<=[^\x00-\x7f])[a-z0-9]{1,3}$")
 
 
 def name_base(key: str) -> str:
     """Schlüssel ohne Logo-Zusatz (ex, V, VMAX …) – den liest die OCR oft nicht mit."""
     base = _NAME_SUFFIX.sub("", key)
+    base = _CJK_LATIN_TAIL.sub("", base)
     return base or key
 
 

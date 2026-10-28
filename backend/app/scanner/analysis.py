@@ -5,6 +5,8 @@ Reihenfolge (Plan 5.6, Schritte 2–4):
 1. OCR auf dem **ganzen** Bild (robust gegen Hände, Slabs, Hüllen, Screenshots).
 2. Kartenausschnitt suchen. Er dient als Referenzbild und – wenn auf dem ganzen Bild keine
    Nummer lesbar war – für eine zweite OCR (kleine Karten im Bild werden so größer).
+   Ist die Karte danach immer noch klein (Binder-Zellen), wird sie einmal vergrößert gelesen:
+   Die Nummer ist dort nur 10–15 Pixel hoch.
 3. Optional ein Durchlauf mit dem koreanischen Modell.
 4. SIFT-Merkmale des ganzen Bildes für den Bildabgleich.
 
@@ -15,6 +17,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
+import cv2
+import numpy as np
 import structlog
 
 from app.scanner.imaging import UInt8Image, card_crop
@@ -23,6 +27,10 @@ from app.scanner.ocr import OcrLine, TextReader
 from app.scanner.text import TextFeatures, extract_text_features
 
 log = structlog.get_logger(__name__)
+
+# Unterhalb dieser Kantenlänge (Pixel) ist die Kartennummer für die OCR meist zu klein.
+SMALL_CARD_SIDE = 900
+UPSCALE_FACTOR = 2.0
 
 
 @dataclass(frozen=True)
@@ -55,6 +63,10 @@ def analyze_photo(
     if crop is not None and not text.numbers:
         lines += reader.read(crop)
         text = extract_text_features(lines)
+    card = crop if crop is not None else image
+    if not text.numbers and max(card.shape[:2]) < SMALL_CARD_SIDE:
+        lines += reader.read(upscale(card))
+        text = extract_text_features(lines)
     analysis = PhotoAnalysis(
         lines=tuple(lines),
         text=text,
@@ -62,6 +74,12 @@ def analyze_photo(
         crop=crop,
     )
     return add_korean_pass(analysis, image, reader) if korean else analysis
+
+
+def upscale(image: UInt8Image, factor: float = UPSCALE_FACTOR) -> UInt8Image:
+    """Bild für die OCR vergrößern (bikubisch – schärfere Ziffern als linear)."""
+    enlarged = cv2.resize(image, None, fx=factor, fy=factor, interpolation=cv2.INTER_CUBIC)
+    return enlarged.astype(np.uint8)
 
 
 def add_korean_pass(

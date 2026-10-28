@@ -19,11 +19,14 @@ import pytest
 from PIL import Image
 
 from app.models import Card, CardSet
+from app.scanner import binder as binder_module
+from app.scanner.analysis import analyze_photo
 from app.scanner.binder import binder_cells, split_grid
 from app.scanner.catalog_images import CatalogImageIndex, download_url
 from app.scanner.imaging import (
     InvalidImageError,
     card_crop,
+    card_quads,
     decode_image,
     downscale,
     encode_jpeg,
@@ -357,8 +360,8 @@ def test_binder_glare_keeps_every_card_in_place(margin: int) -> None:
 
     cells, method = binder_cells(_sleeved_page(crops, margin=margin, glare=True), "auto")
 
-    # Ohne Tisch: Umrisse + ergänzte Positionen; mit Tisch notfalls die geteilte Seite.
-    assert method == ("konturen" if margin == 0 else "3x3")
+    # Umrisse + ergänzte Positionen (seit alle Vierecke als Maß probiert werden, auch mit Tisch).
+    assert method == "konturen"
     assert any(cell.estimated for cell in cells)  # verdeckte Umrisse fehlen nicht
     assert sorted((cell.row, cell.column) for cell in cells) == [
         (row, column) for row in range(3) for column in range(3)
@@ -370,6 +373,38 @@ def test_binder_glare_keeps_every_card_in_place(margin: int) -> None:
     assert correct >= 8
 
 
+def test_binder_ignores_outlines_beyond_the_photo(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Echtes Binderfoto (28.10.): Glanz auf Toploadern ergab kartengroße Scheinvierecke, die
+    über den oberen Bildrand ragten. Sie verdrängten in der Auswahl die echten Karten der
+    oberen Reihe – solche Vierecke zählen nicht mehr."""
+    crops = [
+        np.asarray(cv2.resize(photo(name), (420, 588)), np.uint8)
+        for name in ("03.jpg", "02.jpg", "05.jpg")
+    ]
+    page = _sleeved_page(crops, margin=0, glare=False)
+    original = card_quads
+
+    def with_phantoms(image: np.ndarray, **kwargs: Any) -> list[tuple[float, np.ndarray]]:
+        found = original(image, **kwargs)
+        # Wie im Foto: Konturfläche kartengroß, das Rechteck darum aber über die halbe Seite
+        # und oben/rechts aus dem Bild hinaus.
+        height, width = image.shape[:2]
+        corners = [[0, -72], [width + 50, -72], [width + 50, height * 0.45], [0, height * 0.45]]
+        phantoms = [(420.0 * 588.0 * 1.1, np.array(corners, np.float32))]
+        return sorted([*phantoms, *found], key=lambda item: -item[0])
+
+    monkeypatch.setattr(binder_module, "card_quads", with_phantoms)
+    cells, method = binder_cells(page, "auto")
+
+    assert method == "konturen"
+    assert len(cells) == 9
+    assert not any(cell.estimated for cell in cells)  # alle neun Umrisse genutzt
+    references = [extract_features(crop, max_features=2000) for crop in crops]
+    for cell in cells:  # jede Zelle zeigt ihre Karte, kein Schein-Ausschnitt
+        scores = [match_score(extract_features(cell.image), ref) for ref in references]
+        assert int(np.argmax(scores)) == (cell.row * 3 + cell.column) % len(crops)
+
+
 def test_binder_grid_uses_the_page_not_the_table() -> None:
     """Ohne Kartenumrisse: erst die Seite im Foto suchen, dann sie teilen."""
     scene = np.full((1400, 1100, 3), 150, np.uint8)
@@ -379,6 +414,26 @@ def test_binder_grid_uses_the_page_not_the_table() -> None:
     # Ein Neuntel der Seite (800 × 1160), nicht des ganzen Fotos (1100 × 1400).
     height, width = cells[0].image.shape[:2]
     assert 230 < width < 270 and 340 < height < 390
+
+
+@pytest.mark.parametrize(("side", "reads"), [(600, 2), (1200, 1)])
+def test_small_cards_are_read_enlarged(side: int, reads: int) -> None:
+    """Binder-Zellen: Ohne lesbare Nummer wird eine kleine Karte vergrößert nachgelesen
+    (echtes Foto: 3 → 5 von 9 Nummern); große Fotos nicht – das kostet nur Zeit."""
+    shapes: list[tuple[int, ...]] = []
+
+    class Reader:
+        def read(self, image: np.ndarray, *, korean: bool = False) -> list[Any]:
+            shapes.append(image.shape)
+            return lines("ブラッキーex", "217/187") if len(shapes) > 1 else lines("ブラッキーex")
+
+    card = np.full((side, int(side * 0.716), 3), 200, np.uint8)
+    analysis = analyze_photo(card, Reader(), find_crop=False)
+
+    assert len(shapes) == reads
+    if reads == 2:
+        assert shapes[1][0] == 2 * side
+        assert [hit.number for hit in analysis.text.numbers] == ["217"]
 
 
 # ------------------------------------------------------------------ Punkte
@@ -413,6 +468,9 @@ def _card(name: str, number: str, *, language: str = "ja", set_id: str = "S12") 
         ("Glurek", "Glurak", 0.75),
         ("Team Rockets MewtuX", "Mew", 0.0),  # kurzer Name steckt im OCR-Text – zählt nicht
         ("Pikachu", "Glurak", 0.0),
+        ("リーフイアEX", "リーフィアex", 1.0),  # kleine Kana als große gelesen
+        ("リーフイアビX", "リーフィアex", 0.85),  # „ex“ als „ビX“ gelesen
+        ("シヤワーズOX", "シャワーズex", 0.95),
     ],
 )
 def test_name_similarity(ocr: str, card_name: str, expected: float) -> None:

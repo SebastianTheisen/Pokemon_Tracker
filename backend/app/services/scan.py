@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -50,14 +51,23 @@ from app.scanner.matching import (
 from app.scanner.runtime import ScannerRuntime
 from app.scanner.slab import SlabLabel
 from app.scanner.storage import ReferenceStore
-from app.scanner.text import NameCandidate, TextFeatures, is_cjk_text
+from app.scanner.text import (
+    LARGE_KANA,
+    SMALL_KANA,
+    NameCandidate,
+    TextFeatures,
+    is_cjk_text,
+)
 from app.scanner.twins import TwinDecision, pick_twin
 from app.services.errors import InvalidInputError, NotFoundError, RateLimitedError
 from app.services.scan_scoring import (
+    MIN_NAME_SIMILARITY,
     Candidate,
     add_image_reasons,
+    apply_page_set,
     apply_twins,
     is_confident,
+    name_similarity,
     rank,
     score_text,
     twin_group,
@@ -69,9 +79,12 @@ MAX_ALTERNATIVES = 4
 NUMBER_QUERY_LIMIT = 300
 NAME_QUERY_LIMIT = 60
 NAME_QUERIES = 6
+CJK_TRIM_MIN_LENGTH = 4
 RESCUE_MIN_INLIERS = CONFIDENT_INLIERS // 2
 REFERENCE_MAX_SIDE = 800
 RATE_WINDOW = timedelta(hours=1)
+# Binderseite: so viele sicher erkannte Zellen aus einem Set machen es zum Set der Seite.
+PAGE_SET_MIN_CELLS = 2
 # Zeichen, die der Vergleichsschlüssel (``compact_key``) entfernt – gleich in SQL.
 _COMPACT_SQL_CHARS = " .,'’`\"-·・"  # noqa: RUF001
 
@@ -134,6 +147,33 @@ class ConfirmOutcome:
 class _Evaluation:
     ranked: list[Candidate] = field(default_factory=list)
     rescue: bool = False
+
+
+@dataclass
+class _Assessment:
+    """Ein ausgewertetes Bild, noch nicht protokolliert (Binder: zweiter Durchlauf möglich)."""
+
+    image: UInt8Image
+    analysis: PhotoAnalysis
+    evaluation: _Evaluation
+    started: float
+    language_hint: str | None
+
+    @property
+    def confident(self) -> bool:
+        return is_confident(self.evaluation.ranked)
+
+
+def page_set(assessments: Sequence[_Assessment]) -> uuid.UUID | None:
+    """Set der Binderseite: das Set der meisten sicher erkannten Zellen – wenn es mindestens
+    :data:`PAGE_SET_MIN_CELLS` sind und die Mehrheit der sicheren Zellen."""
+    sets = Counter(a.evaluation.ranked[0].card.set_id for a in assessments if a.confident)
+    if not sets:
+        return None
+    ((set_id, count),) = sets.most_common(1)
+    if count < PAGE_SET_MIN_CELLS or count * 2 <= sum(sets.values()):
+        return None
+    return set_id
 
 
 def _best_score(evaluation: _Evaluation) -> float:
@@ -239,13 +279,20 @@ class ScanService:
         return cards
 
     async def _cards_by_name(self, names: Iterable[NameCandidate]) -> list[Card]:
-        compact_name = func.translate(func.lower(Card.name), _COMPACT_SQL_CHARS, "")
+        # Wie ``compact_key``: kleine Kana → große, Satzzeichen weg (translate löscht Zeichen
+        # ohne Gegenstück).
+        compact_name = func.translate(
+            func.lower(Card.name), SMALL_KANA + _COMPACT_SQL_CHARS, LARGE_KANA
+        )
         cards: list[Card] = []
         for name in list(names)[:NAME_QUERIES]:
             cjk = is_cjk_text(name.key)
             conditions: list[ColumnElement[bool]] = []
             if len(name.base) >= (2 if cjk else 3):
                 conditions.append(compact_name.contains(name.base, autoescape=True))
+            if cjk and len(name.base) >= CJK_TRIM_MIN_LENGTH:
+                # Letztes Zeichen oft Rest des Logos („リーフイアビX“ – „ビ“ war das „e“).
+                conditions.append(compact_name.contains(name.base[:-1], autoescape=True))
             if not cjk and len(name.key) >= 4:  # noqa: PLR2004 – Trigramme brauchen Länge
                 # pg_trgm (Index): Wort-Ähnlichkeit für Tippfehler der OCR
                 conditions.append(literal(name.text.casefold()).op("<%")(func.lower(Card.name)))
@@ -261,11 +308,28 @@ class ScanService:
             cards += (await self.session.scalars(statement)).unique()
         return cards
 
+    async def _page_set_cards(self, set_id: uuid.UUID, text: TextFeatures) -> list[Card]:
+        """Karten des Seiten-Sets, deren Name oder Nummer zum gelesenen Text passt."""
+        cards = (await self.session.scalars(select(Card).where(Card.set_id == set_id))).unique()
+        numbers = {hit.number for hit in text.numbers}
+        return [
+            card
+            for card in cards
+            if card.number_norm in numbers
+            or name_similarity(text.names, card.name) >= MIN_NAME_SIMILARITY
+        ]
+
     async def _text_candidates(
-        self, text: TextFeatures, language_hint: str | None
+        self,
+        text: TextFeatures,
+        language_hint: str | None,
+        page_set_id: uuid.UUID | None = None,
     ) -> list[Candidate]:
         found: dict[uuid.UUID, Card] = {}
-        for card in [*await self._cards_by_number(text), *await self._cards_by_name(text.names)]:
+        cards = [*await self._cards_by_number(text), *await self._cards_by_name(text.names)]
+        if page_set_id is not None:
+            cards += await self._page_set_cards(page_set_id, text)
+        for card in cards:
             found.setdefault(card.id, card)
         candidates = [
             score_text(Candidate(card), text, language_hint=language_hint)
@@ -273,6 +337,8 @@ class ScanService:
         ]
         if language_hint is not None:
             candidates = [c for c in candidates if c.card.language == language_hint] or candidates
+        if page_set_id is not None:
+            apply_page_set(candidates, page_set_id)
         return rank(candidates)
 
     # ------------------------------------------------------------------ Bildabgleich
@@ -402,9 +468,13 @@ class ScanService:
         )
 
     async def _evaluate(
-        self, analysis: PhotoAnalysis, image: UInt8Image, language_hint: str | None
+        self,
+        analysis: PhotoAnalysis,
+        image: UInt8Image,
+        language_hint: str | None,
+        page_set_id: uuid.UUID | None = None,
     ) -> _Evaluation:
-        ranked = await self._text_candidates(analysis.text, language_hint)
+        ranked = await self._text_candidates(analysis.text, language_hint, page_set_id)
         if not ranked:
             return _Evaluation(await self._rescue_by_references(analysis.features), rescue=True)
         await self._image_match(ranked, analysis.features)
@@ -426,14 +496,10 @@ class ScanService:
             return False
         return not is_confident(evaluation.ranked)
 
-    async def _identify(
-        self,
-        image: UInt8Image,
-        *,
-        mode: ScanMode,
-        language_hint: str | None,
-        find_crop: bool = True,
-    ) -> ScanOutcome:
+    async def _assess(
+        self, image: UInt8Image, *, language_hint: str | None, find_crop: bool = True
+    ) -> _Assessment:
+        """Auswerten und bewerten, ohne zu protokollieren."""
         started = time.perf_counter()
         reader = self.runtime.reader
         korean_allowed = self.settings.scanner_korean_ocr
@@ -452,7 +518,12 @@ class ScanService:
             # Nur übernehmen, wenn es besser wird – das KO-Modell liest andere Schriften falsch.
             if _best_score(korean_evaluation) > _best_score(evaluation):
                 analysis, evaluation = korean, korean_evaluation
+        return _Assessment(image, analysis, evaluation, started, language_hint)
 
+    async def _finish(self, assessment: _Assessment, *, mode: ScanMode) -> ScanOutcome:
+        """Ergebnis protokollieren und den Kartenausschnitt für die Bestätigung merken."""
+        image, analysis, evaluation = assessment.image, assessment.analysis, assessment.evaluation
+        started = assessment.started
         ranked = evaluation.ranked
         confident = is_confident(ranked)
         best = ranked[0] if ranked else None
@@ -501,6 +572,17 @@ class ScanService:
             reference_available=True,
         )
 
+    async def _identify(
+        self,
+        image: UInt8Image,
+        *,
+        mode: ScanMode,
+        language_hint: str | None,
+        find_crop: bool = True,
+    ) -> ScanOutcome:
+        assessment = await self._assess(image, language_hint=language_hint, find_crop=find_crop)
+        return await self._finish(assessment, mode=mode)
+
     async def scan(
         self, data: bytes, *, language_hint: str | None = None, mode: ScanMode = ScanMode.SINGLE
     ) -> ScanOutcome:
@@ -535,24 +617,44 @@ class ScanService:
     async def scan_binder(
         self, data: bytes, *, layout: BinderLayout = "auto", language_hint: str | None = None
     ) -> BinderOutcome:
-        """Binderseite (Beta): Seite zerlegen, jede Zelle einzeln erkennen."""
+        """Binderseite (Beta): Seite zerlegen, jede Zelle einzeln erkennen.
+
+        Zweiter Durchlauf: Stammen mehrere sicher erkannte Karten aus einem Set, werden die
+        unsicheren Zellen mit diesem Set als Hinweis neu bewertet – Binderseiten sind meist nach
+        Set sortiert, und in Hüllen ist die kleine Kartennummer oft unlesbar, der Name nicht.
+        """
         await self._check_rate_limit(1)
         page = await self._decode(data, max_side=BINDER_MAX_SIDE)
         cells, method = await self.runtime.run_cpu(binder_cells, page, layout)
         await self._check_rate_limit(len(cells))
+        assessments = [
+            await self._assess(
+                cell.image,
+                language_hint=language_hint,
+                # Geschätzte Zellen sind größer als die Karte – dort selbst zuschneiden.
+                find_crop=cell.estimated,
+            )
+            for cell in cells
+        ]
+        page_set_id = page_set(assessments)
+        if page_set_id is not None:
+            for assessment in assessments:
+                if assessment.confident:
+                    continue
+                assessment.evaluation = await self._evaluate(
+                    assessment.analysis,
+                    assessment.image,
+                    assessment.language_hint,
+                    page_set_id,
+                )
+        log.info("scan.binder", method=method, cells=len(cells), page_set=str(page_set_id))
         results = [
             BinderCellOutcome(
                 row=cell.row,
                 column=cell.column,
-                outcome=await self._identify(
-                    cell.image,
-                    mode=ScanMode.BINDER,
-                    language_hint=language_hint,
-                    # Geschätzte Zellen sind größer als die Karte – dort selbst zuschneiden.
-                    find_crop=cell.estimated,
-                ),
+                outcome=await self._finish(assessment, mode=ScanMode.BINDER),
             )
-            for cell in cells
+            for cell, assessment in zip(cells, assessments, strict=True)
         ]
         return BinderOutcome(method=method, cells=tuple(results))
 

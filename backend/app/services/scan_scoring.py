@@ -12,6 +12,7 @@ Name passt                 ≤ 0,35  „ルギアV“ ↔ „ルギアV“ (unsc
 Bildabgleich               ≤ 0,60  RANSAC-Inlier; volle Punkte ab 150
 Sprache passt nicht        − 0,05 … 0,30
 Nachdruck unterschieden    0,20    Stempel der 30th Celebration im Foto (:mod:`twins`)
+Set der Binderseite        0,15    übrige Karten der Seite sicher aus demselben Set
 =========================  ======  ===============================================
 
 **Sicherer Treffer** (die App zeigt dann „Erkannt als …“), wenn
@@ -51,6 +52,7 @@ STRONG_LANGUAGE_PENALTY = 0.25
 HINT_LANGUAGE_PENALTY = 0.30
 WEAK_LANGUAGE_PENALTY = 0.05
 TWIN_POINTS = 0.20
+PAGE_SET_POINTS = 0.15
 _MIN_CONTAINED_RATIO = 0.6
 _VARIANT_SUFFIX = re.compile(r"\s*\((?:Parallel|Reprint)\)$")
 
@@ -105,6 +107,7 @@ class Candidate:
     reference_inliers: int | None = None
     twin_points: float = 0.0
     twin_undecided: bool = False
+    page_set_points: float = 0.0
     reasons: list[str] = field(default_factory=list)
 
     @property
@@ -131,7 +134,7 @@ class Candidate:
 
     @property
     def score(self) -> float:
-        return self.text_score + self.image_score + self.twin_points
+        return self.text_score + self.image_score + self.twin_points + self.page_set_points
 
     @property
     def confidence(self) -> float:
@@ -184,6 +187,16 @@ def score_text(
         reasons.append(f"Sprache {card.language} statt {expected}")
     candidate.reasons = reasons
     return candidate
+
+
+def apply_page_set(candidates: Sequence[Candidate], set_id: object) -> None:
+    """Binderseite: Karten aus dem Set, aus dem die sicher erkannten Nachbarn stammen, bekommen
+    :data:`PAGE_SET_POINTS`. Zählt nicht als starker Beleg – sicher wird es erst mit Nummer
+    oder Bildabgleich."""
+    for candidate in candidates:
+        if candidate.card.set_id == set_id:
+            candidate.page_set_points = PAGE_SET_POINTS
+            candidate.reasons.append("Gleiches Set wie die übrigen Karten der Seite")
 
 
 def add_image_reasons(candidate: Candidate) -> None:
