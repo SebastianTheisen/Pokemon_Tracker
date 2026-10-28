@@ -50,6 +50,7 @@ class CardSource(enum.StrEnum):
     POKEMONTCG = "pokemontcg"  # englischer Datensatz von pokemontcg.io (Lücken bei TCGdex)
     TRANSLATED = "translated"  # deutsche Fassung aus der englischen Karte abgeleitet
     ONEPIECE = "onepiece"  # offizielle One-Piece-Kartenliste (onepiece-cardgame.com)
+    TCGPLAYER = "tcgplayer"  # TCGplayer-Katalog über tcgcsv.com (japanische Classic Collection)
 
 
 class ImageSource(enum.StrEnum):
@@ -62,6 +63,7 @@ class ImageSource(enum.StrEnum):
     POKEMON_CARD_TW = "asia.pokemon-card.com/tw"  # offizielle Datenbank Taiwan
     PRICECHARTING = "pricecharting"  # Setliste von PriceCharting (Korea, China)
     ONEPIECE = "onepiece-cardgame.com"  # offizielle One-Piece-Kartenliste (EN/JP)
+    TCGPLAYER = "tcgplayer"  # TCGplayer-Bild (tcgcsv.com)
 
 
 class CardSet(UuidPrimaryKeyMixin, Base):

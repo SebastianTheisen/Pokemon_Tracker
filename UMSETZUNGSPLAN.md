@@ -845,6 +845,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Live-Scanner (iPhone-Rückmeldung): löst nur aus, wenn im Rahmen eine Karte liegt – Prüfung auf dem Gerät (vier gerade Kanten im Karten-/Slab-Format), Rahmen wird dann grün. Gemessen an iPhone-Bildern (Roger im Toploader, Boden, Stoff) und Testfotos: 0/18 leere Bilder lösen aus, 18/29 Karten werden erkannt (Fehlschläge: schräg gehalten, angeschnitten, Slab in der Hand → Auslöser-Knopf). Erkennung wieder mit dem ganzen Bild (Zuschnitt hatte Roger verschlechtert), Ausschnitt nur als Bestätigung; Erkennung im Hintergrund; sehr unsichere Treffer (< 50 %) kein Tipp; alter Tipp verschwindet bei neuer Aufnahme
 
+- [x] Japanische Classic Collection (CLL/CLF/CLK, je 32 Karten + Energien) fehlte – pokemon-card.com führt sie nicht; der Bildabgleich fand das Grundset 1996 mit gleicher Grafik und meldete „sicher“. Jetzt: Import aus tcgcsv.com (Nummer, Bild, englischer Name; Pokémon mit japanischem Namen aus der PokéAPI-Liste), Cardmarket-Ausgaben 5527–5529 über den Namen verknüpft (`classic-import`, täglich mit dem Cardmarket-Lauf). Zusätzlich: gelesene vollständige Setgröße, die dem Set widerspricht („/032“ gegen 102), macht einen Treffer nie „sicher“
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

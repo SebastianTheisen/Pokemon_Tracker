@@ -49,6 +49,7 @@ from app.scanner.storage import ReferenceStore
 from app.services.alerts import check_price_alerts
 from app.services.card_details import sync_card_details
 from app.services.cardmarket_catalog import last_successful_import, run_catalog_import
+from app.services.classic_collection import refresh_classic_collection
 from app.services.collection import CollectionService, users_with_items
 from app.services.image_import import last_finished_run, last_run_incomplete, run_image_import
 from app.services.onepiece_catalog import OnePieceCatalog
@@ -256,6 +257,9 @@ async def cardmarket_forever(
         # One Piece: eigener Download (Spiel 18), eigener Lauf – Fehler stehen im Protokoll.
         await run_catalog_import(session_factory, settings, tcgdex=None, game=Game.ONEPIECE.value)
         await refresh_sealed_images(session_factory, settings)  # wöchentlich, Fehler egal
+        # Japanische Classic Collection (tcgcsv, 3 Abrufe) – nach dem Katalog, damit die
+        # Cardmarket-Produkte zum Verknüpfen da sind; Fehler egal.
+        await refresh_classic_collection(session_factory, settings)
         if summary.error:
             await asyncio.sleep(3600)  # nicht in einer Fehlerschleife hämmern
 

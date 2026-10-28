@@ -74,6 +74,8 @@ from app.services.cardmarket_catalog import render_status as render_cardmarket_s
 from app.services.cardmarket_matching import match_cardmarket, render_match_report
 from app.services.catalog_search import search_cards
 from app.services.catalog_sync import fill_image_fallbacks, remove_digital_sets, sync_catalog
+from app.services.classic_collection import ClassicCollection
+from app.services.classic_collection import render_report as render_classic_report
 from app.services.collection import CollectionService, ItemFilter, ItemInput
 from app.services.errors import ServiceError
 from app.services.german_import import import_german, remove_imported
@@ -348,6 +350,17 @@ async def _onepiece_import(
     except OnePieceCatalogError as exc:
         raise SystemExit(f"Fehler: {exc}") from exc
     text = render_onepiece_report(report)
+    if args.out:
+        await asyncio.to_thread(Path(args.out).write_text, text, encoding="utf-8")
+    print(text)
+
+
+async def _classic_import(
+    factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
+) -> None:
+    """Japanische Classic Collection (CLL/CLF/CLK) aus tcgcsv.com, mit Cardmarket verknüpft."""
+    report = await ClassicCollection(factory, settings).run(dry_run=args.dry_run)
+    text = render_classic_report(report)
     if args.out:
         await asyncio.to_thread(Path(args.out).write_text, text, encoding="utf-8")
     print(text)
@@ -826,6 +839,12 @@ def _add_cardmarket_commands(commands: Any) -> None:
     )
     onepiece.add_argument("--out", help="Bericht zusätzlich als Markdown-Datei")
     onepiece.set_defaults(handler=_onepiece_import)
+    classic = commands.add_parser(
+        "classic-import", help="Japanische Classic Collection (CLL/CLF/CLK) aus tcgcsv.com"
+    )
+    classic.add_argument("--dry-run", action="store_true", help="nur lesen, nichts speichern")
+    classic.add_argument("--out", help="Bericht zusätzlich als Markdown-Datei")
+    classic.set_defaults(handler=_classic_import)
 
 
 def build_parser() -> argparse.ArgumentParser:
