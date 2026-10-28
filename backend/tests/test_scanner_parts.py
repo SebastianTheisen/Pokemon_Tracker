@@ -573,6 +573,10 @@ def test_read_set_size_contradicting_the_set_is_never_confident() -> None:
         ("リーフイアEX", "リーフィアex", 1.0),  # kleine Kana als große gelesen
         ("リーフイアビX", "リーフィアex", 0.85),  # „ex“ als „ビX“ gelesen
         ("シヤワーズOX", "シャワーズex", 0.95),
+        # Screenshot 28.10.: V-Logo als „ソ“, KP-Zahl am Namen – die V-Fassung liegt vorn
+        ("ゼラオラソ", "ゼラオラV", 1.0),
+        ("ゼラオラソ", "ゼラオラVMAX", 0.95),
+        ("ルファイヤーV220", "ガラル ファイヤーV", 0.83),
     ],
 )
 def test_name_similarity(ocr: str, card_name: str, expected: float) -> None:

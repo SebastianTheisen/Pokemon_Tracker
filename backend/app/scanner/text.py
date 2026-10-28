@@ -332,8 +332,12 @@ _HP_PREFIX = re.compile(r"^(?:KP|HP|PV)\s*\d+\s*", re.IGNORECASE)
 # („ルファイヤーV220“). Zwei bis drei Ziffern nach Kana/Kanji (ggf. nach dem Logo) fallen
 # weg – eine einzelne Ziffer gehört zum Namen („ポリゴン2“).
 _CJK_HP_TAIL = re.compile(
-    r"(?<=[^\x00-\x7f])((?:VMAX|VSTAR|V|GX|ex)?)\s*\d{2,3}$", re.IGNORECASE
+    r"(?<=[^\x00-\x7f])((?:VMAX|VSTAR|V|GX|ex)?)\s*\d{2,3}[A-Za-z]?$", re.IGNORECASE
 )
+# Das „V“-Logo liest die OCR auf japanischen Karten gern als „ソ“ („ゼラオラソ“). Kein
+# Pokémon-Name endet auf ソ – sonst passen alle Fassungen (GX, VMAX …) gleich gut, und die
+# richtige fällt aus den Kandidaten für den Bildabgleich (Screenshot 28.10.).
+_CJK_V_MISREAD = re.compile(r"(?<=[ァ-ヺー]{2})ソ$")
 _STAGE_PREFIX = re.compile(
     r"^(?:BASIS|BASIC|PHASE\s*\d|STAGE\s*\d|たね|[12]進化|[12]退化|1化)\s*", re.IGNORECASE
 )
@@ -415,7 +419,8 @@ def clean_name(text: str) -> str:
     text = _STAGE_PREFIX.sub("", text)
     text = _HP_PREFIX.sub("", text)
     text = _HP_SUFFIX.sub("", text).strip()
-    return _CJK_HP_TAIL.sub(r"\1", text).strip()
+    text = _CJK_HP_TAIL.sub(r"\1", text).strip()
+    return _CJK_V_MISREAD.sub("V", text)
 
 
 def name_candidate(line: OcrLine) -> NameCandidate | None:

@@ -98,6 +98,10 @@ def test_normalize_and_keys() -> None:
     assert clean_name("ゼラオラV 210") == "ゼラオラV"
     assert clean_name("リザードン120") == "リザードン"
     assert clean_name("ポリゴン2") == "ポリゴン2"  # eine Ziffer gehört zum Namen
+    assert clean_name("游ルファイヤーV220C") == "游ルファイヤーV"
+    # „V“-Logo als „ソ“ gelesen → nur noch die V-Fassungen passen genau
+    assert clean_name("ゼラオラソ") == "ゼラオラV"
+    assert compact_key(clean_name("ゼラオラソ")) == compact_key("ゼラオラV")
 
 
 @pytest.mark.parametrize(
