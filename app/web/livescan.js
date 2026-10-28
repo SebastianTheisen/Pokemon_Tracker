@@ -92,20 +92,37 @@
       previous = current;
       return motion.toFixed(1) + ',' + change.toFixed(1);
     },
-    /** Aktuelles Bild als JPEG (längste Seite höchstens 1600 px); merkt es als „letztes Foto“. */
-    frame: function () {
+    /** Aktuelles Bild als JPEG (längste Seite höchstens 1600 px); merkt es als „letztes Foto“.
+     *  Mit Rahmen (Anteile der sichtbaren Ansicht, Breite > 0) nur dieser Ausschnitt plus Rand –
+     *  umgerechnet über object-fit: cover. */
+    frame: function (centerX, centerY, widthFraction, aspect, margin) {
       return new Promise((resolve) => {
         const source = active();
         if (!source) { resolve(null); return; }
-        const scale = Math.min(1, 1600 / Math.max(source.videoWidth, source.videoHeight));
+        const vw = source.videoWidth, vh = source.videoHeight;
+        let sx = 0, sy = 0, sw = vw, sh = vh;
+        const ew = source.clientWidth, eh = source.clientHeight;
+        if (widthFraction > 0 && ew > 0 && eh > 0) {
+          const scale = Math.max(ew / vw, eh / vh); // cover
+          const offsetX = (ew - vw * scale) / 2, offsetY = (eh - vh * scale) / 2;
+          const gw = ew * widthFraction * (1 + 2 * margin);
+          const gh = ew * widthFraction * aspect * (1 + 2 * margin);
+          const gx = ew * centerX - gw / 2, gy = eh * centerY - gh / 2;
+          sx = Math.max(0, (gx - offsetX) / scale);
+          sy = Math.max(0, (gy - offsetY) / scale);
+          sw = Math.min(vw - sx, gw / scale);
+          sh = Math.min(vh - sy, gh / scale);
+          if (sw < 16 || sh < 16) { sx = 0; sy = 0; sw = vw; sh = vh; }
+        }
+        const factor = Math.min(1, 1600 / Math.max(sw, sh));
         const canvas = document.createElement('canvas');
-        canvas.width = Math.round(source.videoWidth * scale);
-        canvas.height = Math.round(source.videoHeight * scale);
-        canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+        canvas.width = Math.round(sw * factor);
+        canvas.height = Math.round(sh * factor);
+        canvas.getContext('2d').drawImage(source, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
         lastShot = sample();
         canvas.toBlob(async (blob) => {
           resolve(blob ? new Uint8Array(await blob.arrayBuffer()) : null);
-        }, 'image/jpeg', 0.88);
+        }, 'image/jpeg', 0.9);
       });
     },
   };

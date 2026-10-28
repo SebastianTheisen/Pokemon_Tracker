@@ -17,7 +17,13 @@ extension type _JsCamera(JSObject _) implements JSObject {
   external JSPromise<JSString> start();
   external void stop();
   external JSString measure();
-  external JSPromise<JSUint8Array?> frame();
+  external JSPromise<JSUint8Array?> frame(
+    JSNumber centerX,
+    JSNumber centerY,
+    JSNumber widthFraction,
+    JSNumber aspect,
+    JSNumber margin,
+  );
 }
 
 const _viewType = 'kartenkiste-camera';
@@ -50,7 +56,14 @@ class _WebCamera implements LiveCamera {
   }
 
   @override
-  Future<Uint8List?> frame() async => (await _js.frame().toDart)?.toDart;
+  Future<Uint8List?> frame({LiveGuide? guide}) async {
+    // Ohne Rahmen: ganzes Bild (Breite 0 = nicht zuschneiden).
+    final g = guide ?? const LiveGuide(centerX: 0.5, centerY: 0.5, widthFraction: 0);
+    final bytes = await _js
+        .frame(g.centerX.toJS, g.centerY.toJS, g.widthFraction.toJS, g.aspect.toJS, g.margin.toJS)
+        .toDart;
+    return bytes?.toDart;
+  }
 
   @override
   Widget preview() {

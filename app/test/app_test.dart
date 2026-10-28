@@ -1674,6 +1674,65 @@ void usabilityTests() {
     await tester.pump(const Duration(seconds: 3));
   });
 
+  testWidgets('Live-Scanner: Erkennung im Hintergrund, Bestätigung mit Ausschnitt', (tester) async {
+    final gate = Completer<void>();
+    final api = FakeApi(loggedIn: true)..scanGate = gate;
+    final camera = FakeLiveCamera()
+      ..measurements.addAll([
+        (motion: 2, change: 40),
+        (motion: 2, change: 40), // Karte 1 → Foto, Erkennung läuft
+        (motion: 30, change: 40), // nächste Karte wird hingelegt
+        (motion: 2, change: 40),
+        (motion: 2, change: 40), // Karte 2 → Foto, obwohl Karte 1 noch erkannt wird
+      ]);
+    await pumpApp(tester, api, camera: camera);
+    final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
+        .read(routerProvider);
+    unawaited(router.push('/scan/live'));
+    await tester.pump();
+    await tester.pump();
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    expect(camera.frames, 2);
+    expect(camera.lastGuide, liveGuide); // nur der Rahmen geht zum Server
+    expect(find.text('Erkenne 2 Karten …'), findsOneWidget);
+
+    gate.complete();
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('live-confirm')), findsOneWidget);
+    expect(find.text('Nachtara VMAX'), findsWidgets);
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.byKey(const Key('live-confirm')), findsNothing);
+    expect(find.text('Fertig (1)'), findsOneWidget); // gleiche Karte zweimal → einmal
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('Live-Scanner: Bild ohne Karte wird still verworfen', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..scanResult = {
+        ...scanJson(confident: false),
+        'detected': {'card_found': false, 'numbers': <Object>[], 'names': <Object>[]},
+      };
+    final camera = FakeLiveCamera()
+      ..measurements.addAll([(motion: 2, change: 40), (motion: 2, change: 40)]);
+    await pumpApp(tester, api, camera: camera);
+    final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
+        .read(routerProvider);
+    unawaited(router.push('/scan/live'));
+    await tester.pump();
+    await tester.pump();
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    expect(api.calls.where((c) => c.startsWith('scan:')).length, 1);
+    expect(find.byKey(const Key('live-guess')), findsNothing);
+    expect(find.byKey(const Key('live-flash')), findsNothing);
+    expect(find.text('Fertig (0)'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
   testWidgets('Live-Scanner: unsicherer Treffer als Tipp – „Ja“ übernimmt ihn', (tester) async {
     final api = FakeApi(loggedIn: true)..scanResult = scanJson(confident: false);
     final camera = FakeLiveCamera()

@@ -20,7 +20,7 @@ class NoLiveCamera implements LiveCamera {
   ({double motion, double change}) measure() => (motion: 255, change: 0);
 
   @override
-  Future<Uint8List?> frame() async => null;
+  Future<Uint8List?> frame({LiveGuide? guide}) async => null;
 
   @override
   Widget preview() => const SizedBox.shrink();

@@ -85,6 +85,8 @@ REFERENCE_MAX_SIDE = 800
 RATE_WINDOW = timedelta(hours=1)
 # Binderseite: so viele sicher erkannte Zellen aus einem Set machen es zum Set der Seite.
 PAGE_SET_MIN_CELLS = 2
+# Zelle ganz ohne Text: Bildabgleich gegen höchstens so viele Karten des Seiten-Sets.
+PAGE_SET_IMAGE_LIMIT = 300
 # Zeichen, die der Vergleichsschlüssel (``compact_key``) entfernt – gleich in SQL.
 _COMPACT_SQL_CHARS = " .,'’`\"-·・"  # noqa: RUF001
 
@@ -419,6 +421,42 @@ class ScanService:
             add_image_reasons(candidate)
         return rank(list(best.values()))
 
+    async def _page_set_image_rescue(
+        self, query: ImageFeatures, set_id: uuid.UUID
+    ) -> list[Candidate]:
+        """Binder-Zelle ohne lesbaren Text: Bildabgleich gegen alle Karten des Seiten-Sets
+        (Katalogbilder werden einmal geladen und als Merkmale zwischengespeichert)."""
+        if len(query) == 0:
+            return []
+        cards = list(
+            (
+                await self.session.scalars(
+                    select(Card)
+                    .where(Card.set_id == set_id, Card.image_url.is_not(None))
+                    .order_by(Card.number_norm)
+                    .limit(PAGE_SET_IMAGE_LIMIT)
+                )
+            ).unique()
+        )
+        catalog = await self.runtime.catalog_images.features_many(c.image_url for c in cards)
+        pairs = [
+            (index, "catalog", features)
+            for index, features in enumerate(catalog)
+            if features is not None
+        ]
+        if not pairs:
+            return []
+        scores: list[tuple[int, str, int]] = await self.runtime.run_cpu(_score_pairs, query, pairs)
+        found = [
+            Candidate(cards[index], catalog_inliers=inliers)
+            for index, _kind, inliers in scores
+            if inliers >= RESCUE_MIN_INLIERS
+        ]
+        apply_page_set(found, set_id)
+        for candidate in found:
+            add_image_reasons(candidate)
+        return rank(found)
+
     async def _twin_images(self, twins: Sequence[Candidate]) -> list[str] | None:
         """Bild-URLs aller Zwillinge in *einer* Sprache (Text darf kein Unterschied sein)."""
         ids = [twin.card.external_id for twin in twins if twin.card.external_id]
@@ -529,7 +567,11 @@ class ScanService:
         best = ranked[0] if ranked else None
         best_identity = best.identity if best else None
         alternatives = ranked[1 : 1 + MAX_ALTERNATIVES]
-        detected = analysis.text.summary() | {"rescue": evaluation.rescue}
+        detected = analysis.text.summary() | {
+            "rescue": evaluation.rescue,
+            # Kartenumriss gefunden? Der Live-Scanner verwirft Bilder ohne Karte still.
+            "card_found": analysis.crop is not None,
+        }
 
         scan_id = uuid.uuid4()
         reference = analysis.reference_image(image)
@@ -647,6 +689,12 @@ class ScanService:
                     assessment.language_hint,
                     page_set_id,
                 )
+                if not assessment.evaluation.ranked:
+                    # Nichts lesbar (Spiegelung, Rand): Bild gegen das Set der Seite.
+                    rescued = await self._page_set_image_rescue(
+                        assessment.analysis.features, page_set_id
+                    )
+                    assessment.evaluation = _Evaluation(rescued, rescue=True)
         log.info("scan.binder", method=method, cells=len(cells), page_set=str(page_set_id))
         results = [
             BinderCellOutcome(

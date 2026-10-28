@@ -592,7 +592,8 @@ async def test_binder_page_set_decides_cells_without_number(
 ) -> None:
     """Echtes Binderfoto (28.10.): In Toploadern ist die Nummer oft unlesbar, der Name nicht.
     Zwei Zellen sind sicher SV8a – die dritte („リーフイアEX“, nur Name) bekommt deshalb die
-    SV8a-Karte statt der gleichnamigen aus dem neueren Set."""
+    SV8a-Karte statt der gleichnamigen aus dem neueren Set, die vierte (gar kein Text) wird
+    per Bild gegen das Set gefunden."""
     sv8a = catalog[("SV8a-217", "ja")].card_set
     async with session_factory() as session:
         newer = CardSet(
@@ -620,17 +621,17 @@ async def test_binder_page_set_decides_cells_without_number(
     sources = {"05.jpg": lines("ブラッキーex", "217/187"), "06.jpg": lines("リーフイアEX")}
     means = {
         name: np.asarray(Image.open(io.BytesIO(crop_jpeg(name))).convert("RGB")).mean(axis=(0, 1))
-        for name in ("05.jpg", "06.jpg", "02.jpg")
+        for name in ("05.jpg", "06.jpg", "07.jpg")
     }
 
     def read(image: np.ndarray, *, korean: bool = False) -> list[Any]:
-        # Zelle am mittleren Farbwert erkennen (BGR → RGB); 02.jpg bleibt ohne Text.
+        # Zelle am mittleren Farbwert erkennen (BGR → RGB); 07.jpg bleibt ohne Text.
         mean = image[:, :, ::-1].reshape(-1, 3).mean(axis=0)
         name = min(means, key=lambda key: float(np.linalg.norm(means[key] - mean)))
         return list(sources.get(name, []))
 
     monkeypatch.setattr(reader, "read", read)
-    page = _binder_page(["05.jpg", "05.jpg", "06.jpg", "02.jpg"])
+    page = _binder_page(["05.jpg", "05.jpg", "06.jpg", "07.jpg"])
     response = await client.post(
         f"{API}/scan/binder",
         files={"file": ("seite.jpg", page, "image/jpeg")},
@@ -646,7 +647,10 @@ async def test_binder_page_set_decides_cells_without_number(
     assert "Gleiches Set wie die übrigen Karten der Seite" in leafeon["best"]["reasons"]
     assert "SV9-010" in [a["card"]["external_id"] for a in leafeon["alternatives"]]
     assert not leafeon["confident"]  # nur Name + Set – sicher erst mit Nummer oder Bild
-    assert results[3]["best"] is None
+    # Ohne jeden Text: Bildabgleich gegen die Karten des Seiten-Sets (SV8a-093 zeigt 07.jpg).
+    rescued = results[3]
+    assert rescued["best"]["card"]["external_id"] == "SV8a-093"
+    assert any(r.startswith("Bildabgleich Katalog") for r in rescued["best"]["reasons"])
 
 
 # ------------------------------------------------------------------ Grenzen und Schutz

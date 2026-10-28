@@ -37,18 +37,27 @@ const _tick = Duration(milliseconds: 300);
 /// Nach so vielen Messungen ohne Auslösen den Auslöser-Knopf als Tipp nennen (≈ 6 s).
 const hintAfterTicks = 20;
 
+/// Höchstens so viele Erkennungen gleichzeitig im Hintergrund.
+const maxPending = 3;
+
+/// So lange bleibt die Bestätigung („✓ Karte“ mit Ausschnitt) stehen.
+const confirmDuration = Duration(milliseconds: 1600);
+
 /// Eine erkannte Karte der laufenden Sitzung.
 class LiveHit {
-  LiveHit({required this.scan, required this.match}) : selected = true;
+  LiveHit({required this.scan, required this.match, this.crop}) : selected = true;
 
   final ScanResult scan;
   final ScanMatch match;
+
+  /// Fotoausschnitt der Karte (Bestätigung und Tipp).
+  final Uint8List? crop;
   bool selected;
 
   CardInfo get card => match.card;
 }
 
-enum _Phase { starting, waiting, recognizing, denied, unsupported }
+enum _Phase { starting, running, denied, unsupported }
 
 class LiveScanScreen extends ConsumerStatefulWidget {
   const LiveScanScreen({super.key});
@@ -63,7 +72,11 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
   _Phase _phase = _Phase.starting;
   Timer? _timer;
   int _still = 0;
-  bool _busy = false;
+
+  /// Foto wird gerade aufgenommen (kurz); die Erkennung selbst läuft im Hintergrund weiter,
+  /// währenddessen kann schon die nächste Karte hingelegt werden.
+  bool _capturing = false;
+  int _pending = 0;
 
   /// Messungen seit dem letzten Foto bzw. ohne Kamerabild.
   int _idleTicks = 0;
@@ -72,10 +85,17 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
   /// Unsicherer Treffer: bester Tipp zum Bestätigen („Ist es Glurak ex?“).
   LiveHit? _guess;
 
-  /// Kurze Meldung unten im Bild („✓ Glurak ex“, „Nicht sicher …“).
+  /// Bestätigung eines Treffers: Ausschnitt + Name.
+  LiveHit? _confirmed;
+  bool _confirmedDuplicate = false;
+  Timer? _confirmTimer;
+
+  /// Kurze Meldung unten im Bild („Nicht erkannt …“).
   String? _flash;
-  bool _flashGood = true;
   Timer? _flashTimer;
+
+  /// Kurzes Aufblitzen beim Auslösen (wie die Kamera-App).
+  bool _shutterFlash = false;
 
   @override
   void initState() {
@@ -87,6 +107,7 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
   void dispose() {
     _timer?.cancel();
     _flashTimer?.cancel();
+    _confirmTimer?.cancel();
     _camera.stop();
     super.dispose();
   }
@@ -96,7 +117,7 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
     if (!mounted) return;
     setState(
       () => _phase = switch (result) {
-        CameraStart.ok => _Phase.waiting,
+        CameraStart.ok => _Phase.running,
         CameraStart.denied => _Phase.denied,
         CameraStart.unsupported => _Phase.unsupported,
       },
@@ -104,8 +125,10 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
     if (result == CameraStart.ok) _timer = Timer.periodic(_tick, (_) => _check());
   }
 
+  bool get _canCapture => !_capturing && _pending < maxPending;
+
   void _check() {
-    if (_busy || !mounted) return;
+    if (!_canCapture || !mounted) return;
     final (:motion, :change) = _camera.measure();
     final hintBefore = _hint;
     if (motion < 0) {
@@ -114,7 +137,7 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
       _noSignalTicks = 0;
       _still = motion < stillThreshold ? _still + 1 : 0;
       if (_still >= stillSamples && change > changeThreshold) {
-        unawaited(_recognize());
+        unawaited(_capture());
         return;
       }
     }
@@ -125,62 +148,82 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
   /// Hinweis in der Statuszeile, wenn die Automatik nicht anspringt.
   String? get _hint => _noSignalTicks >= stillSamples * 5
       ? 'Kamera liefert kein Bild – Auslöser antippen'
-      : _idleTicks >= hintAfterTicks
+      : _idleTicks >= hintAfterTicks && _pending == 0
       ? 'Erkennt nichts? Auslöser antippen'
       : null;
 
-  Future<void> _recognize() async {
-    if (_busy) return;
-    _busy = true;
+  /// Foto aufnehmen und die Erkennung im Hintergrund starten.
+  Future<void> _capture() async {
+    if (!_canCapture) return;
+    _capturing = true;
     _still = 0;
     _idleTicks = 0;
-    setState(() => _phase = _Phase.recognizing);
     try {
-      final bytes = await _camera.frame();
+      final bytes = await _camera.frame(guide: liveGuide);
       if (!mounted) return;
       if (bytes == null) {
-        _show('Kein Kamerabild – Live-Scanner neu öffnen oder mit Foto scannen', good: false);
+        _show('Kein Kamerabild – Live-Scanner neu öffnen oder mit Foto scannen');
         return;
       }
+      unawaited(HapticFeedback.selectionClick());
+      setState(() {
+        _pending++;
+        _shutterFlash = true;
+      });
+      Timer(const Duration(milliseconds: 120), () {
+        if (mounted) setState(() => _shutterFlash = false);
+      });
+      unawaited(_recognize(bytes));
+    } finally {
+      _capturing = false;
+    }
+  }
+
+  Future<void> _recognize(Uint8List bytes) async {
+    try {
       final result = await ref
           .read(apiProvider)
           .scan(UploadImage(bytes: bytes, filename: 'live.jpg'));
       if (!mounted) return;
       final best = result.best;
-      if (result.confident && best != null) {
-        _take(LiveHit(scan: result, match: best));
+      if (result.looksEmpty) {
+        return; // keine Karte im Bild (Tisch, Boden …) – still verwerfen
+      } else if (result.confident && best != null) {
+        _take(LiveHit(scan: result, match: best, crop: bytes));
       } else if (best != null) {
         // Wie bei Collectr: bester Tipp zum Bestätigen statt nur „nicht sicher“.
-        setState(() => _guess = LiveHit(scan: result, match: best));
+        setState(() => _guess = LiveHit(scan: result, match: best, crop: bytes));
       } else {
-        _show('Nicht erkannt – Karte ruhig und ganz ins Bild halten', good: false);
+        _show('Nicht erkannt – Karte ruhig und ganz in den Rahmen halten');
       }
     } on ApiException catch (error) {
-      _show(error.message, good: false);
+      _show(error.message);
     } finally {
-      _busy = false;
-      if (mounted) setState(() => _phase = _Phase.waiting);
+      if (mounted) setState(() => _pending--);
     }
   }
 
-  /// Treffer übernehmen (doppelt hintereinander zählt nur einmal).
+  /// Treffer übernehmen (doppelt hintereinander zählt nur einmal) und kurz bestätigen.
   void _take(LiveHit hit) {
     final duplicate = _hits.isNotEmpty && _hits.last.card.id == hit.card.id;
+    _confirmTimer?.cancel();
     setState(() {
-      _guess = null;
+      if (identical(_guess, hit)) _guess = null;
       if (!duplicate) _hits.add(hit);
+      _confirmed = hit;
+      _confirmedDuplicate = duplicate;
+      _flash = null;
     });
     if (!duplicate) unawaited(HapticFeedback.heavyImpact());
-    _show('✓ ${hit.card.displayName}${duplicate ? ' (schon erfasst)' : ''}', good: true);
+    _confirmTimer = Timer(confirmDuration, () {
+      if (mounted) setState(() => _confirmed = null);
+    });
   }
 
-  void _show(String text, {required bool good}) {
+  void _show(String text) {
     if (!mounted) return;
     _flashTimer?.cancel();
-    setState(() {
-      _flash = text;
-      _flashGood = good;
-    });
+    setState(() => _flash = text);
     _flashTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) setState(() => _flash = null);
     });
@@ -205,6 +248,13 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
     _timer = Timer.periodic(_tick, (_) => _check());
   }
 
+  String get _status => switch (_phase) {
+    _Phase.starting => 'Kamera startet …',
+    _ when _pending > 0 =>
+      _pending == 1 ? 'Erkenne … nächste Karte hinlegen' : 'Erkenne $_pending Karten …',
+    _ => _hint ?? 'Karte in den Rahmen legen – ruhig halten',
+  };
+
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: Colors.black,
@@ -220,18 +270,18 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
         children: [
           _camera.preview(),
           const IgnorePointer(child: CustomPaint(painter: _FramePainter())),
+          IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: _shutterFlash ? 0.5 : 0,
+              duration: const Duration(milliseconds: 100),
+              child: const ColoredBox(color: Colors.white),
+            ),
+          ),
           Positioned(
             left: 16,
             right: 16,
             top: 16,
-            child: _StatusPill(
-              text: switch (_phase) {
-                _Phase.starting => 'Kamera startet …',
-                _Phase.recognizing => 'Erkenne …',
-                _ => _hint ?? 'Karte in den Rahmen legen – ruhig halten',
-              },
-              busy: _phase != _Phase.waiting,
-            ),
+            child: _StatusPill(text: _status, busy: _phase == _Phase.starting || _pending > 0),
           ),
           Positioned(
             left: 0,
@@ -239,12 +289,21 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
             bottom: 104,
             child: Center(
               child: _Shutter(
-                busy: _phase == _Phase.recognizing,
-                onPressed: _phase == _Phase.waiting ? () => unawaited(_recognize()) : null,
+                busy: _capturing,
+                onPressed: _phase == _Phase.running && _canCapture
+                    ? () => unawaited(_capture())
+                    : null,
               ),
             ),
           ),
-          if (_guess case final guess?)
+          if (_confirmed case final hit?)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 186,
+              child: _Confirmation(key: ValueKey(hit), hit: hit, duplicate: _confirmedDuplicate),
+            )
+          else if (_guess case final guess?)
             Positioned(
               left: 16,
               right: 16,
@@ -256,12 +315,7 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
               ),
             )
           else if (_flash case final text?)
-            Positioned(
-              left: 16,
-              right: 16,
-              bottom: 194,
-              child: _Flash(text: text, good: _flashGood),
-            ),
+            Positioned(left: 16, right: 16, bottom: 194, child: _Flash(text: text)),
           Positioned(
             left: 0,
             right: 0,
@@ -274,19 +328,87 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
   );
 }
 
+/// Bestätigung wie bei Collectr: der fotografierte Ausschnitt, Name und Häkchen – springt kurz
+/// auf und verschwindet wieder; die Karte liegt dann unten in der Leiste.
+class _Confirmation extends StatelessWidget {
+  const _Confirmation({required this.hit, required this.duplicate, super.key});
+
+  final LiveHit hit;
+  final bool duplicate;
+
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+    tween: Tween(begin: 0.6, end: 1),
+    duration: const Duration(milliseconds: 260),
+    curve: Curves.easeOutBack,
+    builder: (context, scale, child) => Opacity(
+      opacity: scale.clamp(0, 1),
+      child: Transform.scale(scale: scale, child: child),
+    ),
+    child: Material(
+      key: const Key('live-confirm'),
+      color: duplicate ? AppColors.warning : AppColors.gain,
+      borderRadius: BorderRadius.circular(16),
+      elevation: 6,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 56,
+                height: 78,
+                child: hit.crop == null
+                    ? CardImage(url: hit.card.image(), width: 56)
+                    : Image.memory(hit.crop!, fit: BoxFit.cover, gaplessPlayback: true),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    duplicate ? 'Schon erfasst' : 'Erkannt',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  Text(
+                    hit.card.displayName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    hit.card.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(duplicate ? Icons.repeat : Icons.check_circle, color: Colors.white, size: 32),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 /// Kartenrahmen als Hilfe (Kartenformat 63 × 88), Rest abgedunkelt.
 class _FramePainter extends CustomPainter {
   const _FramePainter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final width = size.width * 0.72;
-    final height = width * 88 / 63;
-    final rect = Rect.fromCenter(
-      center: Offset(size.width / 2, size.height * 0.45),
-      width: width,
-      height: height,
-    );
+    final rect = liveGuide.rect(size);
     final card = RRect.fromRectAndRadius(rect, const Radius.circular(16));
     canvas
       ..drawPath(
@@ -385,20 +507,16 @@ class _StatusPill extends StatelessWidget {
 }
 
 class _Flash extends StatelessWidget {
-  const _Flash({required this.text, required this.good});
+  const _Flash({required this.text});
 
   final String text;
-  final bool good;
 
   @override
   Widget build(BuildContext context) => Center(
     child: Container(
       key: const Key('live-flash'),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: good ? AppColors.gain : AppColors.warning,
-        borderRadius: BorderRadius.circular(14),
-      ),
+      decoration: BoxDecoration(color: AppColors.warning, borderRadius: BorderRadius.circular(14)),
       child: Text(
         text,
         textAlign: TextAlign.center,
@@ -425,6 +543,14 @@ class _GuessCard extends StatelessWidget {
       padding: const EdgeInsets.all(10),
       child: Row(
         children: [
+          // Eigenes Foto neben dem Katalogbild – so sieht man sofort, ob es passt.
+          if (hit.crop case final crop?) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.memory(crop, width: 42, height: 59, fit: BoxFit.cover),
+            ),
+            const SizedBox(width: 6),
+          ],
           CardImage(url: hit.card.image(), width: 42),
           const SizedBox(width: 10),
           Expanded(

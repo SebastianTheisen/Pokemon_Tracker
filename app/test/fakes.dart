@@ -1,3 +1,4 @@
+import 'dart:async';
 // Testattrappen: API ohne Netzwerk, Bildquelle ohne Kamera.
 import 'dart:typed_data';
 
@@ -946,9 +947,13 @@ class FakeApi extends Api {
 
   List<Json> wishlistJson = [];
 
+  /// Hält Scans an, bis der Test ihn abschließt (Erkennung im Hintergrund).
+  Completer<void>? scanGate;
+
   @override
   Future<ScanResult> scan(UploadImage image, {String? language}) async {
     calls.add('scan:${image.filename}');
+    if (scanGate case final gate?) await gate.future; // Erkennung „dauert“
     return ScanResult.fromJson(scanResult);
   }
 
@@ -1120,6 +1125,79 @@ class FakeDevice implements DeviceBridge {
   }
 }
 
+/// 1×1-PNG als Kamerabild (Image.memory braucht ein gültiges Bild).
+const _png = <int>[
+  137,
+  80,
+  78,
+  71,
+  13,
+  10,
+  26,
+  10,
+  0,
+  0,
+  0,
+  13,
+  73,
+  72,
+  68,
+  82,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  1,
+  8,
+  2,
+  0,
+  0,
+  0,
+  144,
+  119,
+  83,
+  222,
+  0,
+  0,
+  0,
+  12,
+  73,
+  68,
+  65,
+  84,
+  120,
+  156,
+  99,
+  248,
+  207,
+  192,
+  0,
+  0,
+  3,
+  1,
+  1,
+  0,
+  201,
+  254,
+  146,
+  239,
+  0,
+  0,
+  0,
+  0,
+  73,
+  69,
+  78,
+  68,
+  174,
+  66,
+  96,
+  130,
+];
+
 /// Steuerbare Live-Kamera: Messwerte der Reihe nach, Fotos als Platzhalter-Bytes.
 class FakeLiveCamera implements LiveCamera {
   FakeLiveCamera({this.result = CameraStart.ok});
@@ -1139,11 +1217,17 @@ class FakeLiveCamera implements LiveCamera {
   ({double motion, double change}) measure() =>
       measurements.isEmpty ? (motion: 50, change: 0) : measurements.removeAt(0);
 
+  LiveGuide? lastGuide;
+
   @override
-  Future<Uint8List?> frame() async {
+  Future<Uint8List?> frame({LiveGuide? guide}) async {
     frames++;
-    return Uint8List.fromList([1, 2, 3]);
+    lastGuide = guide;
+    return noSignal ? null : Uint8List.fromList(_png);
   }
+
+  /// Kamera liefert kein Bild (frame() → null).
+  bool noSignal = false;
 
   @override
   Widget preview() => const ColoredBox(color: Color(0xFF000000));

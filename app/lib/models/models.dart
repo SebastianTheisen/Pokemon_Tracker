@@ -1291,6 +1291,8 @@ class ScanResult {
     this.grading,
     this.psa,
     this.psaWarning,
+    this.cardFound = true,
+    this.textFound = true,
   });
 
   factory ScanResult.fromJson(Json json) => ScanResult(
@@ -1304,6 +1306,13 @@ class ScanResult {
     psaWarning: json.strOrNull('psa_warning'),
     durationMs: json.integer('duration_ms'),
     canSaveReference: json.flag('can_save_reference'),
+    cardFound: json.objOrNull('detected')?['card_found'] != false,
+    textFound: switch (json.objOrNull('detected')) {
+      final detected? =>
+        (detected['numbers'] as List?)?.isNotEmpty == true ||
+            (detected['names'] as List?)?.isNotEmpty == true,
+      null => true,
+    },
   );
 
   final String scanId;
@@ -1320,6 +1329,15 @@ class ScanResult {
   final String? psaWarning;
   final int durationMs;
   final bool canSaveReference;
+
+  /// Kartenumriss im Bild gefunden (der Live-Scanner verwirft Bilder ohne Karte still).
+  final bool cardFound;
+
+  /// Nummer oder Name gelesen.
+  final bool textFound;
+
+  /// Wohl gar keine Karte im Bild: weder Umriss noch Text, und nichts sicher erkannt.
+  bool get looksEmpty => !confident && !cardFound && !textFound;
 
   List<ScanMatch> get matches => [?best, ...alternatives];
 }
