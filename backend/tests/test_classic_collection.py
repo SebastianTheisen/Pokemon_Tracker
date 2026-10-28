@@ -17,6 +17,7 @@ from app.services.classic_collection import (
     ClassicCard,
     ClassicCollection,
     match_products,
+    name_key,
     parse_products,
     render_report,
 )
@@ -112,6 +113,30 @@ def test_cardmarket_matching_by_name_then_order() -> None:
         (744625, "Fire Energy"),  # anderer Name – bleibt übrig und passt in der Reihenfolge
     ]
     assert match_products(cards, products) == {"001": 744592, "028": 744621, "034": 744625}
+
+
+def test_cardmarket_names_with_accents_levels_and_suffixes() -> None:
+    """Import 28.10.: Bei CLF blieben fünf Karten offen (tcgcsv ohne die zwei Energien,
+    daher kein Rückfall auf die Reihenfolge)."""
+    names = ["Parasect", "Poke Ball", "Pokemon Fan Club", "Pokemon Nurse", "Boss's Orders"]
+    cards = [ClassicCard(name, f"{index:03d}", 32, None, None) for index, name in enumerate(names)]
+    products = [
+        (743169, "Parasect Lv.33 [Nutritional Support | Hibernation Spore]"),
+        (743188, "Poké Ball"),
+        (743191, "Pokémon Fan Club"),
+        (743192, "Pokémon Nurse"),
+        (743193, "Boss's Orders - Giovanni"),
+        (743197, "Basic Fighting Energy"),
+        (743198, "Basic Grass Energy"),
+    ]
+    assert match_products(cards, products) == {
+        "000": 743169,
+        "001": 743188,
+        "002": 743191,
+        "003": 743192,
+        "004": 743193,
+    }
+    assert name_key("Ho-Oh ex") == "hoohex"  # Bindestrich im Namen bleibt Teil des Namens
 
 
 async def test_import_creates_sets_cards_and_cardmarket_links(

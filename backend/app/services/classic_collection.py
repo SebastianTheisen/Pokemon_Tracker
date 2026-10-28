@@ -18,6 +18,7 @@ englischen. ``name_en`` hält immer den englischen Namen (Suche „charizard“)
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
@@ -46,6 +47,8 @@ LARGE_IMAGE = "_in_1000x1000.jpg"
 _LEVEL = re.compile(r"\s+Lv\.?\s*\d+$", re.IGNORECASE)
 _EX = re.compile(r"\s+ex$")
 _BRACKET = re.compile(r"\s*\[.*$")
+# Zusatz nach Bindestrich mit Leerzeichen: „Boss's Orders - Giovanni“ (nicht „Ho-Oh“).
+_DASH_SUFFIX = re.compile(r"\s+-\s+.*$")
 _KEY = re.compile(r"[^a-z0-9]+")
 
 
@@ -134,8 +137,15 @@ def parse_products(data: object) -> list[ClassicCard]:
 
 
 def name_key(name: str) -> str:
-    """Vergleichsschlüssel: Cardmarket „Charmander [Scratch | Ember]“ = tcgcsv „Charmander“."""
-    return _KEY.sub("", _BRACKET.sub("", name).casefold())
+    """Vergleichsschlüssel: Cardmarket „Charmander [Scratch | Ember]“ = tcgcsv „Charmander“;
+    ebenso „Poké Ball“ = „Poke Ball“, „Parasect Lv.33“ = „Parasect“, „Boss's Orders -
+    Giovanni“ = „Boss's Orders“ (Import 28.10.: fünf CLF-Karten blieben sonst offen)."""
+    text = _DASH_SUFFIX.sub("", _BRACKET.sub("", name))
+    text = _LEVEL.sub("", text)
+    plain = "".join(
+        char for char in unicodedata.normalize("NFKD", text) if not unicodedata.combining(char)
+    )
+    return _KEY.sub("", plain.casefold())
 
 
 def match_products(
