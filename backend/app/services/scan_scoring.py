@@ -179,7 +179,9 @@ def total_conflict(text: TextFeatures, card: Card) -> int | None:
 
     Widerspruch nur, wenn *keine* gelesene Setgröße passt (auch nicht mit einer falsch
     gelesenen Ziffer) und die Nummer selbst nicht übereinstimmt."""
-    official = card.card_set.card_count_official
+    # Ohne offizielle Zahl (Sets von PriceCharting, z. B. Grundset 1996) die Kartenzahl im
+    # Katalog – sonst widerspräche „001/032“ dem Grundset nie.
+    official = card.card_set.card_count_official or card.card_set.card_count_total
     if not official or any(hit.number == card.number_norm for hit in text.numbers):
         return None
     # Nur vollständig gelesene Setgrößen zählen: „001/032“ hat drei Stellen wie „102“;
@@ -228,7 +230,8 @@ def score_text(
         candidate.total_conflict = True
         reasons.append(
             f"Gelesene Setgröße /{read_total:03d} passt nicht "
-            f"(Set hat {card_set.card_count_official} Karten) – bitte prüfen"
+            f"(Set hat {card_set.card_count_official or card_set.card_count_total} Karten)"
+            " – bitte prüfen"
         )
     set_code = card_set.external_id.casefold()
     if set_code in text.set_codes or set_code.replace("-", "") in text.set_codes:

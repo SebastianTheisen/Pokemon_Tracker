@@ -311,6 +311,7 @@ class Settings(BaseSettings):
             "storage.googleapis.com",  # Bilder von PriceCharting (Korea, China)
             "en.onepiece-cardgame.com",  # One Piece (offizielle Kartenlisten EN/JP)
             "www.onepiece-cardgame.com",
+            "tcgplayer-cdn.tcgplayer.com",  # japanische Classic Collection (tcgcsv.com)
         ],
         description="Nur von diesen Hosts werden Katalogbilder geladen (Schutz vor SSRF).",
     )

@@ -271,3 +271,30 @@ def test_same_artwork_in_another_set_is_not_proof() -> None:
         Candidate(card("expansion-pack", "1", 102), catalog_inliers=180), numbered
     )
     assert is_confident(rank([classic_read, base_read]))
+
+
+def test_scanner_may_load_classic_images() -> None:
+    """Classic-Binder 28.10.: Die TCGplayer-Bilder waren nur für die Anzeige freigegeben –
+    der Bildabgleich lehnte sie ab, das Grundset gewann über sein Bild."""
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert "tcgplayer-cdn.tcgplayer.com" in settings.scanner_image_hosts
+
+
+def test_set_size_conflict_without_official_count() -> None:
+    """PriceCharting-Sets (Grundset 1996) haben keine offizielle Zahl – die Kartenzahl im
+    Katalog reicht, damit „001/032“ widerspricht."""
+    base = Card(
+        language="ja",
+        number="4",
+        number_norm="4",
+        name="ヒトカゲ",
+        card_set=CardSet(
+            external_id="pc-pokemon-japanese-expansion-pack",
+            language="ja",
+            name="Pokemon Japanese Expansion Pack",
+            card_count_official=None,
+            card_count_total=102,
+        ),
+    )
+    text = extract_text_features(lines("ヒトカゲ", "001/032"))
+    assert score_text(Candidate(base, catalog_inliers=200), text).total_conflict
