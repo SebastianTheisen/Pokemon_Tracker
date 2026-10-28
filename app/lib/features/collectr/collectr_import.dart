@@ -120,6 +120,30 @@ class _CollectrImportScreenState extends ConsumerState<CollectrImportScreen> {
     (row) => _choices[row.index]!.selected && _ready(row),
   );
 
+  /// Kacheln, die der Server nicht als Karte lesen konnte (keine Kartennummer).
+  List<String> get _unreadTiles {
+    final read = {for (final row in _preview?.rows ?? const <CollectrRow>[]) row.index};
+    return [
+      for (final (index, lines) in (_payload?.rows ?? const <List<String>>[]).indexed)
+        if (!read.contains(index)) lines.isEmpty ? '(leere Kachel)' : lines.first,
+    ];
+  }
+
+  /// Alles, was beim Übernehmen *nicht* mitkommt – nichts soll still verloren gehen.
+  List<String> _leftOut() => [
+    for (final row in _preview?.rows ?? const <CollectrRow>[])
+      if (!(_choices[row.index]!.selected && _ready(row)))
+        '${row.quantity}× ${row.name} · ${row.setName} · ${row.number ?? '–'} '
+            '(${_choices[row.index]!.card == null
+                ? 'keine Karte gewählt'
+                : row.graded && _choices[row.index]!.grade == null
+                ? 'Note fehlt'
+                : 'abgewählt'})',
+    for (final name in _unreadTiles) '$name (ohne Kartennummer)',
+  ];
+
+  List<String> _notImported = const [];
+
   int get _missingGrades => (_preview?.rows ?? const <CollectrRow>[])
       .where(
         (row) => row.graded && _choices[row.index]!.selected && _choices[row.index]!.grade == null,
@@ -198,7 +222,10 @@ class _CollectrImportScreenState extends ConsumerState<CollectrImportScreen> {
       if (!mounted) return;
       invalidateCollection(ref);
       ref.invalidate(foldersProvider);
-      setState(() => _result = result);
+      setState(() {
+        _notImported = _leftOut();
+        _result = result;
+      });
     } on ApiException catch (error) {
       if (mounted) showMessage(context, error.message);
     } finally {
@@ -234,7 +261,7 @@ class _CollectrImportScreenState extends ConsumerState<CollectrImportScreen> {
               ),
             )
           : result != null
-          ? _Done(result: result)
+          ? _Done(result: result, leftOut: _notImported)
           : _buildPreview(preview),
       bottomNavigationBar: preview == null || result != null
           ? null
@@ -263,7 +290,8 @@ class _CollectrImportScreenState extends ConsumerState<CollectrImportScreen> {
     final check = _rows('check');
     final missing = _rows('missing');
     final graded = preview.rows.where((row) => row.graded).length;
-    final skippedTiles = (_payload?.rows.length ?? 0) - preview.rows.length;
+    final unread = _unreadTiles;
+    final pieces = preview.rows.fold<int>(0, (sum, row) => sum + row.quantity);
     return ListView(
       padding: const EdgeInsets.only(bottom: 24),
       children: [
@@ -282,9 +310,16 @@ class _CollectrImportScreenState extends ConsumerState<CollectrImportScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: Text(
+            'Gelesen: ${_payload?.rows.length ?? 0} Kacheln · $pieces Stück – bitte mit der '
+            'Anzahl in Collectr vergleichen.',
+            key: const Key('collectr-total'),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: Text(
             '${matched.length} zugeordnet · ${check.length} bitte prüfen · '
-            '${missing.length} nicht gefunden'
-            '${skippedTiles > 0 ? ' · $skippedTiles ohne Kartennummer übersprungen' : ''}',
+            '${missing.length} nicht gefunden',
             style: TextStyle(color: AppColors.textMuted),
           ),
         ),
@@ -312,6 +347,18 @@ class _CollectrImportScreenState extends ConsumerState<CollectrImportScreen> {
               ),
             ),
           ),
+        if (unread.isNotEmpty) ...[
+          SectionTitle('Ohne Kartennummer (${unread.length})'),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Diese Kacheln konnte Kartenkiste nicht lesen. Bitte von Hand hinzufügen – sie '
+              'stehen nach dem Übernehmen noch einmal in der Liste.',
+            ),
+          ),
+          for (final name in unread)
+            ListTile(leading: const Icon(Icons.help_outline), title: Text(name)),
+        ],
         if (check.isNotEmpty) ...[
           SectionTitle('Bitte prüfen (${check.length})'),
           for (final row in check) _tile(row),
@@ -475,21 +522,45 @@ class _PickSheet extends StatelessWidget {
 }
 
 class _Done extends StatelessWidget {
-  const _Done({required this.result});
+  const _Done({required this.result, required this.leftOut});
 
   final CollectrCommitResult result;
 
+  /// Kacheln, die nicht übernommen wurden (zum Nachtragen).
+  final List<String> leftOut;
+
   @override
-  Widget build(BuildContext context) => EmptyView(
-    icon: Icons.check_circle,
-    message:
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.all(16),
+    children: [
+      Icon(Icons.check_circle, size: 56, color: AppColors.gain),
+      const SizedBox(height: 12),
+      Text(
         '${result.added} Karten in „${result.folder.name}“ übernommen.'
-        '${result.skipped > 0 ? ' ${result.skipped} lagen dort schon und wurden übersprungen.' : ''}\n\n'
+        '${result.skipped > 0 ? ' ${result.skipped} lagen dort schon und wurden übersprungen.' : ''}',
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontSize: 16),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        leftOut.isEmpty
+            ? 'Alle gelesenen Karten sind übernommen.'
+            : 'Nicht übernommen (${leftOut.length}) – bitte von Hand nachtragen oder den '
+                  'Ordner erneut importieren (schon übernommene Karten werden übersprungen):',
+        key: const Key('collectr-leftout'),
+        textAlign: TextAlign.center,
+        style: TextStyle(color: leftOut.isEmpty ? AppColors.gain : AppColors.warning),
+      ),
+      for (final entry in leftOut)
+        ListTile(dense: true, leading: const Icon(Icons.remove_circle_outline), title: Text(entry)),
+      const SizedBox(height: 16),
+      const Text(
         'Für den nächsten Ordner: in Collectr oben das Portfolio wechseln und das Lesezeichen '
         'erneut antippen.',
-    action: FilledButton(
-      onPressed: () => context.go('/collection'),
-      child: const Text('Zur Sammlung'),
-    ),
+        textAlign: TextAlign.center,
+      ),
+      const SizedBox(height: 12),
+      FilledButton(onPressed: () => context.go('/collection'), child: const Text('Zur Sammlung')),
+    ],
   );
 }

@@ -863,6 +863,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Einstellungen → Gefahrenbereich → „Sammlung zurücksetzen“: löscht alle Positionen, Ordner (danach nur leerer Standardordner „Sammlung“), Wertverlauf und Tageswerte; auf Wunsch auch die Merkliste. Konto, Preisalarme, Tauschvorgänge und Referenzbilder bleiben. Schutz: Dialog erst nach Eingabe „LÖSCHEN“ aktiv, der Server verlangt das Wort ebenfalls (`POST /collection/reset`). Test: nur der eigene Nutzer betroffen. Nebenbei behoben: Dialog-Eingabefelder (auch Noten-Dialog des Collectr-Imports) wurden vor Ende der Schließ-Animation freigegeben
 
+- [x] Collectr-Import vollständig prüfbar: Vorschau zeigt „Gelesen: N Kacheln · S Stück“ (zum Vergleich mit Collectr) und Kacheln ohne Kartennummer; nach dem Übernehmen Liste „Nicht übernommen“ mit Grund (keine Karte gewählt, Note fehlt, abgewählt, ohne Nummer). Gleiche Karte zweimal als eigener Eintrag: Lesezeichen zählt gleichzeitig sichtbare Doppel mit, Server fasst sie zu einer Position mit addierter Menge zusammen (vorher wäre eine verloren gegangen). Browser-Test 62/62 inkl. Doppel
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

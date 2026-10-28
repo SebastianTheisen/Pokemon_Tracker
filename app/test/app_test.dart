@@ -1745,6 +1745,10 @@ void usabilityTests() {
     expect(api.calls, contains('collectrPreview:4:Main Ordner'));
     expect(find.text('Main Ordner'), findsOneWidget); // Ordnername aus Collectr
     expect(find.text('2 zugeordnet · 1 bitte prüfen · 1 nicht gefunden'), findsOneWidget);
+    expect(
+      find.text('Gelesen: 4 Kacheln · 5 Stück – bitte mit der Anzahl in Collectr vergleichen.'),
+      findsOneWidget,
+    );
     expect(find.text('1 Karten übernehmen'), findsOneWidget); // Slab ohne Note fehlt noch
 
     await tester.tap(find.byKey(const Key('collectr-grade-all')));
@@ -1768,6 +1772,9 @@ void usabilityTests() {
     expect(items[2]['grade'], '10');
     expect(items[2].containsKey('condition'), isFalse);
     expect(find.textContaining('3 Karten in „Main Ordner“ übernommen.'), findsOneWidget);
+    // Die nicht gefundene Karte geht nicht still verloren
+    expect(find.textContaining('Nicht übernommen (1)'), findsOneWidget);
+    expect(find.text('1× Karte 3 · Eevee Heroes · 083/069 (keine Karte gewählt)'), findsOneWidget);
   });
 
   testWidgets('Binder-Scan: Karten erscheinen nach und nach mit Fortschritt', (tester) async {

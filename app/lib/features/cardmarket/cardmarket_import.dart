@@ -36,14 +36,16 @@ const T=(e,s)=>{const x=e.querySelector(s);return x?x.textContent.trim().replace
 if(/(^|\\.)getcollectr\\.com\$/.test(location.hostname)){
 const B=document.createElement('div');B.style.cssText='position:fixed;top:10px;left:10px;right:10px;z-index:2147483647;background:#1e293b;color:#fff;padding:12px;border-radius:10px;font:15px sans-serif';document.body.appendChild(B);
 const M=new Map();const X=/^[+\\-−▲▼]?\\s*\\\$|%\\)?\$/;
-const G=()=>{document.querySelectorAll('body *').forEach(e=>{if(e.childElementCount===0&&/^Qty:/.test(e.textContent.trim())){let t=e;while(t&&t!==document.body&&!t.querySelector('img'))t=t.parentElement;
-if(t&&t!==document.body){const l=t.innerText.split('\\n').map(x=>x.trim()).filter(x=>x&&!X.test(x)).slice(0,14).map(x=>x.slice(0,200));const k=l.join('|');if(!M.has(k))M.set(k,l)}}})};
-let n=-1,q=0,i=0;const S=()=>{G();B.textContent='Kartenkiste: sammle Karten … '+M.size;
-const end=window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-5;if(end&&M.size===n){q++}else{q=0}n=M.size;i++;
+const G=()=>{const C=new Map();const D=new Set();document.querySelectorAll('body *').forEach(e=>{if(e.childElementCount===0&&/^Qty:/.test(e.textContent.trim())){let t=e;while(t&&t!==document.body&&!t.querySelector('img'))t=t.parentElement;
+if(t&&t!==document.body&&!D.has(t)){D.add(t);const l=t.innerText.split('\\n').map(x=>x.trim()).filter(x=>x&&!X.test(x)).slice(0,14).map(x=>x.slice(0,200));const k=l.join('|');const c=(C.get(k)||0)+1;C.set(k,c);if(!M.has(k)||M.get(k).n<c)M.set(k,{l:l,n:c})}}})};
+const Z=()=>{let z=0;M.forEach(v=>z+=v.n);return z};
+let n=-1,q=0,i=0;const S=()=>{G();const z=Z();B.textContent='Kartenkiste: sammle Karten … '+z;
+const end=window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-5;if(end&&z===n){q++}else{q=0}n=z;i++;
 if(q<3&&i<600){window.scrollBy(0,window.innerHeight*2);setTimeout(S,600);return}
 let p='';document.querySelectorAll('body *').forEach(e=>{if(!p&&e.childElementCount<4&&/^\\s*Portfolio:/.test(e.textContent))p=e.textContent.replace(/^\\s*Portfolio:\\s*/,'').trim()});
 B.remove();if(!M.size){alert('Kartenkiste: Keine Karten gefunden. Bitte das Showcase öffnen und erneut tippen.');return}
-const d={p:p.slice(0,80),u:location.href.split('#')[0],r:[...M.values()].slice(0,1500)};
+const r2=[];M.forEach(v=>{for(let j=0;j<v.n;j++)r2.push(v.l)});
+const d={p:p.slice(0,80),u:location.href.split('#')[0],r:r2.slice(0,1500)};
 const b=btoa(unescape(encodeURIComponent(JSON.stringify(d)))).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+\$/,'');
 location.href=A+'/#/collectr-import?d='+b};window.scrollTo(0,0);setTimeout(S,400);return}
 if(/(^|\\.)ebay\\./.test(location.hostname)){k='ebay';

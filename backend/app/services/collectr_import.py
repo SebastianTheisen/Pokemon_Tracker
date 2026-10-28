@@ -266,6 +266,10 @@ class ImportItem:
     grade: str | None
 
 
+# Karte, Variante, Zustand, Grading-Firma, Note – was eine Position eindeutig macht
+_ItemKey = tuple[uuid.UUID, str, str | None, GradingCompany | None, str | None]
+
+
 @dataclass(frozen=True)
 class CommitResult:
     folder: Folder
@@ -324,36 +328,42 @@ class CollectrImport:
         if len(items) > MAX_ROWS:
             raise InvalidInputError(f"Höchstens {MAX_ROWS} Karten auf einmal.")
         folder = await self._folder(folder_name)
-        existing = {
+        existing: set[_ItemKey] = {
             (item.card_id, item.variant, item.condition, item.grading_company, item.grade)
             for item in await self._session.scalars(
                 select(CollectionItem).where(
                     CollectionItem.user_id == self._user.id,
                     CollectionItem.folder_id == folder.id,
-                    CollectionItem.card_id.is_not(None),
                 )
             )
+            if item.card_id is not None
         }
-        added = skipped = 0
+        # Gleiche Karte mehrfach im Showcase (z. B. zweimal einzeln angelegt): eine Position
+        # mit zusammengezählter Menge – nicht als „schon vorhanden“ überspringen.
+        merged: dict[_ItemKey, int] = {}
         for item in items:
             graded = item.grading_company is not None
             condition = None if graded else (item.condition or "NM")
-            key = (item.card_id, item.variant, condition, item.grading_company, item.grade)
+            grade = item.grade if graded else None
+            key = (item.card_id, item.variant, condition, item.grading_company, grade)
+            merged[key] = merged.get(key, 0) + item.quantity
+        added = skipped = 0
+        for key, quantity in merged.items():
             if key in existing:
                 skipped += 1
                 continue
+            card_id, variant, condition, company, grade = key
             await self._collection.add_item(
                 ItemInput(
                     folder_id=folder.id,
-                    card_id=item.card_id,
-                    variant=item.variant,
+                    card_id=card_id,
+                    variant=variant,
                     condition=condition,
-                    quantity=item.quantity,
-                    grading_company=item.grading_company,
-                    grade=item.grade if graded else None,
+                    quantity=min(quantity, 9999),
+                    grading_company=company,
+                    grade=grade,
                 ),
                 refresh_prices=False,
             )
-            existing.add(key)
             added += 1
         return CommitResult(folder=folder, added=added, skipped=skipped)

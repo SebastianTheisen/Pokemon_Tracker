@@ -227,6 +227,26 @@ async def test_collectr_preview_and_commit(
     result = commit.json()
     assert (result["folder"]["name"], result["added"], result["skipped"]) == ("Main Ordner", 3, 0)
 
+    # Gleiche Karte zweimal als eigener Eintrag im Showcase → eine Position, Menge addiert
+    twice = await client.post(
+        f"{API}/import/collectr/commit",
+        json={
+            "folder_name": "Doppelt",
+            "items": [{"card_id": best(1), "quantity": 1}, {"card_id": best(1), "quantity": 1}],
+        },
+        headers=alice.headers,
+    )
+    assert (twice.json()["added"], twice.json()["skipped"]) == (1, 0)
+    doubled = (
+        await client.get(
+            f"{API}/collection/items",
+            params={"folder_id": twice.json()["folder"]["id"]},
+            headers=alice.headers,
+        )
+    ).json()
+    doubled_items = doubled["items"] if isinstance(doubled, dict) else doubled
+    assert [e["quantity"] for e in doubled_items] == [2]
+
     # Zweiter Durchlauf (gleicher Ordner, Groß/Klein egal): nichts doppelt
     again = await client.post(
         f"{API}/import/collectr/commit",
