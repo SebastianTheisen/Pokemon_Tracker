@@ -5,11 +5,13 @@ Die Kachel-Zeilen stammen aus den Screenshots des Showcase (28.10.2026).
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.config import Settings
 from app.models import Card, CardSet, CmProduct
 from app.services.collectr_import import parse_row
 from tests.conftest import RegisterUser
@@ -181,6 +183,7 @@ async def test_collectr_preview_and_commit(
     client: AsyncClient,
     register_user: RegisterUser,
     session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
 ) -> None:
     alice = await register_user("alice@example.com")
     cards = await _catalog(session_factory)
@@ -198,6 +201,14 @@ async def test_collectr_preview_and_commit(
     assert data["portfolio"] == "Main Ordner"
     rows: dict[int, Any] = {row["index"]: row for row in data["rows"]}
     assert set(rows) == {0, 1, 2, 3, 4}  # Zeile 5 ist keine Karte
+    # Letzte Vorschau liegt zum Nachsehen auf dem Server (Rohzeilen + Vorschläge)
+    saved = json.loads(
+        (settings.scanner_data_dir / "collectr" / f"{alice.user_id}.json").read_text("utf-8")
+    )
+    assert saved["portfolio"] == "Main Ordner"
+    assert saved["rows"][0]["lines"] == ESPEON
+    assert saved["rows"][0]["matches"][0]["set"] == "S6a"
+    assert saved["rows"][5]["status"] == "unlesbar"
 
     def best(index: int) -> str:
         return str(rows[index]["matches"][0]["card"]["id"])

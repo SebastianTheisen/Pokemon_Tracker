@@ -867,6 +867,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Collectr-Import Trainer-Ordner (erster echter Lauf: 31 zugeordnet, viele „bitte prüfen“, 2 nicht gefunden): Trainer-Namen übersetzt die App nicht („ナンジャモ“), der Name fehlte in der Bewertung → richtige Treffer knapp unter der Schwelle. Jetzt: englischer Name aus dem verknüpften Cardmarket-Produkt („Iono (V.2)“ → „Iono“); ohne englischen Namen tragen Nummer, Setgröße und Setname – aber nur ein klar passender Setname (≥ 0,75, Wortreihenfolge egal), sonst „prüfen“ (Sky Legend ≠ GG End, gleiche Setgröße). Offen: Lillie 080/SM-P und Sycamore 246/XY-P fehlen vermutlich im Katalog (Prüfung per psql)
 
+- [x] Collectr-Vorschau nachvollziehbar: Server speichert die letzte Vorschau je Nutzer (Rohzeilen vom Lesezeichen + Vorschläge mit Punktzahl) im Scanner-Volume; `deploy/phase8_collectr_last.sh [Filter]` zeigt sie an (z. B. „Kahili“ oder „check“). Anlass: „Kahili 065/060 → Zacian V“ – Zacian kommt aus dem Katalog (einzige Karte 065 in einem 60er-Set), nicht aus Collectr
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

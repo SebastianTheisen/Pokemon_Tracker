@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, StringConstraints
 
-from app.api.deps import CurrentUser, PriceServiceDep, SessionDep
+from app.api.deps import CurrentUser, PriceServiceDep, SessionDep, SettingsDep
+from app.core.config import Settings
 from app.models import GradingCompany
 from app.providers.pricing import Condition
 from app.schemas.catalog import CardOut
@@ -23,6 +26,7 @@ from app.services.collectr_import import (
 )
 
 router = APIRouter(prefix="/import", tags=["import"])
+log = structlog.get_logger(__name__)
 
 Line = Annotated[str, StringConstraints(max_length=200)]
 FolderName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
@@ -111,13 +115,52 @@ class CollectrCommitOut(BaseModel):
     skipped: int
 
 
+def _remember_preview(
+    settings: Settings, user_id: uuid.UUID, body: CollectrPreviewIn, out: CollectrPreviewOut
+) -> None:
+    """Letzte Vorschau je Nutzer als Datei (Rohzeilen + Zuordnung) – zum Nachsehen mit
+    ``deploy/phase8_collectr_last.sh``, wenn eine Zuordnung unklar ist. Fehler stören nicht."""
+    by_index = {row.index: row for row in out.rows}
+    entries = []
+    for index, lines in enumerate(body.rows):
+        row = by_index.get(index)
+        entries.append(
+            {
+                "index": index,
+                "lines": lines,
+                "status": row.status if row else "unlesbar",
+                "matches": [
+                    {
+                        "score": m.score,
+                        "set": m.card.card_set.external_id,
+                        "number": m.card.number,
+                        "name": m.card.name,
+                        "language": m.card.language,
+                    }
+                    for m in (row.matches if row else [])
+                ],
+            }
+        )
+    target = settings.scanner_data_dir / "collectr" / f"{user_id}.json"
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"portfolio": body.portfolio, "rows": entries}
+        target.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    except OSError:
+        log.warning("collectr.preview_not_saved", exc_info=True)
+
+
 @router.post("/collectr/preview")
-async def collectr_preview(body: CollectrPreviewIn, importer: Importer) -> CollectrPreviewOut:
+async def collectr_preview(
+    body: CollectrPreviewIn, importer: Importer, user: CurrentUser, settings: SettingsDep
+) -> CollectrPreviewOut:
     """Kacheln des Showcase auswerten und dem Katalog zuordnen (speichert nichts)."""
     results = await importer.preview(body.rows)
-    return CollectrPreviewOut(
+    out = CollectrPreviewOut(
         portfolio=body.portfolio, rows=[CollectrRowOut.build(r) for r in results]
     )
+    _remember_preview(settings, user.id, body, out)
+    return out
 
 
 @router.post("/collectr/commit")
