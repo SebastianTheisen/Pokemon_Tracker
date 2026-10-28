@@ -329,3 +329,25 @@ def test_weak_image_of_the_right_print_blocks_sure_result() -> None:
 
     apply_page_set([base, classic], {classic.card.set_id})
     assert any("übrigen Karten der Seite" in reason for reason in classic.reasons)
+
+
+def test_pokedex_numbers_do_not_cancel_the_set_size_conflict() -> None:
+    """PriceCharting nummeriert das Grundset 1996 nach Pokédex (Bisasam = „1“) – das passt
+    zufällig zu „001/032“ und darf den Widerspruch der Setgröße nicht aufheben."""
+    base = Card(
+        language="ja",
+        number="1",
+        number_norm="1",
+        name="フシギダネ",
+        card_set=CardSet(
+            external_id="pc-pokemon-japanese-expansion-pack",
+            language="ja",
+            name="Pokemon Japanese Expansion Pack",
+            card_count_official=None,
+            card_count_total=102,
+        ),
+    )
+    text = extract_text_features(lines("フシギダネ", "001/032"))
+    scored = score_text(Candidate(base, catalog_inliers=209), text)
+    assert scored.total_conflict
+    assert not scored.strong_evidence

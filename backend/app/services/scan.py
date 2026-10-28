@@ -26,6 +26,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import urlsplit
 
 import structlog
 from sqlalchemy import ColumnElement, delete, func, literal, or_, select
@@ -530,7 +531,14 @@ class ScanService:
         common = set.intersection(*(set(urls) for urls in by_identity.values()))
         for language in (twins[0].card.language, "en", *sorted(common)):
             if language in common:
-                return [by_identity[twin.identity][language] for twin in twins]
+                urls = [by_identity[twin.identity][language] for twin in twins]
+                # Bilder verschiedener Quellen (scharfer Scan gegen kleines Produktfoto): Der
+                # Vergleich misst dann die Bildqualität, nicht die Karte (Classic-Binder:
+                # Grundset von PriceCharting „gewann“ gegen Classic von TCGplayer).
+                if len({urlsplit(url).hostname for url in urls}) > 1:
+                    log.info("scan.twins_mixed_sources", cards=[t.identity for t in twins])
+                    return None
+                return urls
         return None
 
     async def _separate_twins(self, ranked: list[Candidate], photo: UInt8Image) -> None:

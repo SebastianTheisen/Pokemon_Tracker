@@ -187,7 +187,14 @@ def total_conflict(text: TextFeatures, card: Card) -> int | None:
     # Ohne offizielle Zahl (Sets von PriceCharting, z. B. Grundset 1996) die Kartenzahl im
     # Katalog – sonst widerspräche „001/032“ dem Grundset nie.
     official = card.card_set.card_count_official or card.card_set.card_count_total
-    if not official or any(hit.number == card.number_norm for hit in text.numbers):
+    if not official:
+        return None
+    # Gleiche Nummer hebt den Widerspruch auf – nur nicht bei Sets ohne offizielle Zahl:
+    # PriceCharting nummeriert japanische Vintage-Karten nach Pokédex (Bisasam = „1“), das
+    # passt zufällig zu „001/032“.
+    if card.card_set.card_count_official and any(
+        hit.number == card.number_norm for hit in text.numbers
+    ):
         return None
     # Nur vollständig gelesene Setgrößen zählen: „001/032“ hat drei Stellen wie „102“;
     # „212/38“ (abgeschnitten, eigentlich 217/187) widerspricht nichts.
