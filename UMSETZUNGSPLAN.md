@@ -855,6 +855,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Binder-Scan nimmt auch 1–2 große Karten nebeneinander (z. B. Screenshot aus einer Anzeige): Bisher brauchte die Umrisssuche ≥ 3 Karten, sonst 3×3-Raster aus Schnipseln. Jetzt reichen 1–2 Umrisse, wenn jede Karte 15–45 % des Bildes einnimmt (Binderkarte ≤ ~11 %, leere Seite ≥ 60 %) und „Automatisch“ gewählt ist. Echter Screenshot (Galar-Lavados V + Zeraora V): 2 saubere Felder; Binder-Messung unverändert 87/87
 
+- [x] App lud am iPhone nicht („Datei nicht geladen: /main.dart.js“): Server und Tailscale-HTTPS lieferten die Datei in 0,5 s (`deploy/phase5_load_check.sh`), das iPhone erreichte den Container aber nur über Relay (DERP Amsterdam, „direct connection not established“) – große Dateien brachen ab. Container bekommt eigenen UDP-Port 41642 (`TS_PORT`, 41641 bleibt beim Tailscale des VPS), `deploy/phase5_tailscale_direct.sh` prüft den Port, zeigt die Firewall nur an und startet den Container neu
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

@@ -59,6 +59,11 @@ services:
       TS_STATE_DIR: /var/lib/tailscale
       TS_USERSPACE: "true"  # kein /dev/net/tun und keine Extra-Rechte nötig
       TS_SERVE_CONFIG: /config/serve.json  # HTTPS (*.ts.net) → api:8000
+      # Eigener UDP-Port für direkte Verbindungen (sonst nur Umweg über Tailscale-Relays, der
+      # bei großen Dateien abbrach). 41641 gehört dem Tailscale direkt auf dem VPS.
+      TS_TAILSCALED_EXTRA_ARGS: --port=${TS_PORT:-41642}
+    ports:
+      - "${TS_PORT:-41642}:${TS_PORT:-41642}/udp"
     volumes:
       - tailscale-state:/var/lib/tailscale
       - ./deploy/tailscale/serve.json:/config/serve.json:ro
