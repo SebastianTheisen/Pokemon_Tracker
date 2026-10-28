@@ -3,6 +3,8 @@
 //
 // Damit nicht dauernd Bilder zum Server gehen, wird nur ausgelöst, wenn das Bild ruhig ist
 // UND sich seit dem letzten Foto deutlich verändert hat (also eine neue Karte daliegt).
+// Der Auslöser-Knopf erkennt sofort – Rückfallweg, falls die Automatik nicht anspringt
+// (z. B. unruhiges Kamerabild bei wenig Licht).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -20,8 +22,9 @@ import '../collection/item_sheet.dart';
 import '../collection/owned.dart';
 import '../dashboard/dashboard_screen.dart';
 
-/// Ruhig: mittlere Grauwert-Änderung zwischen zwei Messungen (0–255) darunter.
-const stillThreshold = 6.0;
+/// Ruhig: mittlere Grauwert-Änderung zwischen zwei Messungen (0–255) darunter. iPhone-Kameras
+/// rauschen innen stärker – 6 war dort nie erreicht.
+const stillThreshold = 9.0;
 
 /// Neue Szene: Abstand zum letzten Foto darüber.
 const changeThreshold = 14.0;
@@ -30,6 +33,9 @@ const changeThreshold = 14.0;
 const stillSamples = 2;
 
 const _tick = Duration(milliseconds: 300);
+
+/// Nach so vielen Messungen ohne Auslösen den Auslöser-Knopf als Tipp nennen (≈ 6 s).
+const hintAfterTicks = 20;
 
 /// Eine erkannte Karte der laufenden Sitzung.
 class LiveHit {
@@ -58,6 +64,10 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
   Timer? _timer;
   int _still = 0;
   bool _busy = false;
+
+  /// Messungen seit dem letzten Foto bzw. ohne Kamerabild.
+  int _idleTicks = 0;
+  int _noSignalTicks = 0;
 
   /// Unsicherer Treffer: bester Tipp zum Bestätigen („Ist es Glurak ex?“).
   LiveHit? _guess;
@@ -97,17 +107,41 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
   void _check() {
     if (_busy || !mounted) return;
     final (:motion, :change) = _camera.measure();
-    _still = motion < stillThreshold ? _still + 1 : 0;
-    if (_still >= stillSamples && change > changeThreshold) unawaited(_recognize());
+    final hintBefore = _hint;
+    if (motion < 0) {
+      _noSignalTicks++; // Kamera liefert (noch) kein Bild
+    } else {
+      _noSignalTicks = 0;
+      _still = motion < stillThreshold ? _still + 1 : 0;
+      if (_still >= stillSamples && change > changeThreshold) {
+        unawaited(_recognize());
+        return;
+      }
+    }
+    _idleTicks++;
+    if (_hint != hintBefore) setState(() {});
   }
 
+  /// Hinweis in der Statuszeile, wenn die Automatik nicht anspringt.
+  String? get _hint => _noSignalTicks >= stillSamples * 5
+      ? 'Kamera liefert kein Bild – Auslöser antippen'
+      : _idleTicks >= hintAfterTicks
+      ? 'Erkennt nichts? Auslöser antippen'
+      : null;
+
   Future<void> _recognize() async {
+    if (_busy) return;
     _busy = true;
     _still = 0;
+    _idleTicks = 0;
     setState(() => _phase = _Phase.recognizing);
     try {
       final bytes = await _camera.frame();
-      if (bytes == null || !mounted) return;
+      if (!mounted) return;
+      if (bytes == null) {
+        _show('Kein Kamerabild – Live-Scanner neu öffnen oder mit Foto scannen', good: false);
+        return;
+      }
       final result = await ref
           .read(apiProvider)
           .scan(UploadImage(bytes: bytes, filename: 'live.jpg'));
@@ -194,16 +228,27 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
               text: switch (_phase) {
                 _Phase.starting => 'Kamera startet …',
                 _Phase.recognizing => 'Erkenne …',
-                _ => 'Karte in den Rahmen legen – ruhig halten',
+                _ => _hint ?? 'Karte in den Rahmen legen – ruhig halten',
               },
               busy: _phase != _Phase.waiting,
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 104,
+            child: Center(
+              child: _Shutter(
+                busy: _phase == _Phase.recognizing,
+                onPressed: _phase == _Phase.waiting ? () => unawaited(_recognize()) : null,
+              ),
             ),
           ),
           if (_guess case final guess?)
             Positioned(
               left: 16,
               right: 16,
-              bottom: 112,
+              bottom: 186,
               child: _GuessCard(
                 hit: guess,
                 onTake: () => _take(guess),
@@ -214,7 +259,7 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen> {
             Positioned(
               left: 16,
               right: 16,
-              bottom: 120,
+              bottom: 194,
               child: _Flash(text: text, good: _flashGood),
             ),
           Positioned(
@@ -263,6 +308,45 @@ class _FramePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_FramePainter oldDelegate) => false;
+}
+
+/// Runder Auslöser wie in der Kamera-App: erkennt das aktuelle Bild sofort.
+class _Shutter extends StatelessWidget {
+  const _Shutter({required this.busy, required this.onPressed});
+
+  final bool busy;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: 'Jetzt erkennen',
+    child: GestureDetector(
+      key: const Key('live-shutter'),
+      onTap: onPressed,
+      child: Container(
+        width: 68,
+        height: 68,
+        padding: const EdgeInsets.all(5),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 4),
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: onPressed == null ? Colors.white38 : Colors.white,
+          ),
+          child: busy
+              ? const Padding(
+                  padding: EdgeInsets.all(14),
+                  child: CircularProgressIndicator(strokeWidth: 3, color: Colors.black54),
+                )
+              : null,
+        ),
+      ),
+    ),
+  );
 }
 
 class _StatusPill extends StatelessWidget {

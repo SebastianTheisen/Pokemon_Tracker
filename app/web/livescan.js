@@ -3,22 +3,39 @@
 (function () {
   'use strict';
   const SAMPLE = 32; // 32×32 Graustufen reichen, um Bewegung und Bildwechsel zu erkennen
+  const BLOCK = 4; // je Messpunkt 4×4 Pixel mitteln: Kamerarauschen (iPhone innen) zählt nicht
+  // Alle erzeugten <video>: Flutter kann die Ansicht mehrfach anlegen (iOS). Gemessen wird am
+  // sichtbaren, laufenden – nicht am zuletzt erzeugten, das evtl. nie Bilder liefert.
+  const videos = [];
   let video = null;
   let stream = null;
   let previous = null;
   let lastShot = null;
   const work = document.createElement('canvas');
 
+  /** Video mit Bild: bevorzugt eines, das im Dokument hängt. */
+  function active() {
+    const ready = videos.filter((v) => v.readyState >= 2 && v.videoWidth > 0);
+    return ready.find((v) => v.isConnected) || ready[0] || null;
+  }
+
   function sample() {
-    if (!video || video.readyState < 2) return null;
-    work.width = SAMPLE; work.height = SAMPLE;
+    const source = active();
+    if (!source) return null;
+    const size = SAMPLE * BLOCK;
+    work.width = size; work.height = size;
     const context = work.getContext('2d', { willReadFrequently: true });
-    context.drawImage(video, 0, 0, SAMPLE, SAMPLE);
-    const data = context.getImageData(0, 0, SAMPLE, SAMPLE).data;
-    const gray = new Uint8Array(SAMPLE * SAMPLE);
-    for (let i = 0; i < gray.length; i++) {
-      gray[i] = (data[i * 4] * 3 + data[i * 4 + 1] * 6 + data[i * 4 + 2]) / 10;
+    context.drawImage(source, 0, 0, size, size);
+    const data = context.getImageData(0, 0, size, size).data;
+    const gray = new Float32Array(SAMPLE * SAMPLE);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const i = (y * size + x) * 4;
+        const cell = Math.floor(y / BLOCK) * SAMPLE + Math.floor(x / BLOCK);
+        gray[cell] += (data[i] * 3 + data[i + 1] * 6 + data[i + 2]) / 10;
+      }
     }
+    for (let i = 0; i < gray.length; i++) gray[i] /= BLOCK * BLOCK;
     return gray;
   }
 
@@ -32,6 +49,7 @@
   window.kartenkisteCamera = {
     createVideo: function () {
       video = document.createElement('video');
+      videos.push(video);
       video.setAttribute('playsinline', '');
       video.muted = true;
       video.autoplay = true;
@@ -52,19 +70,23 @@
       } catch (e) {
         return e && (e.name === 'NotAllowedError' || e.name === 'SecurityError') ? 'denied' : 'unsupported';
       }
-      if (video) { video.srcObject = stream; video.play().catch(() => {}); }
+      videos.forEach((v) => { v.srcObject = stream; v.play().catch(() => {}); });
       previous = null; lastShot = null;
       return 'ok';
     },
     stop: function () {
       if (stream) stream.getTracks().forEach((track) => track.stop());
       stream = null; previous = null; lastShot = null;
-      if (video) video.srcObject = null;
+      videos.forEach((v) => { v.srcObject = null; });
+      // Abgehängte Elemente vergessen (Bildschirm geschlossen), sichtbare behalten.
+      const kept = videos.filter((v) => v.isConnected);
+      videos.length = 0; videos.push(...kept);
     },
-    /** "motion,change": Bewegung seit der letzten Messung und Abstand zum letzten Foto (0–255). */
+    /** "motion,change": Bewegung seit der letzten Messung und Abstand zum letzten Foto (0–255);
+     *  "-1,-1", solange die Kamera kein Bild liefert. */
     measure: function () {
       const current = sample();
-      if (!current) return '255,0';
+      if (!current) return '-1,-1';
       const motion = difference(current, previous);
       const change = difference(current, lastShot);
       previous = current;
@@ -73,12 +95,13 @@
     /** Aktuelles Bild als JPEG (längste Seite höchstens 1600 px); merkt es als „letztes Foto“. */
     frame: function () {
       return new Promise((resolve) => {
-        if (!video || video.readyState < 2) { resolve(null); return; }
-        const scale = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
+        const source = active();
+        if (!source) { resolve(null); return; }
+        const scale = Math.min(1, 1600 / Math.max(source.videoWidth, source.videoHeight));
         const canvas = document.createElement('canvas');
-        canvas.width = Math.round(video.videoWidth * scale);
-        canvas.height = Math.round(video.videoHeight * scale);
-        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.width = Math.round(source.videoWidth * scale);
+        canvas.height = Math.round(source.videoHeight * scale);
+        canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
         lastShot = sample();
         canvas.toBlob(async (blob) => {
           resolve(blob ? new Uint8Array(await blob.arrayBuffer()) : null);

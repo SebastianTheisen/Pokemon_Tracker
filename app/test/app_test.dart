@@ -1648,6 +1648,32 @@ void usabilityTests() {
     expect(find.textContaining('Kein Kamerazugriff'), findsOneWidget);
   });
 
+  testWidgets('Live-Scanner: Auslöser erkennt sofort; ohne Kamerabild ein Hinweis', (tester) async {
+    final api = FakeApi(loggedIn: true);
+    // iPhone-Fall: Die Automatik springt nie an (kein Bild bzw. unruhig).
+    final camera = FakeLiveCamera()
+      ..measurements.addAll(List.filled(12, (motion: -1.0, change: -1.0)));
+    await pumpApp(tester, api, camera: camera);
+    final router = ProviderScope.containerOf(tester.element(find.byType(KartenkisteApp)))
+        .read(routerProvider);
+    unawaited(router.push('/scan/live'));
+    await tester.pump();
+    await tester.pump();
+    for (var i = 0; i < 11; i++) {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    expect(camera.frames, 0);
+    expect(find.text('Kamera liefert kein Bild – Auslöser antippen'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('live-shutter')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(camera.frames, 1);
+    expect(api.calls.where((c) => c.startsWith('scan:')).length, 1);
+    expect(find.text('Fertig (1)'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
   testWidgets('Live-Scanner: unsicherer Treffer als Tipp – „Ja“ übernimmt ihn', (tester) async {
     final api = FakeApi(loggedIn: true)..scanResult = scanJson(confident: false);
     final camera = FakeLiveCamera()
