@@ -29,6 +29,11 @@ BinderLayout = Literal["auto", "3x3", "4x3", "2x2"]
 GRIDS: dict[str, tuple[int, int]] = {"3x3": (3, 3), "4x3": (4, 3), "2x2": (2, 2)}  # Spalten, Reihen
 CELL_MARGIN = 0.04
 MIN_DETECTED_CARDS = 3
+# Weniger Umrisse zählen nur, wenn die Karten groß im Bild sind (Screenshot oder Foto von
+# 1–2 Karten). Auf einem Binderfoto ist eine Karte höchstens ~11 % (3×3) groß – dort bleibt
+# es bei mindestens drei Umrissen, sonst Raster. Nach oben begrenzt, weil eine leere
+# 9er-Seite fast das Seitenverhältnis einer Karte hat (Seite ≥ 60 % des Fotos).
+_FEW_CARDS_AREA = (0.15, 0.45)
 _SAME_LINE = 0.45  # Mittelpunkte näher als dieser Anteil des Abstands: dieselbe Reihe/Spalte
 _GAP_GUESS = 1.06  # Abstand ≈ Kartenmaß + Steg, solange nur eine Reihe/Spalte bekannt ist
 _ESTIMATE_PADDING = 0.12  # geschätzte Zellen: so viel größer als eine Karte (je Seite)
@@ -200,8 +205,12 @@ def detect_cards(image: UInt8Image, grid: tuple[int, int] | None = None) -> list
         selected = _select_similar(quads, area)
         if len(selected) > len(best):
             best = selected
-    if len(best) < MIN_DETECTED_CARDS:
+    if not best:
         return []
+    if len(best) < MIN_DETECTED_CARDS:
+        low, high = (fraction * width * height for fraction in _FEW_CARDS_AREA)
+        if grid is not None or not all(low <= cv2.contourArea(c) <= high for c in best):
+            return []
 
     boxes = [_box(corners) for corners in best]
     card_w = float(np.median([b[2] - b[0] for b in boxes]))

@@ -853,6 +853,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Hinweise mit Knopf („Rückgängig“, „Zum Tausch“, „Einschalten“) blieben seit Flutter 3.29 stehen, bis man sie wegtippt (auch über Seitenwechsel) → blenden sich wieder von selbst aus (`persist: false`, Rückgängig 6 s). Test prüft das
 
+- [x] Binder-Scan nimmt auch 1–2 große Karten nebeneinander (z. B. Screenshot aus einer Anzeige): Bisher brauchte die Umrisssuche ≥ 3 Karten, sonst 3×3-Raster aus Schnipseln. Jetzt reichen 1–2 Umrisse, wenn jede Karte 15–45 % des Bildes einnimmt (Binderkarte ≤ ~11 %, leere Seite ≥ 60 %) und „Automatisch“ gewählt ist. Echter Screenshot (Galar-Lavados V + Zeraora V): 2 saubere Felder; Binder-Messung unverändert 87/87
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

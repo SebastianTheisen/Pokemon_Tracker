@@ -407,6 +407,30 @@ def test_binder_ignores_outlines_beyond_the_photo(monkeypatch: pytest.MonkeyPatc
         assert int(np.argmax(scores)) == (cell.row * 3 + cell.column) % len(crops)
 
 
+def test_binder_two_large_cards_side_by_side() -> None:
+    """Screenshot/Foto mit zwei großen Karten nebeneinander (Rückmeldung 28.10.): zwei Felder
+    statt eines 3×3-Rasters aus Schnipseln. Mit fest gewähltem Raster bleibt es beim Raster."""
+    crops = [
+        np.asarray(cv2.resize(photo(name), (300, 420)), np.uint8) for name in ("03.jpg", "02.jpg")
+    ]
+    scene = np.full((520, 760, 3), 30, np.uint8)
+    scene[50:470, 60:360] = crops[0]
+    scene[50:470, 400:700] = crops[1]
+
+    cells, method = binder_cells(scene, "auto")
+
+    assert method == "konturen"
+    assert [(cell.row, cell.column, cell.estimated) for cell in cells] == [
+        (0, 0, False),
+        (0, 1, False),
+    ]
+    references = [extract_features(crop, max_features=2000) for crop in crops]
+    for cell in cells:
+        scores = [match_score(extract_features(cell.image), ref) for ref in references]
+        assert int(np.argmax(scores)) == cell.column
+    assert binder_cells(scene, "3x3")[1] == "3x3"
+
+
 def test_binder_grid_uses_the_page_not_the_table() -> None:
     """Ohne Kartenumrisse: erst die Seite im Foto suchen, dann sie teilen."""
     scene = np.full((1400, 1100, 3), 150, np.uint8)

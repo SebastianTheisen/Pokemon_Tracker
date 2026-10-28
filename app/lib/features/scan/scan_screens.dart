@@ -1305,7 +1305,9 @@ class _BinderScanScreenState extends ConsumerState<BinderScanScreen> {
                     children: [
                       Text(
                         'Eine ganze Binderseite fotografieren, gerade von oben und ohne '
-                        'Spiegelungen. Beta: Die Erkennung schwankt noch – bitte jede Karte prüfen.',
+                        'Spiegelungen – oder ein Bild mit ein, zwei großen Karten nebeneinander '
+                        '(z. B. Screenshot aus einer Anzeige). '
+                        'Beta: Die Erkennung schwankt noch – bitte jede Karte prüfen.',
                         style: TextStyle(color: AppColors.textMuted),
                       ),
                       const SizedBox(height: 12),
