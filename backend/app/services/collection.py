@@ -36,6 +36,7 @@ from app.models import (
     WishlistItem,
 )
 from app.providers.pricing import CONDITIONS
+from app.services.display_names import card_display_name, set_display_name
 from app.services.errors import ConflictError, InvalidInputError, NotFoundError
 from app.services.games import DEFAULT_GAME, item_game
 from app.services.movers import Movers, TrendChange, price_movers, trend_changes
@@ -630,7 +631,11 @@ class CollectionService:
 
         def name_of(v: ValuedItem) -> str:
             return (
-                v.item.card.name if v.item.card else v.item.product.name if v.item.product else ""
+                card_display_name(v.item.card)
+                if v.item.card
+                else v.item.product.name
+                if v.item.product
+                else ""
             ).casefold()
 
         sorters = {
@@ -646,7 +651,7 @@ class CollectionService:
             "name": (name_of, False),
             "set_number": (
                 lambda v: (
-                    v.item.card.card_set.name if v.item.card else "",
+                    set_display_name(v.item.card.card_set) if v.item.card else "",
                     v.item.card.number_norm.zfill(6) if v.item.card else "",
                 ),
                 False,

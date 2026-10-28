@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
 from app.models import PortfolioSnapshot, PushSubscription, User, UserSettings
+from app.services.display_names import card_display_name
 from app.services.movers import price_movers
 from app.services.push import PushMessage, notify_user
 
@@ -107,7 +108,7 @@ async def send_weekly_summaries(
                     continue
                 movers = await price_movers(session, user.id, now=now, days=7, limit=1)
                 top = (
-                    (movers.gainers[0].card.name, movers.gainers[0].change)
+                    (card_display_name(movers.gainers[0].card), movers.gainers[0].change)
                     if movers.gainers
                     else None
                 )

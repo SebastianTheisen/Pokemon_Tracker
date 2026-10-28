@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Card, CollectionItem, GradingCompany, Product, Trade, User
 from app.providers.pricing import CONDITIONS
+from app.services.display_names import card_display_name, set_display_name
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.friends import FriendsService
 from app.services.pricing import PriceService
@@ -79,7 +80,7 @@ def _label(card: Card | None, product: Product | None, line: TradeLine) -> str:
         return product.name
     if card is None:
         return "Unbekannt"
-    parts = [f"{card.name} ({card.card_set.name} {card.number})"]
+    parts = [f"{card_display_name(card)} ({set_display_name(card.card_set)} {card.number})"]
     if line.grading_company:
         parts.append(f"{line.grading_company} {line.grade or ''}".strip())
     else:

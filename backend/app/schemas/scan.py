@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.providers.psa import PsaCert
 from app.schemas.catalog import CardOut
+from app.services.display_names import card_display_name
 from app.services.scan import BatchItem, BinderOutcome, ScanMatch, ScanOutcome
 
 CONFIDENT_HINT = "Erkannt als {name}"
@@ -94,7 +95,7 @@ class ScanResultOut(BaseModel):
         if outcome.best is None:
             hint = NOTHING_HINT
         elif outcome.confident:
-            hint = CONFIDENT_HINT.format(name=outcome.best.card.name)
+            hint = CONFIDENT_HINT.format(name=card_display_name(outcome.best.card))
         else:
             hint = UNSURE_HINT
         return cls(

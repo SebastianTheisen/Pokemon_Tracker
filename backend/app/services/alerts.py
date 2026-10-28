@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import Settings
 from app.models import AlertDirection, Card, PriceAlert, Product, User
 from app.providers.pricing import CONDITIONS, PriceProvider
+from app.services.display_names import card_display_name
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.price_health import SourceHealth
 from app.services.pricing import CardPrices, PriceService
@@ -70,7 +71,7 @@ def _euro(value: Decimal) -> str:
 
 def alert_message(alert: PriceAlert, current: Decimal) -> PushMessage:
     if alert.card is not None:
-        name = alert.card.name
+        name = card_display_name(alert.card)
         extra = [] if alert.variant == "normal" else ["Reverse Holo"]
         if alert.condition != "NM":
             extra.append(alert.condition)

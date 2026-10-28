@@ -953,7 +953,7 @@ class _ResultTile extends ConsumerWidget {
     final best = result?.best;
     return ListTile(
       leading: CardImage(url: best?.card.image(), width: 40),
-      title: Text(best?.card.name ?? error ?? 'Nicht erkannt'),
+      title: Text(best?.card.displayName ?? error ?? 'Nicht erkannt'),
       subtitle: Text(
         best == null ? title : '$title · ${best.card.subtitle}',
         maxLines: 1,
