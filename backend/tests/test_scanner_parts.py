@@ -10,6 +10,7 @@ import uuid
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import cv2
@@ -35,7 +36,7 @@ from app.scanner.matching import ImageFeatures, extract_features, match_score
 from app.scanner.storage import FeatureCache, PendingScans, ReferenceStore
 from app.scanner.text import LanguageGuess, extract_text_features
 from app.scanner.twins import TwinDecision, pick_twin
-from app.services.scan import page_neighbours
+from app.services.scan import page_neighbours, page_set
 from app.services.scan_scoring import (
     Candidate,
     is_confident,
@@ -435,6 +436,35 @@ def test_small_cards_are_read_enlarged(side: int, reads: int) -> None:
     if reads == 2:
         assert shapes[1][0] == 2 * side
         assert [hit.number for hit in analysis.text.numbers] == ["217"]
+
+
+@pytest.mark.parametrize(
+    ("confident_sets", "expected"),
+    [
+        (["A", "A", "A", "A", "A", "A", "A", "A"], "A"),  # Set-Seite (echtes Foto: 8 sicher)
+        (["A", "A"], "A"),
+        (["A", "A", "B"], None),  # gemischte Seite: 2 von 3 reicht nicht
+        (["A", "A", "B", "C", "D"], None),
+        (["A", "A", "A", "B"], "A"),
+        (["A"], None),
+        ([], None),
+    ],
+)
+def test_page_set_only_for_pages_that_show_one(
+    confident_sets: list[str], expected: str | None
+) -> None:
+    """Gemischte Binderseiten bekommen kein Seiten-Set (kein Bonus, keine Bild-Rettung)."""
+    ids = {name: uuid.uuid4() for name in "ABCD"}
+
+    def cell(set_name: str | None) -> Any:
+        card = SimpleNamespace(set_id=ids[set_name] if set_name else None)
+        ranked = [SimpleNamespace(card=card)] if set_name else []
+        return SimpleNamespace(
+            confident=set_name is not None, evaluation=SimpleNamespace(ranked=ranked)
+        )
+
+    cells = [cell(name) for name in confident_sets] + [cell(None), cell(None)]
+    assert page_set(cells) == (ids[expected] if expected else None)
 
 
 def test_page_neighbours_prefer_close_numbers() -> None:

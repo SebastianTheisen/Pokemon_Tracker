@@ -190,13 +190,15 @@ def page_neighbours(cards: Sequence[Card], known: Sequence[Card], limit: int) ->
 
 
 def page_set(assessments: Sequence[_Assessment]) -> uuid.UUID | None:
-    """Set der Binderseite: das Set der meisten sicher erkannten Zellen – wenn es mindestens
-    :data:`PAGE_SET_MIN_CELLS` sind und die Mehrheit der sicheren Zellen."""
+    """Set der Binderseite – nur wenn die Seite selbst es zeigt: mindestens
+    :data:`PAGE_SET_MIN_CELLS` sicher erkannte Zellen aus einem Set und mehr als zwei Drittel
+    aller sicheren Zellen. Gemischte Seiten (Karten ohne Bezug zueinander) bekommen keins –
+    dort wird jede Zelle wie ein Einzelscan erkannt."""
     sets = Counter(a.evaluation.ranked[0].card.set_id for a in assessments if a.confident)
     if not sets:
         return None
     ((set_id, count),) = sets.most_common(1)
-    if count < PAGE_SET_MIN_CELLS or count * 2 <= sum(sets.values()):
+    if count < PAGE_SET_MIN_CELLS or count * 3 <= sum(sets.values()) * 2:
         return None
     return set_id
 
