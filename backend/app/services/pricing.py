@@ -227,9 +227,15 @@ class PriceService:
         für die tägliche Aktualisierung vor."""
         report = RefreshReport()
         now = self._now()
-        # Die Quellen (TCGdex, PriceCharting, Plug-ins) kennen nur Pokémon; andere Spiele
-        # bekommen ihre Werte allein aus dem Cardmarket-Preisführer.
-        providers = self._providers if card.card_set.game == Game.POKEMON.value else [GUIDE_ONLY]
+        # TCGdex und Plug-ins kennen nur Pokémon. Andere Spiele bekommen ihre Werte aus dem
+        # Cardmarket-Preisführer – plus jede Quelle, die das Spiel ausdrücklich kann
+        # (``games``, z. B. PriceCharting für Slabs).
+        game = card.card_set.game
+        providers = (
+            self._providers
+            if game == Game.POKEMON.value
+            else [GUIDE_ONLY, *(p for p in self._providers if game in getattr(p, "games", ()))]
+        )
         for provider in providers:
             if getattr(provider, "fallback_only", False) and not await self._needs_fallback(card):
                 report.outcomes[provider.name] = "not_needed"  # Cardmarket hat einen Preis
@@ -350,7 +356,7 @@ class PriceService:
             )
             if english is not None:
                 name, set_name = english.name, english.card_set.name
-        if name is None:
+        if name is None and card.card_set.game == Game.POKEMON.value:
             name = translate_card_name(card.name, card.language, target="en")
         # Bekannte Produktseite (Set-Import Korea/China oder frühere Suche) → kein Suchen.
         product_url = await self._session.scalar(

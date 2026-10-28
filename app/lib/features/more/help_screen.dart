@@ -8,6 +8,15 @@ typedef _Topic = ({IconData icon, String title, List<String> steps});
 
 const List<_Topic> _topics = [
   (
+    icon: Icons.swap_horiz,
+    title: 'Pokémon und One Piece',
+    steps: [
+      'Oben auf Übersicht, Sammlung, Suche und Sets: „Alle · Pokémon · One Piece“. Die Wahl bleibt gespeichert.',
+      'One Piece gibt es auf Englisch und Japanisch – mit Preisen von Cardmarket, Slabs mit US-Preisen von PriceCharting.',
+      'Parallel- und Reprint-Fassungen sind eigene Karten („Roronoa Zoro (Parallel)“). Der Scanner unterscheidet sie am Bild.',
+    ],
+  ),
+  (
     icon: Icons.style_outlined,
     title: 'Deine Karten bearbeiten',
     steps: [
@@ -31,7 +40,7 @@ const List<_Topic> _topics = [
     icon: Icons.search,
     title: 'Suchen und schnell hinzufügen',
     steps: [
-      'Deutsch oder Englisch, mit Nummer („nachtara 215“) oder Setkürzel („PFL077“).',
+      'Deutsch oder Englisch, mit Nummer („nachtara 215“) oder Setkürzel („PFL077“). One Piece mit der Kartennummer („OP01-001“).',
       '„+“ neben einem Treffer: sofort 1× Near Mint in die Sammlung. Lange drücken: Reverse Holo, Details, Merkliste.',
       'Grün „✓ In deiner Sammlung“: so oft hast du die Karte schon – und in welchem Ordner.',
     ],

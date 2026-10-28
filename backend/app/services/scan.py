@@ -66,8 +66,6 @@ from app.services.scan_scoring import (
 log = structlog.get_logger(__name__)
 
 MAX_ALTERNATIVES = 4
-# Der Scanner erkennt (noch) nur Pokémon – One Piece folgt in Phase 8.5.
-SCAN_GAME = Game.POKEMON.value
 NUMBER_QUERY_LIMIT = 300
 NAME_QUERY_LIMIT = 60
 NAME_QUERIES = 6
@@ -203,7 +201,19 @@ class ScanService:
         cards: list[Card] = []
         set_codes = sorted(text.set_codes)
         languages = list(text.language.languages)
-        for number in sorted({hit.number for hit in text.numbers}):
+        onepiece = sorted({hit.number for hit in text.numbers if hit.source == "onepiece"})
+        if onepiece:
+            # Die One-Piece-Nummer enthält das Set („OP01-001“) – kein weiteres Eingrenzen nötig.
+            cards += (
+                await self.session.scalars(
+                    select(Card)
+                    .join(CardSet, Card.set_id == CardSet.id)
+                    .where(Card.number_norm.in_(onepiece), CardSet.game == Game.ONEPIECE.value)
+                    .order_by(CardSet.release_date.desc().nulls_last())
+                    .limit(NUMBER_QUERY_LIMIT)
+                )
+            ).unique()
+        for number in sorted({hit.number for hit in text.numbers if hit.source != "onepiece"}):
             totals = sorted(
                 {hit.total for hit in text.numbers if hit.number == number and hit.total}
             )
@@ -219,7 +229,7 @@ class ScanService:
             statement = (
                 select(Card)
                 .join(CardSet, Card.set_id == CardSet.id)
-                .where(Card.number_norm == number, CardSet.game == SCAN_GAME)
+                .where(Card.number_norm == number, CardSet.game == Game.POKEMON.value)
                 .order_by(CardSet.release_date.desc().nulls_last())
                 .limit(NUMBER_QUERY_LIMIT)
             )
@@ -244,7 +254,7 @@ class ScanService:
             statement = (
                 select(Card)
                 .join(CardSet, Card.set_id == CardSet.id)
-                .where(or_(*conditions), CardSet.game == SCAN_GAME)
+                .where(or_(*conditions))
                 .order_by(CardSet.release_date.desc().nulls_last())
                 .limit(NAME_QUERY_LIMIT)
             )

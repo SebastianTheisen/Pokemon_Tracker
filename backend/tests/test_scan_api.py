@@ -923,3 +923,91 @@ async def test_reprint_with_same_number_is_told_apart_by_stamp(
     assert "Druck per Bildvergleich bestimmt" in " | ".join(stamped["best"]["reasons"])
     assert stamped["confident"] is True
     assert _best(plain) == ("dp6-43", "de")
+
+
+# ------------------------------------------------------------------ One Piece
+
+
+async def _onepiece_cards(
+    session_factory: async_sessionmaker[AsyncSession], *, parallel: bool
+) -> None:
+    """Zoro OP01-001 (EN) – auf Wunsch zusätzlich die Parallel-Fassung (gleiche Nummer)."""
+    async with session_factory() as session:
+        card_set = CardSet(
+            external_id="op-OP01",
+            language="en",
+            game="onepiece",
+            name="Romance Dawn",
+            card_count_official=121,
+            release_date=date(2022, 12, 2),
+        )
+        session.add(card_set)
+        await session.flush()
+        for suffix in ("", "_p1") if parallel else ("",):
+            session.add(
+                Card(
+                    external_id=f"op-OP01-001{suffix}",
+                    language="en",
+                    set_id=card_set.id,
+                    number="OP01-001",
+                    number_norm="OP1001",
+                    name="Roronoa Zoro" + (" (Parallel)" if suffix else ""),
+                )
+            )
+        await session.commit()
+
+
+async def test_one_piece_card_found_by_its_printed_number(
+    client: AsyncClient,
+    admin: Account,
+    reader: ScriptedReader,
+    catalog: CardMap,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    await _onepiece_cards(session_factory, parallel=False)
+    reader.script(
+        "06.jpg", lines("Roronoa Zoro", "LEADER", "Supernovas/Straw Hat Crew", "0P01-001")
+    )
+
+    result = await _scan(client, admin, photo_bytes("06.jpg"))
+
+    assert _best(result) == ("op-OP01-001", "en")
+    assert result["confident"] is True
+    assert "Kartennummer OP01-001 passt" in result["best"]["reasons"]
+
+
+async def test_one_piece_parallel_needs_the_image(
+    client: AsyncClient,
+    admin: Account,
+    reader: ScriptedReader,
+    catalog: CardMap,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Normale und Parallel-Fassung haben Nummer und Namen gemeinsam – ohne Bildabgleich
+    darf der Scanner nicht raten, bietet aber beide an."""
+    await _onepiece_cards(session_factory, parallel=True)
+    reader.script("06.jpg", lines("Roronoa Zoro", "OP01-001"))
+
+    result = await _scan(client, admin, photo_bytes("06.jpg"))
+
+    offered = {result["best"]["card"]["external_id"]} | {
+        alternative["card"]["external_id"] for alternative in result["alternatives"]
+    }
+    assert {"op-OP01-001", "op-OP01-001_p1"} <= offered
+    assert result["confident"] is False
+
+
+async def test_pokemon_scan_ignores_one_piece_numbers(
+    client: AsyncClient,
+    admin: Account,
+    reader: ScriptedReader,
+    catalog: CardMap,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    await _onepiece_cards(session_factory, parallel=True)
+    reader.script("06.jpg", lines("ルギア", "HP80", "たねポケモン", "142/103"))
+
+    result = await _scan(client, admin, photo_bytes("06.jpg"))
+
+    assert _best(result) == ("PCG10-142", "ja")
+    assert result["confident"] is True

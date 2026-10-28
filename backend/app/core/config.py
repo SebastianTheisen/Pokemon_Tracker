@@ -309,6 +309,8 @@ class Settings(BaseSettings):
             "www.pokemon-card.com",
             "asia.pokemon-card.com",
             "storage.googleapis.com",  # Bilder von PriceCharting (Korea, China)
+            "en.onepiece-cardgame.com",  # One Piece (offizielle Kartenlisten EN/JP)
+            "www.onepiece-cardgame.com",
         ],
         description="Nur von diesen Hosts werden Katalogbilder geladen (Schutz vor SSRF).",
     )
@@ -316,10 +318,8 @@ class Settings(BaseSettings):
         default_factory=lambda: [
             "tcgplayer-cdn.tcgplayer.com",
             "product-images.tcgplayer.com",
-            "en.onepiece-cardgame.com",  # One-Piece-Kartenbilder (offizielle Kartenliste)
-            "www.onepiece-cardgame.com",
         ],
-        description="Zusätzlich für die Bildauslieferung erlaubt (Sealed, One Piece).",
+        description="Zusätzlich für die Bildauslieferung erlaubt (Bilder versiegelter Produkte).",
     )
 
     @model_validator(mode="after")

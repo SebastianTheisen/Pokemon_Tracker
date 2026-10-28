@@ -59,11 +59,19 @@ _LANGUAGE_HINTS = (
 )
 _NAME_LINE = re.compile(r"^[A-Z][A-Z .'/&-]{2,40}$")
 _NOT_A_NAME = re.compile(
-    r"POKEMON|POKÉMON|GEM|MINT|PRISTINE|PSA|BGS|CGC|BECKETT|AUTHENTIC|HOLO$|^\d|CERT"
+    r"POKEMON|POKÉMON|ONE PIECE|GEM|MINT|PRISTINE|PSA|BGS|CGC|BECKETT|AUTHENTIC|HOLO$|^\d|CERT"
     r"|BASIC|BASIS|STAGE|WEAKNESS|RESISTANCE|RETREAT|ABILITY|TRAINER"
 )
 _MAX_GRADE = 10.0
-_HEADER = re.compile(r"(?:19|20)\d{2}\s+POK[EÉ]MON")
+_HEADER = re.compile(r"(?:19|20)\d{2}\s+(?:POK[EÉ]MON|ONE\s?PIECE)")
+# Kopfzeile mit Spiel und Set („2022 POKEMON JPN.SWSH“, „2023 ONE PIECE JAPANESE OP05“).
+_GAME_WORDS = ("POKEMON", "POKÉMON", "ONE PIECE", "ONEPIECE")
+
+
+def _is_game_line(text: str) -> bool:
+    return any(word in text for word in _GAME_WORDS)
+
+
 _CERT_NUMBER = re.compile(r"^\d{8,10}$")
 _BLACK_LABEL = re.compile(r"BLACK\s*LABEL")
 _GRADE_SEARCH_DISTANCE = 3
@@ -134,12 +142,12 @@ def _find_name(texts: Sequence[str]) -> str | None:
     """Kartenname auf dem Label: „FA/LUGIA V“ → „LUGIA V“ (Zusatz vor dem Schrägstrich weg).
 
     Bevorzugt Zeilen mit Schrägstrich (typisch für PSA), sonst die erste Großbuchstaben-Zeile
-    nach der Zeile mit „POKEMON“ (Jahr + Spiel + Set).
+    nach der Zeile mit dem Spiel („POKEMON“ bzw. „ONE PIECE“, dazu Jahr und Set).
     """
     after_header = False
     fallback: str | None = None
     for text in texts:
-        if "POKEMON" in text or "POKÉMON" in text:
+        if _is_game_line(text):
             after_header = True
             continue
         if not _NAME_LINE.match(text) or _NOT_A_NAME.search(text):
@@ -171,7 +179,7 @@ def parse_slab(lines: Sequence[OcrLine]) -> SlabLabel | None:
         (
             code
             for text in texts
-            if "POKEMON" in text or "POKÉMON" in text
+            if _is_game_line(text)
             for keyword, code in _LANGUAGE_HINTS
             if re.search(rf"(?<![A-Z]){keyword}(?![A-Z])", text)
         ),

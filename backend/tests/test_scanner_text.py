@@ -36,6 +36,10 @@ from tests.scan_helpers import lines
         ("NO 042", [("42", None, None)]),
         ("#110", [("110", None, None)]),
         ("SWSH050", [("SWSH50", None, None)]),
+        ("OP01-001", [("OP1001", None, None)]),  # One Piece: Set + Nummer
+        ("0P05-1I9 SR", [("OP5119", None, None)]),  # OCR: 0 statt O, I statt 1
+        ("ST10 005", [("ST10005", None, None)]),
+        ("P-001", [("P1", None, None)]),
         ("HP220", []),
         ("LV.15 HP50", []),
         ("2022 POKEMON JPN.SWSH", []),
@@ -239,3 +243,28 @@ def test_black_label_and_no_false_psa() -> None:
     # Ohne Kopfzeile oder Zertifikatsnummer bleibt es keine PSA-Erkennung.
     assert parse_slab(lines("GEM MT", "10", "154634082")) is None
     assert parse_slab(lines("2025 POKEMON M2a JP", "GEM MT", "10")) is None
+
+
+def test_one_piece_slab_label() -> None:
+    features = extract_text_features(
+        lines(
+            "2023 ONE PIECE JAPANESE",
+            "OP05-AWAKENING OF THE NEW ERA",
+            "MONKEY.D.LUFFY",
+            "#OP05-119",
+            "GEM MT",
+            "10",
+            "81234567",
+            "PSA",
+        )
+    )
+
+    assert features.slab is not None
+    assert (features.slab.company, features.slab.grade, features.slab.cert) == (
+        "PSA",
+        "10",
+        "81234567",
+    )
+    assert features.slab.language_hint == "ja"
+    assert features.names[0].text == "MONKEY.D.LUFFY"
+    assert "OP5119" in [hit.number for hit in features.numbers]

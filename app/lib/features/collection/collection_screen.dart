@@ -389,7 +389,11 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
         count: summary.items,
       ),
       filename: 'kartenkiste-sammlung.png',
-      text: 'Meine Pokémon-Sammlung in der Kartenkiste',
+      text: switch (ref.read(gameFilterProvider)) {
+        Game.onepiece => 'Meine One-Piece-Sammlung in der Kartenkiste',
+        Game.pokemon => 'Meine Pokémon-Sammlung in der Kartenkiste',
+        null => 'Meine Sammlung in der Kartenkiste',
+      },
     );
   }
 

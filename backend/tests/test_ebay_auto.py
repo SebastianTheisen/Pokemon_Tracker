@@ -129,11 +129,13 @@ async def _card(
     number: str = "183",
     language: str = "de",
     official: int | None = 165,
+    game: str = "pokemon",
 ) -> Card:
     async with factory() as session:
         card_set = CardSet(
             external_id=f"sv03.5-{language}-{number}",
             language=language,
+            game=game,
             name="151",
             card_count_official=official,
         )
@@ -170,6 +172,11 @@ async def test_search_for_raw_graded_and_japanese_cards(
     assert build_search(raw, "BGS 10 BL").keywords == "Glurak ex 183/165 BGS 10 Black Label"
     assert build_search(japanese, None).keywords == "Glurak ex 006/165 japanese"
     assert build_search(promo, None).keywords == "Pikachu SVP085"
+    parallel = await _card(
+        session_factory, name="Roronoa Zoro (Parallel)", number="OP01-001", language="en",
+        official=121, game="onepiece",
+    )  # fmt: skip
+    assert build_search(parallel, "PSA 10").keywords == "Roronoa Zoro OP01-001 PSA 10"
     assert build_search(raw, None).page_url.startswith(
         "https://www.ebay.de/sch/i.html?_nkw=Glurak+ex+183%2F165+-PSA"
     )

@@ -46,7 +46,15 @@ GRADE_METRICS = ("grade_7", "grade_8", "grade_9", "grade_9_5", "psa_10")
 LANGUAGE_MARKERS = {"ja": "japanese", "ko": "korean", "zh-tw": "chinese", "zh-cn": "chinese"}
 _FOREIGN = ("japanese", "korean", "chinese", "german", "french", "italian", "spanish")
 _WORD = re.compile(r"[a-z0-9]+")
-_STOP = frozenset({"pokemon", "the", "and", "of", *LANGUAGE_MARKERS.values()})
+_STOP = frozenset({"pokemon", "one", "piece", "the", "and", "of", *LANGUAGE_MARKERS.values()})
+# Rubrik („console“) je Spiel: „Pokemon Evolving Skies“, „One Piece Romance Dawn“ (in Adressen
+# mit Bindestrichen – beides wird gleich behandelt).
+CONSOLE_PREFIXES = {"pokemon": "pokemon", "onepiece": "one piece"}
+# Fassung im Kartennamen (One Piece): „Roronoa Zoro (Parallel)“ – PriceCharting schreibt sie
+# in eckige Klammern: „Roronoa Zoro [Alternate Art] #OP01-001“.
+_VARIANT_SUFFIX = re.compile(r"\s*\((Parallel|Reprint)\)$")
+_VARIANT_TAG = re.compile(r"\[([^\]]+)\]")
+_PARALLEL_WORDS = ("alternate", "parallel", "manga", "special", "sp ", "treasure")
 DATE_WINDOW_DAYS = 120
 SEARCH_URL = "https://www.pricecharting.com/search-products?type=prices&q="
 
@@ -84,9 +92,24 @@ def search_query(card: CardRef) -> str | None:
     """Suchbegriff wie auf PriceCharting: englischer Name, Nummer, Sprachzusatz."""
     if not card.english_name:
         return None
-    number = normalize_number(card.number) or card.number
+    name = _VARIANT_SUFFIX.sub("", card.english_name)
+    # One Piece: die Nummer wie gedruckt („OP01-001“) – so steht sie bei PriceCharting.
+    number = card.number if card.game != "pokemon" else normalize_number(card.number)
     marker = LANGUAGE_MARKERS.get(card.language, "")
-    return " ".join(part for part in (card.english_name, number, marker.title()) if part)
+    return " ".join(part for part in (name, number or card.number, marker.title()) if part)
+
+
+def _variant_fits(card: CardRef, item_name: str) -> bool:
+    """One Piece: Parallel-Fassung nur zu Einträgen mit Fassungs-Zusatz, normale Karte nur zu
+    Einträgen ohne. Pokémon: keine Einschränkung."""
+    if card.game == "pokemon":
+        return True
+    wanted = _VARIANT_SUFFIX.search(card.english_name or card.name)
+    tags = " ".join(_VARIANT_TAG.findall(item_name)).casefold() + " "
+    is_parallel = any(word in tags for word in _PARALLEL_WORDS)
+    if wanted is not None and wanted.group(1) == "Parallel":
+        return is_parallel
+    return not is_parallel
 
 
 @dataclass(frozen=True)
@@ -99,14 +122,17 @@ def _candidates(card: CardRef, items: Sequence[dict[str, Any]]) -> list[Match]:
     """Treffer mit passender Sprache, Nummer und Name, bewertet nach Set und Datum."""
     marker = LANGUAGE_MARKERS.get(card.language)
     number = normalize_number(card.number)
-    name_words = _words(card.english_name or "")
+    prefix = CONSOLE_PREFIXES.get(card.game, card.game)
+    name_words = _words(_VARIANT_SUFFIX.sub("", card.english_name or ""))
     key_word = max(name_words, key=len, default="")
     set_words = _words(card.english_set_name or card.set_name)
     matches = []
     for item in items:
-        console = str(item.get("console") or "").casefold()
+        console = str(item.get("console") or "").casefold().replace("-", " ")
         name = str(item.get("name") or "")
-        if not console.startswith("pokemon") or item.get("category") not in (None, "trading-card"):
+        if not console.startswith(prefix) or item.get("category") not in (None, "trading-card"):
+            continue
+        if not _variant_fits(card, name):
             continue
         if marker is not None and marker not in console:
             continue
@@ -209,6 +235,7 @@ class PriceChartingProvider:
     name = PRICECHARTING
     kind: PriceKind = "verified"
     fallback_only = True
+    games = ("pokemon", "onepiece")
     needs_context = True
     timeout_seconds = 45.0  # Apify-Lauf: Start + Suche dauern meist 5–15 s
 

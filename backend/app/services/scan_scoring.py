@@ -29,6 +29,7 @@ Sonst zeigt die App „Falsche Karte? Selbst suchen“ mit der Kandidatenliste.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
@@ -51,6 +52,7 @@ HINT_LANGUAGE_PENALTY = 0.30
 WEAK_LANGUAGE_PENALTY = 0.05
 TWIN_POINTS = 0.20
 _MIN_CONTAINED_RATIO = 0.6
+_VARIANT_SUFFIX = re.compile(r"\s*\((?:Parallel|Reprint)\)$")
 
 
 def name_similarity(names: Sequence[NameCandidate], card_name: str) -> float:
@@ -156,17 +158,24 @@ def score_text(
         if hit.number != card.number_norm:
             continue
         candidate.number_match = True
+        if hit.source == "onepiece":
+            # „OP01-001“ nennt Set und Nummer zugleich – zählt wie Nummer + Setcode.
+            candidate.set_code_match = True
+            reasons.append(f"Kartennummer {card.number} passt")
+            break
         if hit.total is not None and card_set.card_count_official == hit.total:
             candidate.total_match = True
             reasons.append(f"Nummer {hit.raw} passt (Set mit {hit.total} Karten)")
             break
-    if candidate.number_match and not candidate.total_match:
+    if candidate.number_match and not candidate.total_match and not candidate.set_code_match:
         reasons.append(f"Nummer {card.number} passt")
     set_code = card_set.external_id.casefold()
     if set_code in text.set_codes or set_code.replace("-", "") in text.set_codes:
         candidate.set_code_match = True
         reasons.append(f"Setcode {card_set.external_id}")
-    candidate.name_score = name_similarity(text.names, card.name)
+    # „Roronoa Zoro (Parallel)“: Der Zusatz steht nicht auf der Karte – die Fassung entscheidet
+    # der Bildabgleich.
+    candidate.name_score = name_similarity(text.names, _VARIANT_SUFFIX.sub("", card.name))
     if candidate.name_score >= MIN_NAME_SIMILARITY:
         reasons.append(f"Name ähnlich „{card.name}“ ({candidate.name_score:.0%})")
     candidate.language_penalty = language_penalty(card.language, text.language, language_hint)

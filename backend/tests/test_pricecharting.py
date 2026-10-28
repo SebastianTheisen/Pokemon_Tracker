@@ -15,7 +15,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
-from app.models import Card, CardSet, CollectionItem, GradingCompany, PricePoint
+from app.models import (
+    Card,
+    CardSet,
+    CmPrice,
+    CmProduct,
+    CollectionItem,
+    GradingCompany,
+    PricePoint,
+)
 from app.providers.apify import ApifyClient
 from app.providers.fx import EcbRates, FxError, parse_ecb
 from app.providers.pricing import CardRef
@@ -176,6 +184,7 @@ def apify_transport(
     items: list[dict[str, Any]],
     *,
     used: float = 1.0,
+    query: str = "Lugia V 110 Japanese",
     calls: list[str] | None = None,
     details: list[dict[str, Any]] | None = None,
 ) -> httpx.MockTransport:
@@ -196,7 +205,7 @@ def apify_transport(
             detail = "parsebird" in path
             payload = json.loads(request.content)
             if not detail:
-                assert payload["searchQueries"] == ["Lugia V 110 Japanese"]
+                assert payload["searchQueries"] == [query]
             body = {
                 "data": {
                     "id": "run1",
@@ -489,3 +498,97 @@ async def test_slab_details_are_stored_and_served(
         ("PSA 10", "2026-10-19", 1040.0),
     ]
     assert data["images"] == DETAIL["images"]
+
+
+# ------------------------------------------------------------------ One Piece
+
+ZORO = item("Roronoa Zoro #OP01-001", "One Piece Romance Dawn", "OP01-001", 2.5)
+ZORO_ALT = item("Roronoa Zoro [Alternate Art] #OP01-001", "One Piece Romance Dawn", "OP01-001", 60)
+ZORO_JP = item("Roronoa Zoro #OP01-001", "One Piece Japanese Romance Dawn", "OP01-001", 1.5)
+
+
+def zoro(**fields: Any) -> CardRef:
+    values: dict[str, Any] = {
+        "external_id": "op-OP01-001",
+        "language": "en",
+        "name": "Roronoa Zoro",
+        "number": "OP01-001",
+        "set_name": "Romance Dawn",
+        "english_name": "Roronoa Zoro",
+        "english_set_name": "Romance Dawn",
+        "release_date": date(2022, 12, 2),
+        "game": "onepiece",
+    }
+    return ref(**(values | fields))
+
+
+def test_one_piece_search_and_choice_respect_game_and_variant() -> None:
+    parallel = zoro(name="Roronoa Zoro (Parallel)", english_name="Roronoa Zoro (Parallel)")
+    pokemon_twin = item("Roronoa Zoro #OP01-001", "Pokemon Promo", "OP01-001", 1)
+
+    assert search_query(parallel) == "Roronoa Zoro OP01-001"
+    assert search_query(zoro(language="ja")) == "Roronoa Zoro OP01-001 Japanese"
+    items = [pokemon_twin, ZORO_ALT, ZORO_JP, ZORO]
+    assert choose(zoro(), items) is ZORO
+    assert choose(parallel, items) is ZORO_ALT
+    assert choose(zoro(language="ja"), items) is ZORO_JP
+    # Pokémon-Karten sehen nie One-Piece-Einträge (und umgekehrt).
+    assert choose(ref(english_name="Roronoa Zoro", number="OP01-001"), [ZORO]) is None
+
+
+async def test_one_piece_slab_gets_pricecharting_without_pokemon_sources(
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    client: AsyncClient,
+    register_user: RegisterUser,
+) -> None:
+    async with session_factory() as session:
+        card_set = CardSet(
+            external_id="op-OP01", language="en", game="onepiece", name="Romance Dawn",
+            release_date=date(2022, 12, 2),
+        )  # fmt: skip
+        session.add(card_set)
+        session.add(
+            CmProduct(
+                id_product=690368,
+                game="onepiece",
+                id_expansion=5229,
+                id_metacard=1,
+                name="Roronoa Zoro (OP01-001)",
+                id_category=1621,
+            )
+        )
+        session.add(CmPrice(id_product=690368, game="onepiece", metrics={"trend": 2.31},
+                            updated_at=NOW))  # fmt: skip
+        await session.flush()
+        card = Card(
+            external_id="op-OP01-001", language="en", set_id=card_set.id, number="OP01-001",
+            number_norm="OP1001", name="Roronoa Zoro", cardmarket_product_id=690368,
+        )  # fmt: skip
+        session.add(card)
+        await session.commit()
+    user = await register_user("zoro@example.com")
+    added = await client.post(
+        "/api/v1/collection/items",
+        json={"card_id": str(card.id), "grading_company": "PSA", "grade": "10"},
+        headers=user.headers,
+    )
+    assert added.status_code == 201, added.text
+    tcgdex = FakeProvider()
+    pricecharting = provider(
+        settings, apify_transport([ZORO_ALT, ZORO], query="Roronoa Zoro OP01-001")
+    )
+
+    async with session_factory() as session:
+        loaded = await session.get_one(Card, card.id)
+        report = await (await _service(session, settings, tcgdex, pricecharting)).refresh(loaded)
+        await session.commit()
+        sources = set(
+            await session.scalars(select(PricePoint.source).where(PricePoint.card_id == card.id))
+        )
+
+    # Der Preisführer-Wert kam schon beim Hinzufügen (frisch), PriceCharting jetzt für den Slab.
+    assert set(report.outcomes) == {"cardmarket-guide", "pricecharting"}
+    assert report.outcomes["pricecharting"] == "fetched"
+    assert tcgdex.calls == []
+    assert sources == {"cardmarket", "pricecharting"}

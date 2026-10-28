@@ -11,6 +11,7 @@ Beispiele aus dem Testsatz (``scanner_testset/``):
 * ``"512 F 110/098 SR"`` → Nummer 110, Setgröße 98, Setcode-Kandidat ``s12`` („5“ statt „S“)
 * ``"No.007"`` → Nummer 7 (alte Karten ohne Setnummer)
 * ``"#110"`` → Nummer 110 (Slab-Label)
+* ``"OP01-001"`` → One Piece: Set und Nummer in einem (unten rechts auf der Karte)
 """
 
 from __future__ import annotations
@@ -207,6 +208,14 @@ _FRACTION = re.compile(
 _NO_NUMBER = re.compile(r"(?<![A-Za-z])N[oO0º°]\s*[.:]?\s*(\d{1,3})(?![0-9])")
 _HASH_NUMBER = re.compile(r"#\s*(\d{1,3})(?![0-9])")
 _PROMO_NUMBER = re.compile(r"(?<![A-Za-z0-9])(SWSH|SM|XY|SVP|SV|BW|HGSS|DP)\s?-?(\d{2,3})(?![0-9])")
+# One Piece: „OP01-001“, „ST10-005“, „EB01-061“, „PRB01-001“, Promos „P-001“. Die OCR liest
+# „0P“ statt „OP“, „5T“ statt „ST“, „E8“ statt „EB“ und „O“ statt „0“ in den Ziffern.
+_ONEPIECE_NUMBER = re.compile(
+    r"(?<![A-Za-z0-9])(?P<code>PRB|OP|0P|ST|5T|EB|E8)\s?(?P<set>[0-9OolI]{2})\s?[-\u2010\u2013\u2014]?\s?"
+    r"(?P<num>[0-9OolI]{3})(?![0-9A-Za-z])"
+    r"|(?<![A-Za-z0-9])P\s?[-\u2010\u2013\u2014]\s?(?P<promo>[0-9OolI]{3})(?![0-9A-Za-z])"
+)
+_ONEPIECE_CODE_FIX = {"0P": "OP", "5T": "ST", "E8": "EB"}
 
 
 def _fix_loose_fractions(text: str) -> str:
@@ -256,7 +265,19 @@ def parse_numbers(text: str) -> list[NumberHit]:
         NumberHit(number=normalize_number(m.group(1) + m.group(2)), raw=m.group(0), source="promo")
         for m in _PROMO_NUMBER.finditer(text)
     ]
+    hits += [onepiece_hit(m) for m in _ONEPIECE_NUMBER.finditer(text)]
     return [hit for hit in hits if hit.number not in {"", "0"}]
+
+
+def onepiece_hit(match: re.Match[str]) -> NumberHit:
+    """One-Piece-Nummer aus einem Treffer von :data:`_ONEPIECE_NUMBER` (OCR-Fehler bereinigt)."""
+    if match.group("promo") is not None:
+        printed = f"P-{match.group('promo').translate(_DIGIT_FIX)}"
+    else:
+        code = _ONEPIECE_CODE_FIX.get(match.group("code"), match.group("code"))
+        digits = match.group("set").translate(_DIGIT_FIX)
+        printed = f"{code}{digits}-{match.group('num').translate(_DIGIT_FIX)}"
+    return NumberHit(number=normalize_number(printed), raw=match.group(0), source="onepiece")
 
 
 # ------------------------------------------------------------------ Setcodes

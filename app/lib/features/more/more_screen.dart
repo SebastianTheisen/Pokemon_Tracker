@@ -173,7 +173,8 @@ class MoreScreen extends ConsumerWidget {
             child: Text(
               '$appName · privat, nur für Freunde.\n'
               'Hinweis: Admins können Sammlungen lesend einsehen; jeder Zugriff wird protokolliert.\n'
-              'Kartenbilder und -namen gehören den Rechteinhabern (The Pokémon Company). '
+              'Kartenbilder und -namen gehören den Rechteinhabern (The Pokémon Company; '
+              'One Piece: Eiichiro Oda/Shueisha, Bandai). '
               'Preise: Cardmarket, PriceCharting, TCGdex.',
               style: TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
