@@ -392,7 +392,7 @@ class CollectrImport:
                 CmProduct.id_product.in_(set(product_of.values()))
             )
         )
-        name_of: dict[int, str] = dict(rows.tuples().all())
+        name_of: dict[int, str] = {row[0]: row[1] for row in rows.all()}
         return {
             card_id: name_of[product]
             for card_id, product in product_of.items()
