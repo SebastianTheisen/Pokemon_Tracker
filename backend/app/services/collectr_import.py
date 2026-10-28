@@ -66,9 +66,11 @@ MATCHED_SCORE = 0.75  # ab hier gilt ein Treffer als zugeordnet …
 MATCHED_LEAD = 0.1  # … wenn der Zweite so weit dahinter liegt
 CHECK_SCORE = 0.35  # darunter taugt ein Kandidat nicht einmal zum Prüfen
 
-_JP_TAG = re.compile(r"\s*\(JP\)\s*$", re.IGNORECASE)
+# „Espeon V (JP)“, „Sun & Moon Promos (JP)“, aber auch „Scarlet & Violet Promo JP“
+_JP_TAG = re.compile(r"\s*(?:\(JP\)|\bJP)\s*$", re.IGNORECASE)
 _QTY = re.compile(r"^Qty:\s*(\d+)$", re.IGNORECASE)
-_PRICE = re.compile(r"^[+\-−▲▼]?\s*\$|%\)?$")
+# Preise in jeder Währung, die Collectr anbietet ($, €, £, ¥ …) und Veränderung in %
+_PRICE = re.compile(r"^[+\-−▲▼]?\s*[$€£¥₩]|^[+\-−]?\s*[\d.,]+\s*[$€£¥₩]$|%\)?$")
 _NUMBER = re.compile(r"^#?([A-Za-z]{0,6}-?\d{1,4}[A-Za-z]?)(?:/([A-Za-z0-9-]+))?$")
 _KEY = re.compile(r"[^a-z0-9]+")
 _VARIANT_ONLY = re.compile(

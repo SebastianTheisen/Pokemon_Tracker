@@ -109,6 +109,33 @@ def test_parse_row_joins_split_lines() -> None:
     assert split is not None and (split.number, split.total) == ("232", "091")
 
 
+def test_parse_row_with_euro_prices_and_jp_suffix() -> None:
+    """Showcase auf Euro umgestellt; Setname mit „JP“ ohne Klammern (Screenshot 28.10.)."""
+    row = parse_row(
+        [
+            "Celebration Fanfare (JP)",
+            "Scarlet & Violet Promo JP",
+            "Common • 110/SV-P",
+            "Near Mint • Normal",
+            "€168.92",
+            "€0.00 (0,00%)",
+            "Qty: 1",
+        ]
+    )
+    assert row is not None
+    assert (row.name, row.set_name, row.japanese) == (
+        "Celebration Fanfare",
+        "Scarlet & Violet Promo",
+        True,
+    )
+    assert (row.number, row.total, row.condition) == ("110", "SV-P", "NM")
+    lillie = parse_row(
+        ["Lillie (JP)", "Sun & Moon Promos (JP)", "Promo • 080/SM-P", "Near Mint • Holofoil",
+         "€379.41", "-€25.32 (-6,26%)", "Qty: 1"]
+    )  # fmt: skip
+    assert lillie is not None and (lillie.number, lillie.total) == ("080", "SM-P")
+
+
 def test_parse_row_ignores_tiles_without_number() -> None:
     assert parse_row(["Login to add", "Track this card in your collection"]) is None
     assert parse_row([]) is None
