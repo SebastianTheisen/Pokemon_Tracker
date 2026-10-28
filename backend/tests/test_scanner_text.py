@@ -93,6 +93,11 @@ def test_normalize_and_keys() -> None:
     assert name_base("pikachu") == "pikachu"  # lateinische Namen bleiben
     assert clean_name("BASIS Glurak KP120") == "Glurak"
     assert clean_name("HP80 ルギア") == "ルギア"
+    # Japanisch ohne gelesenes „HP“: Zahl klebt am Namen (Screenshot 28.10.)
+    assert clean_name("ルファイヤーV220") == "ルファイヤーV"
+    assert clean_name("ゼラオラV 210") == "ゼラオラV"
+    assert clean_name("リザードン120") == "リザードン"
+    assert clean_name("ポリゴン2") == "ポリゴン2"  # eine Ziffer gehört zum Namen
 
 
 @pytest.mark.parametrize(

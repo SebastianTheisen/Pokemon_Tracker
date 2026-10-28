@@ -328,6 +328,12 @@ def parse_set_codes(texts: Iterable[str], numbers: Iterable[NumberHit] = ()) -> 
 
 _HP_SUFFIX = re.compile(r"\s*(?:KP|HP|PV|LV\.?)\s*\d+.*$", re.IGNORECASE)
 _HP_PREFIX = re.compile(r"^(?:KP|HP|PV)\s*\d+\s*", re.IGNORECASE)
+# Japanische Karten: das kleine „HP“ fehlt in der OCR oft, die Zahl klebt dann am Namen
+# („ルファイヤーV220“). Zwei bis drei Ziffern nach Kana/Kanji (ggf. nach dem Logo) fallen
+# weg – eine einzelne Ziffer gehört zum Namen („ポリゴン2“).
+_CJK_HP_TAIL = re.compile(
+    r"(?<=[^\x00-\x7f])((?:VMAX|VSTAR|V|GX|ex)?)\s*\d{2,3}$", re.IGNORECASE
+)
 _STAGE_PREFIX = re.compile(
     r"^(?:BASIS|BASIC|PHASE\s*\d|STAGE\s*\d|たね|[12]進化|[12]退化|1化)\s*", re.IGNORECASE
 )
@@ -408,7 +414,8 @@ def clean_name(text: str) -> str:
     text = normalize_text(text)
     text = _STAGE_PREFIX.sub("", text)
     text = _HP_PREFIX.sub("", text)
-    return _HP_SUFFIX.sub("", text).strip()
+    text = _HP_SUFFIX.sub("", text).strip()
+    return _CJK_HP_TAIL.sub(r"\1", text).strip()
 
 
 def name_candidate(line: OcrLine) -> NameCandidate | None:
