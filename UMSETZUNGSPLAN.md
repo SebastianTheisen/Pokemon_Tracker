@@ -834,6 +834,12 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 - [x] 8.6 Slab-Preise One Piece über PriceCharting (Rubrik „One Piece …“, Parallel ↔ „[Alternate Art]“, Japanisch ↔ „Japanese“); Pokémon-Quellen werden für One Piece weiterhin nicht gefragt
 - [x] 8.7 Gleichbehandlung: Hilfe („Pokémon und One Piece“, Suche „OP01-001“), Teilen-Text je Spiel, Rechtehinweis, App-Beschreibung; eBay-Suche ohne „(Parallel)“-Zusatz
 
+### Nachbesserung 28.10. (Rückmeldung Nutzer)
+
+- [x] Binder-Scan: Glanzstreifen verdeckten Kartenumrisse → Karten fielen weg, Reihe/Spalte verrutschten. Raster wird jetzt aus den gefundenen Karten vervollständigt, ohne Umrisse wird erst die Seite im Foto gesucht. Messung synthetisch (`docs/phase8/binder.md`, `deploy/spikes/binder_bench.py`): 62/87 → 86/87. Offen: 2–3 echte Fotos von Binderseiten
+- [x] Slabs als Slab: gegradete Karten erscheinen in Raster, Startseite und Liste in einer Acryl-Hülle mit Etikett der Firma (PSA rot/weiß, Beckett silber bzw. Black Label gold/schwarz, CGC blau, SGC schwarz, TAG, ACE) mit Einstufung („GEM MT“) und Note – nachempfunden, ohne Logos
+- [x] Nebenbei gefunden: Standardordner wurde bei parallelen ersten Anfragen doppelt angelegt → 500. Jetzt konfliktfrei (Test reproduziert den Fehler vorher)
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

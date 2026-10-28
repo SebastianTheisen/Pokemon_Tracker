@@ -13,6 +13,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
+import '../../widgets/slab_frame.dart';
 import '../../widgets/range_chips.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/value_chart.dart';
@@ -764,7 +765,7 @@ class _ItemRow extends StatelessWidget {
           isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
           color: isSelected ? AppColors.primary : AppColors.textMuted,
         ),
-        null => CardImage(url: item.image, width: 40, contain: item.card == null),
+        null => itemImage(item, width: 40),
       },
       title: Row(
         children: [
@@ -811,7 +812,7 @@ class _ItemTile extends ConsumerWidget {
     return ListTile(
       onTap: item.card == null ? null : () => context.push('/card/${item.card!.id}'),
       onLongPress: readOnly ? null : () => _edit(context, ref),
-      leading: CardImage(url: item.image, width: 40, contain: item.card == null),
+      leading: itemImage(item, width: 40),
       title: Row(
         children: [
           Flexible(child: Text(item.title, overflow: TextOverflow.ellipsis)),

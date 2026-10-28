@@ -10,6 +10,7 @@ import 'package:kartenkiste/core/prefs.dart';
 import 'package:kartenkiste/core/push/push_bridge.dart';
 import 'package:kartenkiste/core/theme.dart';
 import 'package:kartenkiste/router.dart';
+import 'package:kartenkiste/widgets/slab_frame.dart';
 import 'package:kartenkiste/widgets/value_chart.dart';
 import 'package:kartenkiste/models/json.dart';
 
@@ -30,6 +31,7 @@ void main() {
   variantTests();
   psaTests();
   gameTests();
+  slabTests();
 
   testWidgets('ohne Sitzung: Anmeldung, falsches und richtiges Passwort', (tester) async {
     final api = FakeApi();
@@ -1745,5 +1747,37 @@ void gameTests() {
     expect(find.byKey(const Key('set-language-de')), findsNothing);
     expect(api.calls, contains('catalogSets:en'));
     expect(api.gameCalls, contains('catalogSets:onepiece'));
+  });
+}
+
+void slabTests() {
+  test('Slab-Etikett: Einstufung und Farben je Firma', () {
+    expect(gradeDescriptor('PSA', '10'), 'GEM MT');
+    expect(gradeDescriptor('PSA', '8'), 'NM-MT');
+    expect(gradeDescriptor('BGS', '9.5'), 'GEM MINT');
+    expect(gradeDescriptor('BGS', '10 BL'), 'BLACK LABEL');
+    expect(gradeDescriptor('CGC', '10'), 'PRISTINE');
+    expect(slabStyle('PSA', '10').label, 'PSA');
+    expect(slabStyle('BGS', '10 BL').background, const Color(0xFF111111));
+    expect(slabStyle('OTHER', '9').label, 'GRADED');
+  });
+
+  testWidgets('Gegradete Karten erscheinen im Raster als Slab mit Etikett', (tester) async {
+    final api = FakeApi(loggedIn: true)
+      ..itemsOverride = [
+        {...itemJson(id: 's1'), 'kind': 'graded', 'grading_company': 'PSA', 'grade': '10'},
+        {...itemJson(id: 's2'), 'kind': 'graded', 'grading_company': 'BGS', 'grade': '9.5'},
+        itemJson(id: 'r1', total: '12.00'),
+      ];
+    await pumpApp(tester, api);
+    await tester.tap(find.byKey(const Key('tab-Sammlung')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('slab-PSA')), findsOneWidget);
+    expect(find.byKey(const Key('slab-BGS')), findsOneWidget);
+    expect(find.text('GEM MT'), findsOneWidget);
+    expect(find.text('BECKETT'), findsOneWidget);
+    expect(find.text('9.5'), findsOneWidget);
+    expect(tester.takeException(), isNull); // kein Überlauf im Etikett
   });
 }

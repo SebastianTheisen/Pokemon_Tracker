@@ -9,6 +9,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common.dart';
+import '../../widgets/slab_frame.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/value_chart.dart';
 import '../alerts/alerts_screen.dart';
@@ -659,7 +660,7 @@ class ItemThumb extends StatelessWidget {
               children: [
                 Opacity(
                   opacity: selected == false ? 0.55 : 1,
-                  child: CardImage(url: item.image, width: width, contain: card == null),
+                  child: itemImage(item, width: width),
                 ),
                 if (selected case final isSelected?)
                   Positioned(
@@ -679,14 +680,13 @@ class ItemThumb extends StatelessWidget {
                     bottom: 4,
                     child: TrendBadge(percent: item.trend7dPct, solid: true),
                   ),
-                if (item.quantity > 1 || item.kind == 'graded')
+                // Gegradete Karten zeigen Firma und Note auf dem Slab-Etikett.
+                if (item.quantity > 1)
                   Positioned(
                     right: 4,
-                    top: 4,
-                    child: Tag(
-                      item.kind == 'graded' ? item.label : '×${item.quantity}',
-                      color: AppColors.accent,
-                    ),
+                    top: item.kind == 'graded' ? null : 4,
+                    bottom: item.kind == 'graded' ? 4 : null,
+                    child: Tag('×${item.quantity}', color: AppColors.accent),
                   ),
               ],
             ),

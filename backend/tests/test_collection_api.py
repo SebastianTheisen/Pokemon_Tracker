@@ -6,6 +6,7 @@ Testdaten überein.“
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 from datetime import UTC, datetime, timedelta
@@ -817,3 +818,22 @@ async def test_owned_shows_collection_value_and_slab_switch_fetches_grade_prices
 
     slab = (await owned())[0]
     assert (slab["grading_company"], slab["grade"], slab["unit_value"]) == ("PSA", "10", None)
+
+
+async def test_first_requests_in_parallel_create_one_default_folder(
+    client: AsyncClient, register_user: RegisterUser
+) -> None:
+    """Beim ersten Öffnen laden Übersicht und Sammlung gleichzeitig – beide legen den
+    Standardordner an. Früher scheiterte eine Anfrage an der Eindeutigkeit (500)."""
+    user = await register_user("neu@example.com")
+
+    responses = await asyncio.gather(
+        client.get(f"{API}/folders", headers=user.headers),
+        client.get(f"{API}/dashboard", headers=user.headers),
+        client.get(f"{API}/collection/items", headers=user.headers),
+        client.get(f"{API}/folders", headers=user.headers),
+    )
+
+    assert [r.status_code for r in responses] == [200, 200, 200, 200]
+    folders = (await client.get(f"{API}/folders", headers=user.headers)).json()
+    assert [f["name"] for f in folders] == ["Sammlung"]

@@ -249,10 +249,28 @@ class CollectionService:
             ).all()
         )
         if not folders:
-            folder = Folder(user_id=self._owner.id, name=DEFAULT_FOLDER_NAME, sort_order=0)
-            self._session.add(folder)
-            await self._session.flush()
-            folders = [folder]
+            # Erster Aufruf: Standardordner anlegen. Zwei gleichzeitige Anfragen (Übersicht und
+            # Sammlung laden parallel) dürfen sich dabei nicht in die Quere kommen – die zweite
+            # findet den Ordner der ersten statt an der Eindeutigkeit zu scheitern.
+            await self._session.execute(
+                insert(Folder)
+                .values(
+                    id=uuid.uuid4(),
+                    user_id=self._owner.id,
+                    name=DEFAULT_FOLDER_NAME,
+                    sort_order=0,
+                )
+                .on_conflict_do_nothing(index_elements=[Folder.user_id, Folder.name])
+            )
+            folders = list(
+                (
+                    await self._session.scalars(
+                        select(Folder)
+                        .where(Folder.user_id == self._owner.id)
+                        .order_by(Folder.sort_order, Folder.created_at)
+                    )
+                ).all()
+            )
         return folders
 
     async def _own_folder(self, folder_id: uuid.UUID) -> Folder:
