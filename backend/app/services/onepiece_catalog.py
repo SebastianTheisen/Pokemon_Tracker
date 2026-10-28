@@ -111,6 +111,23 @@ def _text(fragment: str) -> str:
     return " ".join(_TAG.sub(" ", unescaped).split())
 
 
+# Kleine Wörter bleiben im Titel klein („Wings of the Captain“), außer am Anfang.
+_SMALL_WORDS = frozenset({"a", "an", "and", "at", "for", "in", "of", "on", "the", "to"})
+
+
+def _title_case(title: str) -> str:
+    """Großbuchstaben-Wörter als Titel („WINGS OF THE CAPTAIN“ → „Wings of the Captain“,
+    auch mit Apostroph wie „SEA'S“); gemischte Schreibweisen („vol.2“) und Japanisch bleiben."""
+    words = []
+    for index, raw in enumerate(title.split()):
+        word = raw
+        if raw.isupper():
+            lower = raw.lower()
+            word = lower if index and lower in _SMALL_WORDS else raw.capitalize()
+        words.append(word)
+    return " ".join(words)
+
+
 @dataclass(frozen=True)
 class Series:
     """Ein Eintrag der Set-Auswahl."""
@@ -131,11 +148,7 @@ class Series:
         text = _SERIES_CODE.sub("", self.label).strip()
         match = _TITLE.match(text)
         title = match.group("title").strip() if match else text
-        # Nur reine Großbuchstaben-Wörter angleichen („ROMANCE“ → „Romance“, „vol.2“ bleibt).
-        return " ".join(
-            word.capitalize() if word.isascii() and word.isupper() else word
-            for word in title.split()
-        )
+        return _title_case(title)
 
     @property
     def group(self) -> str:

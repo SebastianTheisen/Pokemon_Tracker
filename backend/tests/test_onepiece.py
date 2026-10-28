@@ -188,7 +188,7 @@ def test_series_labels_are_decoded_named_and_grouped() -> None:
     )
     assert (prb.code, prb.name, prb.group) == (
         "PRB01",
-        "One Piece Card The Best",
+        "One Piece Card the Best",
         "Premium-Booster",
     )
     # Ohne Kürzel: letzte vier Ziffern – in allen Sprachen gleich.
@@ -200,7 +200,7 @@ def test_series_labels_are_decoded_named_and_grouped() -> None:
 
 def test_series_title_keeps_mixed_case_words() -> None:
     entry = Series("569302", "PREMIUM BOOSTER -ONE PIECE CARD THE BEST vol.2- [PRB-02]", "PRB02")
-    assert entry.name == "One Piece Card The Best vol.2"
+    assert entry.name == "One Piece Card the Best vol.2"
 
 
 def test_cards_with_parallels_and_broken_blocks() -> None:
@@ -461,3 +461,16 @@ async def test_import_removes_sets_left_without_cards(
         names = set(await session.scalars(select(CardSet.external_id)))
     assert "op-OP14EB04" not in names
     assert {"op-OP01", "op-PRB01"} <= names
+
+
+def test_series_titles_read_like_titles() -> None:
+    def name(label: str) -> str:
+        return Series("1", label, None).name
+
+    assert name("BOOSTER PACK -WINGS OF THE CAPTAIN- [OP-06]") == "Wings of the Captain"
+    apostrophe = "\u2019"  # so steht es auf der Seite
+    assert name(f"BOOSTER PACK -THE AZURE SEA{apostrophe}S SEVEN- [OP14-EB04]") == (
+        f"The Azure Sea{apostrophe}s Seven"
+    )
+    assert name("BOOSTER PACK -A FIST OF DIVINE SPEED- [OP-11]") == "A Fist of Divine Speed"
+    assert name("ブースターパック 謀略の王国【OP-04】") == "ブースターパック 謀略の王国"
