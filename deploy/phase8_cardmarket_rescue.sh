@@ -11,6 +11,9 @@ out="docs/phase8/cardmarket_rescue.md"
 mkdir -p docs/phase8
 run() { docker compose exec -T api python -m app.cli "$@" 2>&1 | grep -v -E '^\{|\[(info|debug) '; }
 {
+  if [[ "${1:-}" == "--apply" ]]; then
+    echo "## Namenszuordnung (alle Karten)"; run cardmarket-match | sed -n "1,4p"; echo
+  fi
   run cardmarket-rescue --owned "$@"
   if [[ "${1:-}" == "--apply" ]]; then echo; echo "## Preise"; run refresh-prices; fi
   echo; echo "_Lauf: $(date -u '+%Y-%m-%d %H:%M UTC'), Stand $(git rev-parse --short HEAD)_"

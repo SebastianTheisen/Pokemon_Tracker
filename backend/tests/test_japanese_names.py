@@ -53,3 +53,12 @@ def test_matching_uses_tcgplayer_english_name() -> None:
     assert english_name("ナンジャモ", "ja", None) is None
     assert english_name("ナンジャモ", "ja", None, "Iono") == "Iono"
     assert english_name("エーフィV", "ja", None, "Espeon V") == "Espeon V"
+
+
+def test_name_key_and_partial_translations() -> None:
+    from app.services.cardmarket_matching import english_name, name_key  # noqa: PLC0415
+
+    assert name_key("Pokémon Ranger (V.2)") == name_key("Pokemon Ranger")
+    # nur halb übersetzbar („ヒビキの Ho-Oh ex“) → englischer Name aus TCGplayer
+    assert english_name("ヒビキのホウオウex", "ja", None, "Ethan's Ho-Oh ex") == "Ethan's Ho-Oh ex"
+    assert english_name("レッドのピカチュウ", "ja", None, "Red's Pikachu") == "Red's Pikachu"

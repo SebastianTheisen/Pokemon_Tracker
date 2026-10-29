@@ -895,6 +895,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Offene Cardmarket-Zuordnungen per Skript statt von Hand (27 Sammlungskarten in 15 Sets nach dem Trainer-Import): `services/cardmarket_rescue.py`, CLI `cardmarket-rescue [--apply] [--owned]`, `deploy/phase8_cardmarket_rescue.sh`. Regeln: (1) Name mehrfach in der Ausgabe – vergebene Produkte fallen weg, bleibt eines übrig → dieses; sonst Secret Rare (Nummer > Setgröße) → letztes Produkt, reguläre → erstes, ohne Setgröße offen; (2) kleines Set ohne Ausgabe – Ausgabe mit ≥ 80 % der Namen (mind. 3), zeitlich passend, klarer Vorsprung. Läuft automatisch nach jedem Cardmarket-Import für Sammlungskarten
 
+- [x] Probelauf `cardmarket-rescue` (29.10.): 4 zugeordnet, 31 offen – zwei Fehler der Namenszuordnung: Akzente („Pokémon Ranger“ ≠ „Pokemon Ranger“) und halb übersetzte Namen („ヒビキの Ho-Oh ex“, „レッドの Pikachu“). Jetzt Akzente egal, bei nicht rein englischer Übersetzung zählt der TCGplayer-Name. Wirkt auch in `cardmarket-match`. Offen: Promo-Sets ohne eindeutige Ausgabe (S8a-P, XYP, SMP2, CP3, CP6, DPP, miscp)
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

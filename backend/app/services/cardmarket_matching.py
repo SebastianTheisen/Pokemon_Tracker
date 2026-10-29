@@ -24,6 +24,7 @@ englischen Namen bleiben offen – außer sie haben einen aus TCGplayer (``name_
 from __future__ import annotations
 
 import re
+import unicodedata
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -51,9 +52,12 @@ _ASCII = re.compile(r"^[\x20-\x7e]+$")
 
 def name_key(name: str) -> str:
     """Vergleichsform: „Charizard ex [Burning Darkness | …] (V.2)“ und „Charizard-ex“ →
-    „charizardex“."""
+    „charizardex“; Akzente zählen nicht („Pokémon Ranger“ = „Pokemon Ranger“)."""
     base = _VERSION.sub("", name.split(" [", 1)[0])
-    return re.sub(r"[\W_]+", "", base.casefold())
+    plain = "".join(
+        char for char in unicodedata.normalize("NFKD", base) if not unicodedata.combining(char)
+    )
+    return re.sub(r"[\W_]+", "", plain.casefold())
 
 
 @dataclass
@@ -89,7 +93,7 @@ def _number_order(number: str) -> tuple[int, int, str]:
     return (0, int(digits.group(1)), number) if digits else (1, 0, number)
 
 
-def english_name(
+def english_name(  # noqa: PLR0911 – eine Rückgabe je Quelle, in Vorrangreihenfolge
     name: str, language: str, english_sibling: str | None, name_en: str | None = None
 ) -> str | None:
     """Englischer Name einer Karte für den Vergleich mit Cardmarket. ``name_en``: englischer
@@ -101,10 +105,12 @@ def english_name(
     if language == "de":
         return None
     translated = translate_card_name(name, language, target="en")
-    if translated:
+    if translated and _ASCII.match(translated):
         return translated
     if name_en:
-        return name_en
+        return name_en  # z. B. „ヒビキのホウオウex“: nur halb übersetzbar → TCGplayer-Name
+    if translated:
+        return translated
     return name if _ASCII.match(name) else None  # z. B. PriceCharting-Karten (englisch)
 
 
