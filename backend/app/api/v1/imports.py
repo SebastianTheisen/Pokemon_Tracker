@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
-from typing import Annotated
+from collections.abc import Sequence
+from typing import Annotated, Any
 
 import structlog
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from pydantic import BaseModel, Field, StringConstraints
 
 from app.api.deps import CurrentUser, PriceServiceDep, SessionDep, SettingsDep
+from app.api.v1.collection import refresh_card_prices
 from app.core.config import Settings
 from app.models import GradingCompany
 from app.providers.pricing import Condition
@@ -166,9 +169,25 @@ async def collectr_preview(
     return out
 
 
+async def refresh_imported_prices(app_state: Any, card_ids: Sequence[uuid.UUID]) -> None:
+    """Preise der importierten Karten gleich holen (sonst erst in der nächsten Tagesrunde –
+    die Sammlung zeigte bis dahin „–“). Begrenzt parallel; Fehler nur im Log."""
+    semaphore = asyncio.Semaphore(app_state.settings.price_refresh_concurrency)
+
+    async def one(card_id: uuid.UUID) -> None:
+        async with semaphore:
+            await refresh_card_prices(app_state, card_id)
+
+    await asyncio.gather(*(one(card_id) for card_id in card_ids))
+    log.info("collectr.prices_refreshed", cards=len(card_ids))
+
+
 @router.post("/collectr/commit")
-async def collectr_commit(body: CollectrCommitIn, importer: Importer) -> CollectrCommitOut:
-    """Ausgewählte Karten in den Ordner übernehmen (legt ihn bei Bedarf an)."""
+async def collectr_commit(
+    body: CollectrCommitIn, importer: Importer, request: Request, background: BackgroundTasks
+) -> CollectrCommitOut:
+    """Ausgewählte Karten in den Ordner übernehmen (legt ihn bei Bedarf an). Preise werden
+    danach im Hintergrund geholt."""
     result = await importer.commit(
         body.folder_name,
         [
@@ -183,6 +202,7 @@ async def collectr_commit(body: CollectrCommitIn, importer: Importer) -> Collect
             for item in body.items
         ],
     )
+    background.add_task(refresh_imported_prices, request.app.state, result.card_ids)
     return CollectrCommitOut(
         folder=FolderOut.model_validate(result.folder),
         added=result.added,

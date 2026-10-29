@@ -400,6 +400,7 @@ class CommitResult:
     folder: Folder
     added: int
     skipped: int
+    card_ids: tuple[uuid.UUID, ...] = ()  # alle Karten des Imports (für den Preisabruf)
 
 
 class CollectrImport:
@@ -521,4 +522,9 @@ class CollectrImport:
                 refresh_prices=False,
             )
             added += 1
-        return CommitResult(folder=folder, added=added, skipped=skipped)
+        return CommitResult(
+            folder=folder,
+            added=added,
+            skipped=skipped,
+            card_ids=tuple(dict.fromkeys(key[0] for key in merged)),
+        )

@@ -885,6 +885,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Katalog-Lücken JP am VPS ergänzt (29.10.): 147 Karten in bestehenden Sets (u. a. BW9-B 077–086 mit Rare Candy, S5a 085–096, S2 107–115), 142 mit großem Bild; 28 Sets mit unsicherer Zuordnung (Starter-Decks) unangetastet. Neue Karten noch ohne Cardmarket-Verknüpfung
 
+- [x] Nach dem Collectr-Import zeigte die Sammlung „–“ statt Werten: der Import legt ohne Preisabruf an (schnell), Preise kamen erst mit der Tagesrunde. Jetzt holt `POST /import/collectr/commit` die Preise aller Karten des Imports im Hintergrund (begrenzt parallel, auch beim erneuten Durchlauf für schon vorhandene)
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

@@ -19,6 +19,7 @@ from app.models import Card, CardSet, CmProduct
 from app.services.collectr_import import clean_portfolio, parse_row
 from app.services.tcgplayer_sets import build_aliases, code_key, name_key, reset_cache, set_aliases
 from tests.conftest import RegisterUser
+from tests.pricing_helpers import FakeProvider
 
 API = "/api/v1"
 
@@ -202,6 +203,7 @@ async def test_collectr_preview_and_commit(
     register_user: RegisterUser,
     session_factory: async_sessionmaker[AsyncSession],
     settings: Settings,
+    price_provider: FakeProvider,
 ) -> None:
     alice = await register_user("alice@example.com")
     cards = await _catalog(session_factory)
@@ -255,6 +257,8 @@ async def test_collectr_preview_and_commit(
     assert commit.status_code == 200, commit.text
     result = commit.json()
     assert (result["folder"]["name"], result["added"], result["skipped"]) == ("Main Ordner", 3, 0)
+    # Preise der importierten Karten gleich im Hintergrund geholt (vorher „–“ bis zur Tagesrunde)
+    assert {ref.external_id for ref in price_provider.calls} >= {"S6a-081", "SM-P-270"}
 
     # Gleiche Karte zweimal als eigener Eintrag im Showcase → eine Position, Menge addiert
     twice = await client.post(
