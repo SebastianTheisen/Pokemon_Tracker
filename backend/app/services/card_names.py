@@ -222,3 +222,53 @@ def translate_english_name(name: str) -> str:
     for pattern, german in _english_to_german():
         text = pattern.sub(german, text)
     return re.sub(r"(\w)'s\b", r"\1s", text)
+
+
+# Zusätze, die viele Karten teilen – sie sagen nichts darüber, welches Pokémon gemeint ist.
+_GENERIC_WORDS = frozenset(
+    {
+        "mega", "vmax", "vstar", "gmax", "break", "prism", "star", "tera", "radiant",
+        "shining", "dark", "light", "team", "rocket", "rockets", "alolan", "galarian",
+        "hisuian", "paldean", "origin", "forme", "form", "the", "and", "with", "ex", "gx",
+    }
+)  # fmt: skip
+
+
+def _plain_words(text: str) -> set[str]:
+    plain = "".join(
+        char for char in unicodedata.normalize("NFKD", text) if not unicodedata.combining(char)
+    )
+    return set(re.findall(r"[a-z]{3,}", plain.casefold()))
+
+
+@cache
+def pokemon_words(name: str, language: str) -> frozenset[str] | None:
+    """Kennwörter des Pokémon einer asiatischen Karte auf Englisch („噴火龍VMAX“ →
+    {"charizard"}); ``None`` ohne Pokémon-Namen (Trainer, Items, Energie)."""
+    translated = translate_card_name(name, language, target="en")
+    if translated is None:
+        return None
+    return frozenset(_plain_words(translated) - _GENERIC_WORDS)
+
+
+def contradicts_english(name: str, language: str, english: str) -> bool:
+    """Gehört ein englischer Name (z. B. Cardmarket-Produkt) sicher zu einer anderen Karte?
+    Nur bei Pokémon-Karten prüfbar: Kein Kennwort des Pokémon kommt darin vor."""
+    words = pokemon_words(name, language)
+    return bool(words) and not (words or frozenset()) & _plain_words(english)
+
+
+def asian_names_conflict(
+    first: str, first_language: str, second: str, second_language: str
+) -> bool:
+    """Zeigen zwei asiatische Karten mit derselben ID sicher verschiedene Karten? Promo-Sets
+    sind je Land anders nummeriert: Japan SV-P 038 ist Basic Fire Energy, Taiwan SV-P 038
+    Charizard VMAX. Konflikt, wenn nur eine ein Pokémon ist oder die Pokémon verschieden sind."""
+    if first_language not in TRANSLATED_LANGUAGES or second_language not in TRANSLATED_LANGUAGES:
+        return False
+    one, two = pokemon_words(first, first_language), pokemon_words(second, second_language)
+    if one is None and two is None:
+        return False
+    if one is None or two is None:
+        return True
+    return bool(one) and bool(two) and not (one & two)

@@ -72,7 +72,11 @@ from app.services.cardmarket_catalog import CARDMARKET_GAMES, run_catalog_import
 from app.services.cardmarket_catalog import catalog_status as cardmarket_status
 from app.services.cardmarket_catalog import render_status as render_cardmarket_status
 from app.services.cardmarket_matching import match_cardmarket, render_match_report
-from app.services.cardmarket_rescue import render_rescue_report, rescue_cardmarket
+from app.services.cardmarket_rescue import (
+    drop_contradicting_products,
+    render_rescue_report,
+    rescue_cardmarket,
+)
 from app.services.catalog_search import search_cards
 from app.services.catalog_sync import fill_image_fallbacks, remove_digital_sets, sync_catalog
 from app.services.classic_collection import ClassicCollection
@@ -386,6 +390,19 @@ async def _cardmarket_rescue(
         if args.apply:
             await session.commit()
     print(render_rescue_report(report))
+
+
+async def _cardmarket_sanity(
+    factory: async_sessionmaker[AsyncSession], _settings: Settings, args: argparse.Namespace
+) -> None:
+    """Asiatische Karten mit Cardmarket-Produkt einer anderen Karte lösen (Standard: Probelauf)."""
+    async with factory() as session:
+        lines = await drop_contradicting_products(session, dry_run=not args.apply)
+        if args.apply:
+            await session.commit()
+    mode = "gelöst" if args.apply else "Probelauf, nichts geändert"
+    print(f"# Cardmarket-Produkt passt nicht zum Namen ({mode}): {len(lines)}")
+    print("\n".join(f"- {line}" for line in lines[:80]))
 
 
 async def _pricecharting_recheck(
@@ -905,6 +922,12 @@ def _add_cardmarket_commands(commands: Any) -> None:
     rescue.add_argument("--apply", action="store_true", help="Zuordnungen speichern")
     rescue.add_argument("--owned", action="store_true", help="nur Karten aus Sammlungen")
     rescue.set_defaults(handler=_cardmarket_rescue)
+    sanity = commands.add_parser(
+        "cardmarket-sanity",
+        help="Asiatische Karten lösen, deren Cardmarket-Produkt eine andere Karte ist; Probelauf",
+    )
+    sanity.add_argument("--apply", action="store_true", help="Produkte wirklich lösen")
+    sanity.set_defaults(handler=_cardmarket_sanity)
     recheck = commands.add_parser(
         "pricecharting-recheck",
         help="Sammlungskarten ohne PriceCharting-Wert neu suchen lassen; Probelauf",

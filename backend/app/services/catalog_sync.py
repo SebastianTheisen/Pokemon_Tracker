@@ -30,6 +30,7 @@ from sqlalchemy.orm import aliased
 
 from app.models import Card, CardSet, CardSource, CollectionItem, ImageSource
 from app.providers.tcgdex import SetBrief, SetDetail, TcgdexClient, TcgdexError
+from app.services.card_names import asian_names_conflict
 from app.services.cardmarket_catalog import learn_tcgdex_product, tcgdex_product_id
 from app.services.catalog_numbers import normalize_number
 from app.services.pricecharting_catalog import replaced_by_pricecharting
@@ -436,31 +437,64 @@ async def fill_image_fallbacks(session: AsyncSession) -> int:
     """Karten ohne Bild bekommen das Bild einer anderen Sprachfassung derselben Karte.
 
     Internationale Sets teilen sich die TCGdex-ID (``swsh7-215`` auf Deutsch und Englisch) –
-    das Artwork ist gleich, nur der Kartentext ist englisch. Gibt die Anzahl zurück.
+    das Artwork ist gleich, nur der Kartentext ist englisch. Asiatische Promo-Sets sind dagegen
+    je Land anders nummeriert (Japan SV-P 038 Basic Fire Energy, Taiwan SV-P 038 Charizard
+    VMAX): Zeigen die Namen verschiedene Karten, gibt es kein Ersatzbild – und ein früher so
+    gesetztes wird entfernt. Gibt die Anzahl neu gesetzter Bilder zurück.
     """
     priority = " ".join(
         f"WHEN '{language}' THEN {index}" for index, language in enumerate(IMAGE_FALLBACK_ORDER)
     )
-    result = await session.execute(
-        text(
-            f"""
-            UPDATE cards AS target
-            SET image_url = source.image_url, image_language = source.language,
-                image_source = 'fallback'
-            FROM (
-                SELECT DISTINCT ON (external_id) external_id, image_url, language
-                FROM cards
-                WHERE external_id IS NOT NULL AND image_url IS NOT NULL
-                  AND image_language IS NULL
-                ORDER BY external_id, CASE language {priority} ELSE 99 END
-            ) AS source
-            WHERE target.external_id = source.external_id
-              AND target.image_url IS NULL
-              AND target.source <> 'user'
-            """  # noqa: S608 – nur feste Sprachcodes, keine Nutzereingaben
+    rows = (
+        await session.execute(
+            text(
+                f"""
+                SELECT target.id, target.name, target.language, target.image_url AS current,
+                       source.name AS source_name, source.language AS source_language,
+                       source.image_url
+                FROM cards AS target
+                JOIN cards AS source
+                  ON source.external_id = target.external_id AND source.id <> target.id
+                WHERE target.external_id IS NOT NULL AND target.source <> 'user'
+                  AND (target.image_url IS NULL OR target.image_source = 'fallback')
+                  AND source.image_url IS NOT NULL AND source.image_language IS NULL
+                ORDER BY target.id, CASE source.language {priority} ELSE 99 END
+                """  # noqa: S608 – nur feste Sprachcodes, keine Nutzereingaben
+            )
         )
-    )
-    return int(getattr(result, "rowcount", 0) or 0)
+    ).all()
+    best: dict[Any, Any] = {}
+    current: dict[Any, str | None] = {}
+    for row in rows:
+        current[row.id] = row.current
+        if row.id in best:
+            continue
+        if not asian_names_conflict(row.name, row.language, row.source_name, row.source_language):
+            best[row.id] = row
+    filled = 0
+    for card_id, image in current.items():
+        chosen = best.get(card_id)
+        if chosen is None:
+            if image is not None:  # früheres Ersatzbild einer anderen Karte
+                await session.execute(
+                    update(Card)
+                    .where(Card.id == card_id)
+                    .values(image_url=None, image_language=None, image_source=None)
+                )
+            continue
+        if chosen.image_url == image:
+            continue
+        await session.execute(
+            update(Card)
+            .where(Card.id == card_id)
+            .values(
+                image_url=chosen.image_url,
+                image_language=chosen.source_language,
+                image_source=ImageSource.FALLBACK,
+            )
+        )
+        filled += image is None
+    return filled
 
 
 @dataclass

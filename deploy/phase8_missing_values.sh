@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Sammlungskarten ohne Wert reparieren – ein Durchgang, keine Handarbeit:
 #   1. API und Worker mit dem aktuellen Stand neu bauen
-#   2. PriceCharting-Prüfungen von Sammlungskarten ohne PriceCharting-Wert zurücksetzen
+#   2. Asiatische Karten mit Cardmarket-Produkt bzw. Ersatzbild einer anderen Karte (Promo-Sets
+#      sind je Land anders nummeriert: Japan SV-P 038 ≠ Taiwan SV-P 038) – Produkte zeigen,
+#      lösen erst mit --apply (erst die Liste prüfen); falsche Ersatzbilder immer entfernen
+#   3. PriceCharting-Prüfungen von Sammlungskarten ohne PriceCharting-Wert zurücksetzen
 #      (bisher galten Fehlschläge als „ok“ und wurden erst nach Tagen neu versucht)
-#   3. Preis-Runde (Cardmarket, PriceCharting für Slabs und Karten ohne Cardmarket-Wert)
-#   4. Liste der Positionen, die danach noch keinen Wert haben – mit Grund
+#   4. Preis-Runde (Cardmarket, PriceCharting für Slabs und Karten ohne Cardmarket-Wert)
+#   5. Liste der Positionen, die danach noch keinen Wert haben – mit Grund
 # Ergebnis: docs/phase8/missing_values.md
 #
-#   bash deploy/phase8_missing_values.sh
+#   bash deploy/phase8_missing_values.sh            # Produkte nur zeigen
+#   bash deploy/phase8_missing_values.sh --apply    # Produkte auch lösen
 set -eu
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 out="docs/phase8/missing_values.md"
@@ -31,6 +35,8 @@ echo "== API und Worker bauen =="
 docker compose up -d --build api worker
 wait_for_api
 {
+  echo "## Cardmarket-Produkte anderer Karten"; run cardmarket-sanity "$@"; echo
+  echo "## Ersatzbilder"; run fill-images; echo
   echo "## PriceCharting neu suchen"; run pricecharting-recheck --apply; echo
   echo "## Preise"; run refresh-prices; echo
   echo "## Noch ohne Wert"

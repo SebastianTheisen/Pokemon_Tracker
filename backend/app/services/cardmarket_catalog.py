@@ -67,6 +67,7 @@ from app.providers.pricing.tcgdex_prices import (
 )
 from app.providers.tcgdex import TcgdexClient, TcgdexError
 from app.services.audit import record_audit
+from app.services.card_names import TRANSLATED_LANGUAGES, contradicts_english
 from app.services.errors import NotFoundError
 
 log = structlog.get_logger(__name__)
@@ -555,8 +556,27 @@ async def apply_known_links(session: AsyncSession) -> int:
     return changed
 
 
-async def learn_tcgdex_product(session: AsyncSession, card: Card, product_id: int) -> None:
-    """Merkt sich das von TCGdex gemeldete Produkt und – falls noch offen – die Ausgabe."""
+async def product_contradicts(session: AsyncSession, card: Card, product_id: int) -> bool:
+    """Gehört das Produkt sicher zu einer anderen Karte? TCGdex meldet für asiatische Promos
+    manchmal das Produkt der japanischen Karte mit gleicher ID (Taiwan SV-P 038 „噴火龍VMAX“ →
+    „Basic Fire Energy“). Prüfbar nur bei Pokémon-Karten (Name übersetzbar)."""
+    if card.language not in TRANSLATED_LANGUAGES:
+        return False
+    product = await session.get(CmProduct, product_id)
+    return product is not None and contradicts_english(card.name, card.language, product.name)
+
+
+async def learn_tcgdex_product(session: AsyncSession, card: Card, product_id: int) -> bool:
+    """Merkt sich das von TCGdex gemeldete Produkt und – falls noch offen – die Ausgabe.
+    ``False``, wenn das Produkt nach Namen sicher zu einer anderen Karte gehört."""
+    if await product_contradicts(session, card, product_id):
+        log.warning(
+            "cardmarket.tcgdex_product_rejected",
+            card=card.external_id,
+            language=card.language,
+            product=product_id,
+        )
+        return False
     if card.cardmarket_product_id != product_id:
         card.cardmarket_product_id = product_id
     card_set = card.card_set
@@ -564,15 +584,16 @@ async def learn_tcgdex_product(session: AsyncSession, card: Card, product_id: in
         ExpansionLinkSource.USER,
         ExpansionLinkSource.BUILTIN,
     ):
-        return
+        return True
     known = KNOWN_SET_EXPANSIONS.get((card_set.language, card_set.external_id))
     if known is not None:
         await link_set(session, card_set, known, ExpansionLinkSource.BUILTIN)
-        return
+        return True
     if card_set.cardmarket_expansion_id is None:
         product = await session.get(CmProduct, product_id)
         if product is not None:
             await link_set(session, card_set, product.id_expansion, ExpansionLinkSource.TCGDEX)
+    return True
 
 
 def tcgdex_product_id(card_data: dict[str, object]) -> int | None:
@@ -770,8 +791,9 @@ async def correct_cardmarket_quotes(
         for q in quotes
         if q.source == CARDMARKET and (product_id := product_id_from_url(q.source_url))
     }
-    if len(reported) == 1:
-        await learn_tcgdex_product(session, card, reported.pop())
+    if len(reported) == 1 and not await learn_tcgdex_product(session, card, reported.pop()):
+        # Werte eines fremden Produkts – nicht speichern.
+        quotes = [q for q in quotes if q.source != CARDMARKET]
     resolution = await resolve_product(session, card)
     if not resolution.corrected:
         if resolution.product_id is None or any(q.source == CARDMARKET for q in quotes):

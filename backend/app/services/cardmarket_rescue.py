@@ -18,6 +18,7 @@ Alles andere bleibt offen und steht im Bericht.
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -27,7 +28,8 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Card, CardSet, CmProduct, CollectionItem, ExpansionLinkSource, Game
-from app.services.cardmarket_catalog import link_set
+from app.services.card_names import TRANSLATED_LANGUAGES, contradicts_english
+from app.services.cardmarket_catalog import invalidate_cardmarket_prices, link_set
 from app.services.cardmarket_matching import (
     MATCH_LANGUAGES,
     MAX_DATE_GAP_DAYS,
@@ -290,3 +292,40 @@ def render_rescue_report(report: RescueReport) -> str:
     if report.still_open:
         lines += ["", "Weiter offen:"] + [f"- {line}" for line in report.still_open[:60]]
     return "\n".join(lines) + "\n"
+
+
+_VERSION_SUFFIX = re.compile(r"\s*[\(\[][^\)\]]*[\)\]]\s*$")
+
+
+async def drop_contradicting_products(session: AsyncSession, *, dry_run: bool = True) -> list[str]:
+    """Asiatische Karten, deren Cardmarket-Produkt nach Namen sicher eine andere Karte ist
+    (siehe :func:`product_contradicts`): Produkt lösen, daraus übernommenen englischen Namen
+    leeren, Cardmarket-Werte verwerfen. Eigene Wahl eines Nutzers bleibt. Commit macht der
+    Aufrufer; Rückgabe: eine Zeile je Karte."""
+    rows = (
+        await session.execute(
+            select(Card, CmProduct.name, CardSet.external_id)
+            .join(CmProduct, CmProduct.id_product == Card.cardmarket_product_id)
+            .join(CardSet, CardSet.id == Card.set_id)
+            .where(
+                Card.language.in_(TRANSLATED_LANGUAGES),
+                Card.cardmarket_product_override.is_(None),
+            )
+        )
+    ).all()
+    lines = []
+    for card, product_name, set_code in rows:
+        if not contradicts_english(card.name, card.language, product_name):
+            continue
+        lines.append(
+            f"{card.language} {set_code} {card.number} {card.name} ≠ "
+            f"{card.cardmarket_product_id} „{product_name}“"
+        )
+        if dry_run:
+            continue
+        if card.name_en == _VERSION_SUFFIX.sub("", product_name)[:200]:
+            card.name_en = None
+        card.cardmarket_product_id = None
+        await invalidate_cardmarket_prices(session, card_id=card.id)
+    log.info("cardmarket.contradicting_products", cards=len(lines), dry_run=dry_run)
+    return lines
