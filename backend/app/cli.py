@@ -102,7 +102,7 @@ from app.services.pricecharting_catalog import PriceChartingCatalog
 from app.services.pricecharting_catalog import render_report as render_pricecharting_report
 from app.services.pricecharting_images import import_pricecharting_images
 from app.services.pricecharting_images import render_image_report as render_pc_images
-from app.services.pricing import PriceService
+from app.services.pricing import PriceService, reset_unpriced_fallback_checks
 from app.services.ptcg_import import import_ptcg
 from app.services.ptcg_import import render_report as render_ptcg_report
 from app.services.scan import ScanOutcome, ScanService
@@ -386,6 +386,18 @@ async def _cardmarket_rescue(
         if args.apply:
             await session.commit()
     print(render_rescue_report(report))
+
+
+async def _pricecharting_recheck(
+    factory: async_sessionmaker[AsyncSession], _settings: Settings, args: argparse.Namespace
+) -> None:
+    """Sammlungskarten ohne PriceCharting-Wert bei der nächsten Preis-Runde neu suchen."""
+    async with factory() as session:
+        count = await reset_unpriced_fallback_checks(session, dry_run=not args.apply)
+        if args.apply:
+            await session.commit()
+    verb = "zurückgesetzt" if args.apply else "würden zurückgesetzt (Probelauf)"
+    print(f"PriceCharting-Prüfungen ohne Wert {verb}: {count}")
 
 
 async def _catalog_gaps_ja(
@@ -893,6 +905,12 @@ def _add_cardmarket_commands(commands: Any) -> None:
     rescue.add_argument("--apply", action="store_true", help="Zuordnungen speichern")
     rescue.add_argument("--owned", action="store_true", help="nur Karten aus Sammlungen")
     rescue.set_defaults(handler=_cardmarket_rescue)
+    recheck = commands.add_parser(
+        "pricecharting-recheck",
+        help="Sammlungskarten ohne PriceCharting-Wert neu suchen lassen; Probelauf",
+    )
+    recheck.add_argument("--apply", action="store_true", help="Prüfungen wirklich löschen")
+    recheck.set_defaults(handler=_pricecharting_recheck)
     commands.add_parser(
         "japanese-names", help="Englische Namen asiatischer Trainer/Items aus Cardmarket"
     ).set_defaults(handler=_japanese_names)

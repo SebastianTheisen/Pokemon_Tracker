@@ -26,7 +26,7 @@ from decimal import Decimal
 from typing import Literal
 
 import structlog
-from sqlalchemy import exists, func, select, union
+from sqlalchemy import delete, exists, func, select, union
 from sqlalchemy.dialects.postgresql import distinct_on, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -65,6 +65,7 @@ from app.services.cardmarket_catalog import (
 )
 from app.services.price_health import SourceHealth
 from app.services.pricecharting_details import store_details
+from app.services.set_names import translated_set_name
 from app.services.user_settings import (
     effective_factors,
     effective_language_factors,
@@ -78,6 +79,7 @@ VERIFIED_SOURCES = frozenset({CARDMARKET, TCGPLAYER, PRICECHARTING})
 # wie einen Trend unter dem günstigsten Angebot. Ersatz, wenn keiner vorhanden ist: ``avg``.
 NM_MEDIAN_METRICS = ("trend", "avg7", "avg30")
 NM_FALLBACK_METRIC = "avg"
+LOW_METRIC = "low"
 CENT = Decimal("0.01")
 
 Clock = Callable[[], datetime]
@@ -293,10 +295,12 @@ class PriceService:
                 timeout=getattr(provider, "timeout_seconds", None)
                 or self._settings.price_provider_timeout_seconds,
             )
-        except PriceNotAvailableError:
+        except PriceNotAvailableError as exc:
             self._health.record_success(provider.name)
-            if provider.kind == "external":
-                return "not_available", True, "Quelle kennt die Karte nicht", 0
+            if provider.kind == "external" or getattr(provider, "fallback_only", False):
+                # Ergänzende Quellen (PriceCharting) dürfen keine Cardmarket-Werte als eigenen
+                # Erfolg melden – sonst gilt die Karte als geprüft, obwohl nichts gefunden wurde.
+                return "not_available", True, str(exc) or "Quelle kennt die Karte nicht", 0
             # Unbekannt bei TCGdex – ein verknüpftes Cardmarket-Produkt hat trotzdem Preise.
             quotes = await correct_cardmarket_quotes(self._session, card, card_ref(card), [])
             if not quotes:
@@ -324,10 +328,17 @@ class PriceService:
         return "fetched", True, None if quotes else "keine Preise", stored
 
     async def _needs_fallback(self, card: Card) -> bool:
-        """Ergänzende Quelle nötig? Ja ohne Cardmarket-Preis (oder mit korrigiertem
-        Cardmarket-Link, dessen Werte fehlen) und für Karten, die jemand als Slab besitzt."""
+        """Ergänzende Quelle nötig? Ja ohne Cardmarket-Wert, aus dem sich ein Preis rechnen
+        lässt (nur „ab“-Preis zählt nicht), mit korrigiertem Cardmarket-Link, dessen Werte
+        fehlen, und für Karten, die jemand als Slab besitzt."""
         has_cardmarket = await self._session.scalar(
-            select(exists().where(PricePoint.card_id == card.id, PricePoint.source == CARDMARKET))
+            select(
+                exists().where(
+                    PricePoint.card_id == card.id,
+                    PricePoint.source == CARDMARKET,
+                    PricePoint.metric.in_((*NM_MEDIAN_METRICS, NM_FALLBACK_METRIC)),
+                )
+            )
         )
         corrected = await self._session.scalar(
             select(exists().where(CardPriceLink.card_id == card.id))
@@ -358,6 +369,14 @@ class PriceService:
                 name, set_name = english.name, english.card_set.name
         if name is None and card.card_set.game == Game.POKEMON.value:
             name = translate_card_name(card.name, card.language, target="en")
+        if (name is None or not name.isascii()) and card.name_en:
+            # Trainer-, Item- und Energiekarten: kein Pokémon-Name zum Übersetzen – der
+            # englische Name kommt aus TCGplayer bzw. dem verknüpften Cardmarket-Produkt.
+            name = card.name_en
+        if set_name is None:
+            set_name = translated_set_name(
+                card.card_set.external_id, card.language, card.card_set.name
+            )
         # Bekannte Produktseite (Set-Import Korea/China oder frühere Suche) → kein Suchen.
         product_url = await self._session.scalar(
             select(PricePoint.source_url)
@@ -669,10 +688,15 @@ def nm_basis(metrics: dict[str, Decimal]) -> tuple[str, Decimal] | None:
 
 
 def _basis(reference: Offer) -> tuple[str, Decimal] | None:
-    """NM-Basis einer Referenz: Cardmarket-Median bzw. umgerechneter US-Preis."""
+    """NM-Basis einer Referenz: Cardmarket-Median bzw. umgerechneter US-Preis. Hat Cardmarket
+    nur den „ab“-Preis (seltene Promos ohne Verkäufe), dient er als letzte Näherung."""
     if reference.source == PRICECHARTING:
         return "US-Preis PriceCharting (umgerechnet)", reference.metrics[RAW_METRIC]
-    return nm_basis(reference.metrics)
+    if (basis := nm_basis(reference.metrics)) is not None:
+        return basis
+    if LOW_METRIC in reference.metrics:
+        return LOW_METRIC, reference.metrics[LOW_METRIC]
+    return None
 
 
 def _condition_prices(
@@ -691,7 +715,10 @@ def _condition_prices(
             offer.source == PRICECHARTING
             and offer.variant == RAW_VARIANT
             and RAW_METRIC in offer.metrics
-            and RAW_VARIANT not in references
+            and (
+                RAW_VARIANT not in references
+                or nm_basis(references[RAW_VARIANT].metrics) is None  # nur „ab“-Preis
+            )
         ):
             references[RAW_VARIANT] = offer
     external_variants = [o.variant for o in offers if o.kind == "external" and o.condition]
@@ -762,3 +789,21 @@ async def tracked_card_ids(
     alerted = select(PriceAlert.card_id).where(PriceAlert.card_id.is_not(None), PriceAlert.active)
     result = await session.scalars(union(viewed, collected, wished, alerted))
     return sorted(card_id for card_id in result.all() if card_id is not None)
+
+
+async def reset_unpriced_fallback_checks(session: AsyncSession, *, dry_run: bool = True) -> int:
+    """PriceCharting-Prüfungen von Sammlungskarten ohne PriceCharting-Wert löschen, damit die
+    nächste Preis-Runde neu sucht (statt die Frist von ``pricecharting_max_age_days`` Tagen
+    abzuwarten). Nötig nach Korrekturen an der Suche, z. B. englische Namen für Trainer.
+    Commit macht der Aufrufer; Rückgabe: Anzahl der (zu) löschenden Prüfungen."""
+    owned = select(CollectionItem.card_id).where(CollectionItem.card_id.is_not(None))
+    priced = select(PricePoint.card_id).where(PricePoint.source == PRICECHARTING)
+    condition = (
+        PriceCheck.source == PRICECHARTING,
+        PriceCheck.card_id.in_(owned),
+        PriceCheck.card_id.not_in(priced),
+    )
+    count = await session.scalar(select(func.count()).select_from(PriceCheck).where(*condition))
+    if not dry_run and count:
+        await session.execute(delete(PriceCheck).where(*condition))
+    return int(count or 0)

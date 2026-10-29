@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -11,7 +12,7 @@ from typing import Any
 import httpx
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
@@ -22,11 +23,12 @@ from app.models import (
     CmProduct,
     CollectionItem,
     GradingCompany,
+    PriceCheck,
     PricePoint,
 )
 from app.providers.apify import ApifyClient
 from app.providers.fx import EcbRates, FxError, parse_ecb
-from app.providers.pricing import CardRef
+from app.providers.pricing import CardRef, PriceNotAvailableError
 from app.providers.pricing.pricecharting import (
     ApifyBudgetError,
     PriceChartingProvider,
@@ -36,7 +38,12 @@ from app.providers.pricing.pricecharting import (
     search_query,
 )
 from app.services.price_health import SourceHealth
-from app.services.pricing import CardPrices, Offer, PriceService
+from app.services.pricing import (
+    CardPrices,
+    Offer,
+    PriceService,
+    reset_unpriced_fallback_checks,
+)
 from app.services.valuation import pricecharting_metric, unit_value
 from tests.conftest import RegisterUser
 from tests.pricing_helpers import FakeProvider, cardmarket
@@ -358,6 +365,135 @@ async def test_service_fetches_pricecharting_for_slabs_even_with_cardmarket(
         loaded = await session.get_one(Card, card.id)
         report = await (await _service(session, settings, tcgdex, pricecharting)).refresh(loaded)
     assert report.outcomes["pricecharting"] == "fetched"
+
+
+async def _trainer_card(factory: async_sessionmaker[AsyncSession]) -> Card:
+    """Japanische Trainerkarte: kein Pokémon-Name zum Übersetzen, Englisch aus ``name_en``."""
+    async with factory() as session:
+        card_set = CardSet(
+            external_id="SM5S", language="ja", name="ウルトラサン", release_date=date(2017, 10, 20)
+        )
+        session.add(card_set)
+        await session.flush()
+        card = Card(
+            external_id="SM5S-070", language="ja", set_id=card_set.id, number="070",
+            number_norm="070", name="ナタネ", name_en="Gardenia",
+        )  # fmt: skip
+        session.add(card)
+        await session.commit()
+        return card
+
+
+async def test_trainer_search_uses_english_name_and_set(
+    session_factory: async_sessionmaker[AsyncSession], settings: Settings
+) -> None:
+    card = await _trainer_card(session_factory)
+    async with session_factory() as session:
+        loaded = await session.get_one(Card, card.id)
+        reference = await (await _service(session, settings))._context_ref(loaded)
+
+    assert reference.english_name == "Gardenia"
+    assert reference.english_set_name == "Ultra Sun"
+    assert search_query(reference) == "Gardenia 70 Japanese"
+
+
+@dataclass
+class FallbackProvider(FakeProvider):
+    """Wie PriceCharting: ergänzende Quelle mit Kontext (englischer Name)."""
+
+    name: str = "pricecharting"
+    fallback_only: bool = True
+    needs_context: bool = True
+
+
+async def test_fallback_miss_is_reported_not_masked_by_cardmarket(
+    session_factory: async_sessionmaker[AsyncSession], settings: Settings
+) -> None:
+    """Früher: Fand PriceCharting nichts, wurden die Cardmarket-Werte als „ok“ gespeichert –
+    die Karte galt tagelang als geprüft, der Grund war unsichtbar."""
+    card = await _trainer_card(session_factory)
+    async with session_factory() as session:
+        await session.execute(
+            update(Card).where(Card.id == card.id).values(cardmarket_product_id=560024)
+        )
+        session.add(CmProduct(id_product=560024, name="Gardenia", id_expansion=1, id_metacard=1))
+        session.add(CmPrice(id_product=560024, metrics={"trend": 3.5}, updated_at=NOW))
+        await session.commit()
+    miss = FallbackProvider(error=PriceNotAvailableError("kein eindeutiger Treffer für „x“"))
+
+    async with session_factory() as session:
+        loaded = await session.get_one(Card, card.id)
+        report = await (await _service(session, settings, miss)).refresh(loaded)
+        await session.commit()
+        check = await session.get_one(PriceCheck, (card.id, "pricecharting"))
+        sources = set(await session.scalars(select(PricePoint.source)))
+
+    assert report.outcomes == {"pricecharting": "not_available"}
+    assert check.message == "kein eindeutiger Treffer für „x“"
+    assert sources == set()
+
+
+async def test_cardmarket_low_only_asks_pricecharting_then_falls_back_to_low(
+    session_factory: async_sessionmaker[AsyncSession], settings: Settings
+) -> None:
+    """Promo mit nur „ab“-Preis bei Cardmarket: PriceCharting wird gefragt und hat Vorrang;
+    ohne PriceCharting dient der „ab“-Preis als gekennzeichnete Schätzung."""
+    card = await _japanese_card(session_factory)
+    tcgdex = FakeProvider(quotes=[cardmarket("low", "4.00")])
+    pricecharting = provider(settings, apify_transport([LUGIA]))
+
+    async with session_factory() as session:
+        loaded = await session.get_one(Card, card.id)
+        service = await _service(session, settings, tcgdex)
+        await service.refresh(loaded)
+        only_low = await service.get_prices(loaded, None)
+        report = await (await _service(session, settings, tcgdex, pricecharting)).refresh(loaded)
+        await session.commit()
+        both = await service.get_prices(loaded, None)
+
+    nm = next(c for c in only_low.conditions if c.condition == "NM")
+    assert (nm.basis_metric, nm.value, nm.source) == ("low", Decimal("4.00"), "cardmarket")
+    assert report.outcomes["pricecharting"] == "fetched"
+    nm = next(c for c in both.conditions if c.variant == "normal" and c.condition == "NM")
+    assert (nm.source, nm.value) == ("pricecharting", Decimal("592.94"))
+
+
+async def test_recheck_resets_owned_cards_without_pricecharting_value(
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+    register_user: RegisterUser,
+) -> None:
+    card = await _trainer_card(session_factory)
+    other = await _japanese_card(session_factory)
+    user = await register_user("recheck@example.com")
+    for owned in (card, other):
+        added = await client.post(
+            "/api/v1/collection/items",
+            json={"card_id": str(owned.id), "grading_company": "PSA", "grade": "10"},
+            headers=user.headers,
+        )
+        assert added.status_code == 201, added.text
+    async with session_factory() as session:
+        for checked in (card, other):
+            session.add(
+                PriceCheck(card_id=checked.id, source="pricecharting", checked_at=NOW, ok=True)
+            )
+        session.add(
+            PricePoint(
+                card_id=other.id, source="pricecharting", variant="graded", metric="psa_10",
+                value=Decimal("840.00"), currency="EUR", source_updated_at=NOW,
+            )
+        )  # fmt: skip
+        await session.commit()
+
+    async with session_factory() as session:
+        assert await reset_unpriced_fallback_checks(session) == 1  # Probelauf
+        assert await session.get(PriceCheck, (card.id, "pricecharting")) is not None
+        assert await reset_unpriced_fallback_checks(session, dry_run=False) == 1
+        await session.commit()
+    async with session_factory() as session:
+        assert await session.get(PriceCheck, (card.id, "pricecharting")) is None
+        assert await session.get(PriceCheck, (other.id, "pricecharting")) is not None
 
 
 # ------------------------------------------------------------------ Bewertung
