@@ -90,6 +90,7 @@ from app.services.image_import import (
 )
 from app.services.japanese_gaps import JapaneseGaps
 from app.services.japanese_gaps import render_report as render_gaps_report
+from app.services.japanese_names import refresh_japanese_names
 from app.services.onepiece_catalog import (
     OnePieceCatalog,
     OnePieceCatalogError,
@@ -366,6 +367,13 @@ async def _classic_import(
     if args.out:
         await asyncio.to_thread(Path(args.out).write_text, text, encoding="utf-8")
     print(text)
+
+
+async def _japanese_names(
+    factory: async_sessionmaker[AsyncSession], _settings: Settings, _args: argparse.Namespace
+) -> None:
+    """Englische Namen asiatischer Trainer/Items aus Cardmarket füllen."""
+    print(f"Englische Namen ergänzt: {await refresh_japanese_names(factory)} Karten")
 
 
 async def _catalog_gaps_ja(
@@ -866,6 +874,9 @@ def _add_cardmarket_commands(commands: Any) -> None:
     gaps.add_argument("--set", help="nur dieses Set-Kürzel, z. B. BW9")
     gaps.add_argument("--out", help="Bericht zusätzlich als Markdown-Datei")
     gaps.set_defaults(handler=_catalog_gaps_ja)
+    commands.add_parser(
+        "japanese-names", help="Englische Namen asiatischer Trainer/Items aus Cardmarket"
+    ).set_defaults(handler=_japanese_names)
 
 
 def build_parser() -> argparse.ArgumentParser:

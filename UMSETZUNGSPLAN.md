@@ -887,6 +887,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Nach dem Collectr-Import zeigte die Sammlung „–“ statt Werten: der Import legt ohne Preisabruf an (schnell), Preise kamen erst mit der Tagesrunde. Jetzt holt `POST /import/collectr/commit` die Preise aller Karten des Imports im Hintergrund (begrenzt parallel, auch beim erneuten Durchlauf für schon vorhandene)
 
+- [x] Japanische Trainer/Items/Stadien zeigten japanische Namen („ナンジャモ“): Pokémon-Namen übersetzt die App, Trainer nicht. `services/japanese_names.py` füllt leere `name_en` asiatischer Karten aus dem verknüpften Cardmarket-Produkt („Iono (V.2)“ → „Iono“); Anzeige und Sortierung nehmen ihn, wenn es keine Pokémon-Übersetzung gibt. Läuft nach jedem Cardmarket-Import; CLI `japanese-names`
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

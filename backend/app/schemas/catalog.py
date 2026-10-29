@@ -81,11 +81,14 @@ class CardOut(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def translated_name(self) -> str | None:
-        """Deutscher Name bei japanischen, koreanischen und chinesischen Pokémon-Karten,
-        englischer bei japanischen One-Piece-Karten (eine deutsche Liste gibt es nicht)."""
+        """Deutscher Name bei japanischen, koreanischen und chinesischen Pokémon-Karten (bei
+        Trainern der englische), englischer bei japanischen One-Piece-Karten."""
         if self.card_set.game != Game.POKEMON.value:
             return self.name_en  # Pokémon-Namen im Text suchen wäre hier Unsinn
-        return translate_card_name(self.name, self.language)
+        # Trainer, Items, Stadien: kein Pokémon-Name – englischer Name von Cardmarket/TCGplayer
+        return translate_card_name(self.name, self.language) or (
+            self.name_en if self.language != "en" else None
+        )
 
 
 class SearchHitOut(BaseModel):

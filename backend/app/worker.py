@@ -52,6 +52,7 @@ from app.services.cardmarket_catalog import last_successful_import, run_catalog_
 from app.services.classic_collection import refresh_classic_collection
 from app.services.collection import CollectionService, users_with_items
 from app.services.image_import import last_finished_run, last_run_incomplete, run_image_import
+from app.services.japanese_names import refresh_japanese_names
 from app.services.onepiece_catalog import OnePieceCatalog
 from app.services.price_health import SourceHealth
 from app.services.pricing import PriceService, tracked_card_ids
@@ -260,6 +261,8 @@ async def cardmarket_forever(
         # Japanische Classic Collection (tcgcsv, 3 Abrufe) – nach dem Katalog, damit die
         # Cardmarket-Produkte zum Verknüpfen da sind; Fehler egal.
         await refresh_classic_collection(session_factory, settings)
+        # Englische Namen japanischer Trainer/Items aus den Cardmarket-Produkten
+        await refresh_japanese_names(session_factory)
         if summary.error:
             await asyncio.sleep(3600)  # nicht in einer Fehlerschleife hämmern
 

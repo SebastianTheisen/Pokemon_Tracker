@@ -19,7 +19,8 @@ def translated_card_name(card: Card) -> str | None:
     """Übersetzter Kartenname oder ``None``."""
     if card.card_set.game != Game.POKEMON.value:
         return card.name_en  # Pokémon-Namen im Text zu suchen wäre hier Unsinn
-    return translate_card_name(card.name, card.language)
+    translated = translate_card_name(card.name, card.language)
+    return translated or (card.name_en if card.language != "en" else None)
 
 
 def translated_set_title(card_set: CardSet) -> str | None:
