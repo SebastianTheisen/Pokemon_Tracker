@@ -1118,11 +1118,17 @@ async def _link_pokemon(
         summary.sets_linked = await link_sets(session_factory, tcgdex, settings, now=now)
     # Erst nach TCGdex: übernimmt nur, was TCGdex offen lässt.
     from app.services.cardmarket_matching import match_cardmarket  # noqa: PLC0415 – Zyklus
+    from app.services.cardmarket_rescue import rescue_cardmarket  # noqa: PLC0415 – Zyklus
 
     async with session_factory() as session:
         matched = await match_cardmarket(session)
         await session.commit()
     summary.names_matched = sum(matched.cards_linked.values())
+    # Zweiter Durchgang für Sammlungskarten (Name mehrfach, kleine Sets) – Regeln siehe Modul
+    async with session_factory() as session:
+        rescued = await rescue_cardmarket(session, dry_run=False, only_owned=True)
+        await session.commit()
+    summary.names_matched += len(rescued.cards)
 
 
 async def last_successful_import(

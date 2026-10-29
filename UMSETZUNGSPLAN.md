@@ -893,6 +893,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Import = einzeln anlegen: Nach `POST /import/collectr/commit` werden im Hintergrund die Preise geholt (Rohkarten Cardmarket, Slabs Notenpreise von PriceCharting – derselbe Weg wie beim Anlegen) und dann `value_at_add` samt Wert des Hinzufügen-Ereignisses nachgetragen (`CollectionService.backfill_start_values`). Die tägliche Preisrunde trägt fehlende Startwerte ebenfalls nach (ältere Importe, Karten ohne Preis beim Anlegen). Test vergleicht Import und manuelles Anlegen derselben Karte
 
+- [x] Offene Cardmarket-Zuordnungen per Skript statt von Hand (27 Sammlungskarten in 15 Sets nach dem Trainer-Import): `services/cardmarket_rescue.py`, CLI `cardmarket-rescue [--apply] [--owned]`, `deploy/phase8_cardmarket_rescue.sh`. Regeln: (1) Name mehrfach in der Ausgabe – vergebene Produkte fallen weg, bleibt eines übrig → dieses; sonst Secret Rare (Nummer > Setgröße) → letztes Produkt, reguläre → erstes, ohne Setgröße offen; (2) kleines Set ohne Ausgabe – Ausgabe mit ≥ 80 % der Namen (mind. 3), zeitlich passend, klarer Vorsprung. Läuft automatisch nach jedem Cardmarket-Import für Sammlungskarten
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

@@ -72,6 +72,7 @@ from app.services.cardmarket_catalog import CARDMARKET_GAMES, run_catalog_import
 from app.services.cardmarket_catalog import catalog_status as cardmarket_status
 from app.services.cardmarket_catalog import render_status as render_cardmarket_status
 from app.services.cardmarket_matching import match_cardmarket, render_match_report
+from app.services.cardmarket_rescue import render_rescue_report, rescue_cardmarket
 from app.services.catalog_search import search_cards
 from app.services.catalog_sync import fill_image_fallbacks, remove_digital_sets, sync_catalog
 from app.services.classic_collection import ClassicCollection
@@ -374,6 +375,17 @@ async def _japanese_names(
 ) -> None:
     """Englische Namen asiatischer Trainer/Items aus Cardmarket füllen."""
     print(f"Englische Namen ergänzt: {await refresh_japanese_names(factory)} Karten")
+
+
+async def _cardmarket_rescue(
+    factory: async_sessionmaker[AsyncSession], _settings: Settings, args: argparse.Namespace
+) -> None:
+    """Offene Karten nachträglich mit Cardmarket verknüpfen (Standard: Probelauf)."""
+    async with factory() as session:
+        report = await rescue_cardmarket(session, dry_run=not args.apply, only_owned=args.owned)
+        if args.apply:
+            await session.commit()
+    print(render_rescue_report(report))
 
 
 async def _catalog_gaps_ja(
@@ -874,6 +886,13 @@ def _add_cardmarket_commands(commands: Any) -> None:
     gaps.add_argument("--set", help="nur dieses Set-Kürzel, z. B. BW9")
     gaps.add_argument("--out", help="Bericht zusätzlich als Markdown-Datei")
     gaps.set_defaults(handler=_catalog_gaps_ja)
+    rescue = commands.add_parser(
+        "cardmarket-rescue",
+        help="Offene Karten mit Cardmarket verknüpfen (Name mehrfach, kleine Sets); Probelauf",
+    )
+    rescue.add_argument("--apply", action="store_true", help="Zuordnungen speichern")
+    rescue.add_argument("--owned", action="store_true", help="nur Karten aus Sammlungen")
+    rescue.set_defaults(handler=_cardmarket_rescue)
     commands.add_parser(
         "japanese-names", help="Englische Namen asiatischer Trainer/Items aus Cardmarket"
     ).set_defaults(handler=_japanese_names)
