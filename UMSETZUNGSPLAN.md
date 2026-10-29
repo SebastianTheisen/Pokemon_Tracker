@@ -881,6 +881,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Falscher „sicherer“ Treffer: Rare Candy (JP) · Megalo Cannon 086/076 → Latios-EX (Plasma Freeze, englisch). TCGplayer führt Megalo Cannon (ja) unter „BW9“, Kartenkiste hat „bw9“ auch als englisches Plasma Freeze – Kürzel wurden ohne Sprache verglichen. Jetzt Kürzel mit Sprache (Kategorie 85 = ja, 3 = en); Katalog-Kürzel „XY10-B“/„BW9-B“ zählen wie TCGplayer „XY10“/„BW9“. Regressionstest
 
+- [x] Lücken im japanischen Katalog aus TCGplayer (tcgcsv Kategorie 85) ergänzen: Anlass Rare Candy · Megalo Cannon 086/076 – BW9-B hat im Katalog nur 001–076, Secret Rares fehlen. `services/japanese_gaps.py`, CLI `catalog-gaps-ja [--apply] [--set]`, `deploy/phase8_japanese_gaps.sh` (Standard Probelauf). Nur bestehende Sets, nur fehlende Nummern, nichts überschreiben; Zuordnung TCGplayer-Set ↔ Katalog-Set über Kürzel (ja, „BW9“ = „BW9-B“) **und** ≥ 60 % gemeinsame Nummern (mind. 5), leere Hüllen nie; Namen wie Classic (Pokémon japanisch, sonst englisch), Bild als Adresse
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

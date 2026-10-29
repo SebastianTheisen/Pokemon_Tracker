@@ -88,6 +88,8 @@ from app.services.image_import import (
 from app.services.image_import import (
     render_report as render_image_report,
 )
+from app.services.japanese_gaps import JapaneseGaps
+from app.services.japanese_gaps import render_report as render_gaps_report
 from app.services.onepiece_catalog import (
     OnePieceCatalog,
     OnePieceCatalogError,
@@ -361,6 +363,17 @@ async def _classic_import(
     """Japanische Classic Collection (CLL/CLF/CLK) aus tcgcsv.com, mit Cardmarket verknüpft."""
     report = await ClassicCollection(factory, settings).run(dry_run=args.dry_run)
     text = render_classic_report(report)
+    if args.out:
+        await asyncio.to_thread(Path(args.out).write_text, text, encoding="utf-8")
+    print(text)
+
+
+async def _catalog_gaps_ja(
+    factory: async_sessionmaker[AsyncSession], settings: Settings, args: argparse.Namespace
+) -> None:
+    """Fehlende Karten japanischer Sets (z. B. Secret Rares) aus tcgcsv.com ergänzen."""
+    report = await JapaneseGaps(factory, settings).run(apply=args.apply, only=args.set)
+    text = render_gaps_report(report)
     if args.out:
         await asyncio.to_thread(Path(args.out).write_text, text, encoding="utf-8")
     print(text)
@@ -845,6 +858,14 @@ def _add_cardmarket_commands(commands: Any) -> None:
     classic.add_argument("--dry-run", action="store_true", help="nur lesen, nichts speichern")
     classic.add_argument("--out", help="Bericht zusätzlich als Markdown-Datei")
     classic.set_defaults(handler=_classic_import)
+    gaps = commands.add_parser(
+        "catalog-gaps-ja",
+        help="Lücken japanischer Sets aus tcgcsv.com (Standard: Probelauf, --apply ergänzt)",
+    )
+    gaps.add_argument("--apply", action="store_true", help="fehlende Karten wirklich anlegen")
+    gaps.add_argument("--set", help="nur dieses Set-Kürzel, z. B. BW9")
+    gaps.add_argument("--out", help="Bericht zusätzlich als Markdown-Datei")
+    gaps.set_defaults(handler=_catalog_gaps_ja)
 
 
 def build_parser() -> argparse.ArgumentParser:
