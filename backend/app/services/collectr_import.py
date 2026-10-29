@@ -401,6 +401,7 @@ class CommitResult:
     added: int
     skipped: int
     card_ids: tuple[uuid.UUID, ...] = ()  # alle Karten des Imports (für den Preisabruf)
+    item_ids: tuple[uuid.UUID, ...] = ()  # neu angelegte Positionen (Startwert nachtragen)
 
 
 class CollectrImport:
@@ -504,12 +505,13 @@ class CollectrImport:
             key = (item.card_id, item.variant, condition, item.grading_company, grade)
             merged[key] = merged.get(key, 0) + item.quantity
         added = skipped = 0
+        item_ids: list[uuid.UUID] = []
         for key, quantity in merged.items():
             if key in existing:
                 skipped += 1
                 continue
             card_id, variant, condition, company, grade = key
-            await self._collection.add_item(
+            created = await self._collection.add_item(
                 ItemInput(
                     folder_id=folder.id,
                     card_id=card_id,
@@ -521,10 +523,12 @@ class CollectrImport:
                 ),
                 refresh_prices=False,
             )
+            item_ids.append(created.id)
             added += 1
         return CommitResult(
             folder=folder,
             added=added,
             skipped=skipped,
             card_ids=tuple(dict.fromkeys(key[0] for key in merged)),
+            item_ids=tuple(item_ids),
         )

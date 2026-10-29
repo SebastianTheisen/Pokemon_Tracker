@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, StringConstraints
 from app.api.deps import CurrentUser, PriceServiceDep, SessionDep, SettingsDep
 from app.api.v1.collection import refresh_card_prices
 from app.core.config import Settings
-from app.models import GradingCompany
+from app.models import GradingCompany, User
 from app.providers.pricing import Condition
 from app.schemas.catalog import CardOut
 from app.schemas.collection import FolderOut, Grade, Variant
@@ -28,6 +28,7 @@ from app.services.collectr_import import (
     RowStatus,
     clean_portfolio,
 )
+from app.services.pricing import PriceService
 from app.services.tcgplayer_sets import set_aliases
 
 router = APIRouter(prefix="/import", tags=["import"])
@@ -169,9 +170,15 @@ async def collectr_preview(
     return out
 
 
-async def refresh_imported_prices(app_state: Any, card_ids: Sequence[uuid.UUID]) -> None:
-    """Preise der importierten Karten gleich holen (sonst erst in der nächsten Tagesrunde –
-    die Sammlung zeigte bis dahin „–“). Begrenzt parallel; Fehler nur im Log."""
+async def refresh_imported_prices(
+    app_state: Any,
+    user_id: uuid.UUID,
+    card_ids: Sequence[uuid.UUID],
+    item_ids: Sequence[uuid.UUID],
+) -> None:
+    """Nach dem Import wie beim einzelnen Anlegen: Preise holen (Rohkarten Cardmarket,
+    Slabs Notenpreise von PriceCharting – derselbe Weg wie ``refresh_card_prices``), dann
+    den Startwert der neuen Positionen nachtragen. Begrenzt parallel; Fehler nur im Log."""
     semaphore = asyncio.Semaphore(app_state.settings.price_refresh_concurrency)
 
     async def one(card_id: uuid.UUID) -> None:
@@ -179,12 +186,30 @@ async def refresh_imported_prices(app_state: Any, card_ids: Sequence[uuid.UUID])
             await refresh_card_prices(app_state, card_id)
 
     await asyncio.gather(*(one(card_id) for card_id in card_ids))
-    log.info("collectr.prices_refreshed", cards=len(card_ids))
+    filled = 0
+    try:
+        async with app_state.session_factory() as session:
+            user = await session.get(User, user_id)
+            if user is not None:
+                prices = PriceService(
+                    session, app_state.settings, app_state.price_providers, app_state.price_health
+                )
+                filled = await CollectionService(session, user, prices).backfill_start_values(
+                    item_ids
+                )
+                await session.commit()
+    except Exception:
+        log.exception("collectr.start_values_failed")
+    log.info("collectr.prices_refreshed", cards=len(card_ids), start_values=filled)
 
 
 @router.post("/collectr/commit")
 async def collectr_commit(
-    body: CollectrCommitIn, importer: Importer, request: Request, background: BackgroundTasks
+    body: CollectrCommitIn,
+    importer: Importer,
+    user: CurrentUser,
+    request: Request,
+    background: BackgroundTasks,
 ) -> CollectrCommitOut:
     """Ausgewählte Karten in den Ordner übernehmen (legt ihn bei Bedarf an). Preise werden
     danach im Hintergrund geholt."""
@@ -202,7 +227,9 @@ async def collectr_commit(
             for item in body.items
         ],
     )
-    background.add_task(refresh_imported_prices, request.app.state, result.card_ids)
+    background.add_task(
+        refresh_imported_prices, request.app.state, user.id, result.card_ids, result.item_ids
+    )
     return CollectrCommitOut(
         folder=FolderOut.model_validate(result.folder),
         added=result.added,

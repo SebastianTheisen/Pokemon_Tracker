@@ -891,6 +891,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Viele japanische Trainer ohne Wert: Cardmarket-Zuordnung braucht einen englischen Namen, die Pokédex-Übersetzung kennt Trainer nicht → nie verknüpft, kein Preis. `catalog-gaps-ja --apply` setzt jetzt auch für vorhandene Karten den englischen Namen aus TCGplayer (gleiches Set, gleiche Nummer); `cardmarket-match` nutzt `name_en`. Ablauf auf dem VPS: `deploy/phase8_japanese_prices.sh` (Namen → Zuordnung → Namen aus Cardmarket → Preise)
 
+- [x] Import = einzeln anlegen: Nach `POST /import/collectr/commit` werden im Hintergrund die Preise geholt (Rohkarten Cardmarket, Slabs Notenpreise von PriceCharting – derselbe Weg wie beim Anlegen) und dann `value_at_add` samt Wert des Hinzufügen-Ereignisses nachgetragen (`CollectionService.backfill_start_values`). Die tägliche Preisrunde trägt fehlende Startwerte ebenfalls nach (ältere Importe, Karten ohne Preis beim Anlegen). Test vergleicht Import und manuelles Anlegen derselben Karte
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

@@ -41,7 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import create_engine, create_session_factory
-from app.models import Card, CardSet, Game
+from app.models import Card, CardSet, CollectionItem, Game
 from app.providers.pricing import PriceProvider
 from app.providers.pricing.registry import build_price_providers
 from app.providers.tcgdex import TcgdexClient
@@ -119,7 +119,19 @@ async def refresh_tracked_prices(
     async with session_factory() as session:
         prices = PriceService(session, settings, providers, health)
         for owner in await users_with_items(session):
-            await CollectionService(session, owner, prices).take_snapshot()
+            collection = CollectionService(session, owner, prices)
+            # Positionen ohne Startwert (Import, Karte damals ohne Preis): jetzt nachtragen
+            await collection.backfill_start_values(
+                list(
+                    await session.scalars(
+                        select(CollectionItem.id).where(
+                            CollectionItem.user_id == owner.id,
+                            CollectionItem.value_at_add.is_(None),
+                        )
+                    )
+                )
+            )
+            await collection.take_snapshot()
             summary.snapshots += 1
         await session.commit()
 

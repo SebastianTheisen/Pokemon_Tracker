@@ -19,7 +19,7 @@ from app.models import Card, CardSet, CmProduct
 from app.services.collectr_import import clean_portfolio, parse_row
 from app.services.tcgplayer_sets import build_aliases, code_key, name_key, reset_cache, set_aliases
 from tests.conftest import RegisterUser
-from tests.pricing_helpers import FakeProvider
+from tests.pricing_helpers import FakeProvider, cardmarket
 
 API = "/api/v1"
 
@@ -654,3 +654,38 @@ async def test_tcgplayer_codes_respect_language(
     # Latios-EX taucht höchstens weit hinten auf (unter der Vorschlagsgrenze gar nicht)
     latios = [m for m in row["matches"] if m["card"]["id"] == str(cards["en"].id)]
     assert not latios or latios[0]["score"] < 0.5
+
+
+async def test_import_matches_manual_add(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    session_factory: async_sessionmaker[AsyncSession],
+    price_provider: FakeProvider,
+) -> None:
+    """Importierte Karten landen wie einzeln angelegte: gleicher Wert, gleicher Startwert
+    („seit Hinzufügen“), Slab mit Firma und Note – nicht erst nach der Tagesrunde."""
+    alice = await register_user("alice@example.com")
+    cards = await _catalog(session_factory)
+    price_provider.quotes = [cardmarket("trend", "10")]
+    raw = str(cards["S6a-081"].id)
+
+    manual = await client.post(
+        f"{API}/collection/items", json={"card_id": raw}, headers=alice.headers
+    )
+    assert manual.status_code == 201, manual.text
+    imported = await client.post(
+        f"{API}/import/collectr/commit",
+        json={"folder_name": "Import", "items": [{"card_id": raw, "condition": "NM"}]},
+        headers=alice.headers,
+    )
+    assert imported.status_code == 200, imported.text
+    folder = imported.json()["folder"]["id"]
+    listed = (
+        await client.get(
+            f"{API}/collection/items", params={"folder_id": folder}, headers=alice.headers
+        )
+    ).json()
+    item = (listed["items"] if isinstance(listed, dict) else listed)[0]
+    expected = manual.json()
+    assert item["value"]["unit_value"] == expected["value"]["unit_value"] is not None
+    assert item["value_at_add"] == expected["value_at_add"] is not None

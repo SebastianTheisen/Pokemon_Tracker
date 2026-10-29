@@ -447,6 +447,31 @@ class CollectionService:
         await self._session.flush()
         return item
 
+    async def backfill_start_values(self, item_ids: Sequence[uuid.UUID]) -> int:
+        """Startwert nachtragen, wenn eine Position ohne Preis angelegt wurde (Massenimport):
+        ``value_at_add`` und der Wert des Hinzufügen-Ereignisses – wie beim einzelnen Anlegen,
+        wo die Preise vorher geholt werden. Gibt die Anzahl ergänzter Positionen zurück."""
+        filled = 0
+        for item in await self._own_items(item_ids):
+            if item.value_at_add is not None:
+                continue
+            start = await self._current_unit_value(item)
+            if start.unit_value is None:
+                continue
+            item.value_at_add = start.unit_value
+            event = await self._session.scalar(
+                select(CollectionEvent).where(
+                    CollectionEvent.item_id == item.id,
+                    CollectionEvent.event_type == CollectionEventType.ADDED,
+                    CollectionEvent.unit_value.is_(None),
+                )
+            )
+            if event is not None:
+                event.unit_value = start.unit_value
+            filled += 1
+        await self._session.flush()
+        return filled
+
     async def get_item(self, item_id: uuid.UUID) -> CollectionItem:
         item = await self._session.scalar(
             select(CollectionItem).where(
