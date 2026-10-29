@@ -12,7 +12,7 @@ from sqlalchemy import text
 
 from app.core.config import get_settings
 from app.db.session import create_engine, create_session_factory
-from app.services.tcgplayer_sets import code_key, name_key, set_aliases
+from app.services.tcgplayer_sets import name_key, set_aliases, set_key
 
 EXAMPLES = (
     "Hot Air Arena", "Sky Legend", "Thunderclap Spark", "Amazing Volt", "Eevee Heroes",
@@ -43,7 +43,9 @@ async def main() -> None:
     ours: dict[str, list[str]] = {}
     for row in rows:
         for code in {row.external_id, row.code or ""} - {""}:
-            ours.setdefault(code_key(code), []).append(f"{row.external_id} ({row.language})")
+            ours.setdefault(set_key(row.language, code), []).append(
+                f"{row.external_id} ({row.language})"
+            )
     codes = {code for group in aliases.values() for code in group}
     hit = sum(1 for code in codes if code in ours)
     print(f"Kürzel bei TCGplayer: {len(codes)}, davon in Kartenkiste: {hit}\n")

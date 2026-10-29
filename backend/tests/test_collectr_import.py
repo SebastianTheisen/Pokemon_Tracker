@@ -410,7 +410,7 @@ def test_tcgplayer_set_keys() -> None:
             {"name": None, "abbreviation": "X"},
         ]
     )
-    assert aliases == {"hotairarena": frozenset({"sv9a"})}
+    assert aliases == {"hotairarena": frozenset({"ja:sv9a"})}
 
 
 async def test_set_aliases_downloads_once_and_survives_errors(settings: Settings) -> None:
@@ -423,7 +423,7 @@ async def test_set_aliases_downloads_once_and_survives_errors(settings: Settings
 
     reset_cache()
     aliases = await set_aliases(settings, transport=httpx.MockTransport(handler))
-    assert aliases["hotairarena"] == frozenset({"sv9a"})
+    assert aliases["hotairarena"] == frozenset({"ja:sv9a"})
     await set_aliases(settings, transport=httpx.MockTransport(handler))
     assert len(calls) == 2  # zwei Kategorien, danach aus dem Speicher
 
@@ -608,3 +608,45 @@ async def test_set_name_alternatives_in_brackets(
     row = response.json()["rows"][0]
     assert row["matches"][0]["card"]["id"] == str(cards["XY11-Br"].id)
     assert row["status"] == "matched"
+
+
+async def test_tcgplayer_codes_respect_language(
+    client: AsyncClient,
+    register_user: RegisterUser,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Rare Candy (JP) · Megalo Cannon · 086/076 (29.10.): TCGplayer führt Megalo Cannon
+    (japanisch) unter „BW9“ – Kartenkiste hat „bw9“ auch als englisches Plasma Freeze. Ohne
+    Sprache galt Latios-EX (Plasma Freeze 86) als sicher."""
+    alice = await register_user("alice@example.com")
+    ALIASES.update(
+        build_aliases([{"name": "Megalo Cannon", "abbreviation": "BW9", "language": "ja"}])
+    )
+    async with session_factory() as session:
+        cards: dict[str, Card] = {}
+        for code, language, size, name in (
+            ("bw9", "en", 116, "Latios-EX"),
+            ("BW9-B", "ja", 76, "ふしぎなアメ"),  # Katalog-Kürzel mit „-B“
+        ):
+            card_set = CardSet(
+                external_id=code, language=language, name=code, card_count_official=size
+            )
+            session.add(card_set)
+            await session.flush()
+            card = Card(
+                external_id=f"{code}-086", language=language, set_id=card_set.id,
+                number="86" if language == "en" else "086", number_norm="86", name=name,
+            )  # fmt: skip
+            session.add(card)
+            cards[language] = card
+        await session.commit()
+    tile = ["Rare Candy (JP)", "Megalo Cannon", "Ultra Rare • 086/076", "Near Mint • Holofoil"]
+    response = await client.post(
+        f"{API}/import/collectr/preview", json={"rows": [tile]}, headers=alice.headers
+    )
+    row = response.json()["rows"][0]
+    assert row["matches"][0]["card"]["id"] == str(cards["ja"].id)
+    assert row["status"] == "matched"
+    # Latios-EX taucht höchstens weit hinten auf (unter der Vorschlagsgrenze gar nicht)
+    latios = [m for m in row["matches"] if m["card"]["id"] == str(cards["en"].id)]
+    assert not latios or latios[0]["score"] < 0.5

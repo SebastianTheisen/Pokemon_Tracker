@@ -879,6 +879,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Namenlose japanische Sets (Name = Kürzel, z. B. „XY11-Br“) per Kartenvergleich mit TCGplayer bestimmt (`deploy/spikes/unnamed_sets.py`: Nummer + englischer Name gegen alle Gruppen von Kategorie 85): XY11-Br = Cruel Traitor (45/53), XY11-Bb = Fever-Burst Fighter (45/53), XY8-Bb/Br, XY1-Bx/By, XY5-Bg/Bt, XY6–XY10 u. a. → in `set_names.json` (Anzeige, Suche, Import). Die leeren Hüllen XY11a/XY11b (0 Karten) bleiben. Collectr-Setnamen „(Cruel Traitor,Ruthless Rebel)“ werden in Alternativen zerlegt → Pokémon Ranger 058/054 → XY11-Br sicher
 
+- [x] Falscher „sicherer“ Treffer: Rare Candy (JP) · Megalo Cannon 086/076 → Latios-EX (Plasma Freeze, englisch). TCGplayer führt Megalo Cannon (ja) unter „BW9“, Kartenkiste hat „bw9“ auch als englisches Plasma Freeze – Kürzel wurden ohne Sprache verglichen. Jetzt Kürzel mit Sprache (Kategorie 85 = ja, 3 = en); Katalog-Kürzel „XY10-B“/„BW9-B“ zählen wie TCGplayer „XY10“/„BW9“. Regressionstest
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).

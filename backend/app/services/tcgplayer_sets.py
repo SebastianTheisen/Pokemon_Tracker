@@ -24,7 +24,9 @@ from app.core.config import Settings
 
 log = structlog.get_logger(__name__)
 
-CATEGORIES = (3, 85)  # Pokémon (Englisch), Pokémon Japan
+# Kategorie → Sprache der Sets. Die Kürzel überschneiden sich zwischen den Sprachen
+# („BW9“ = Megalo Cannon (ja) = Plasma Freeze (en)) – daher immer mit Sprache vergleichen.
+CATEGORIES = {3: "en", 85: "ja"}
 CACHE_SECONDS = 24 * 3600
 RETRY_SECONDS = 10 * 60
 
@@ -49,14 +51,22 @@ def code_key(code: str) -> str:
     return _LEADING_ZEROS.sub("", _KEY.sub("", code.casefold()))
 
 
-def build_aliases(groups: Iterable[Mapping[str, Any]]) -> dict[str, frozenset[str]]:
-    """Gruppen von tcgcsv → {Namensschlüssel: Kürzel-Schlüssel}."""
+def set_key(language: str, code: str) -> str:
+    """Kürzel mit Sprache: „ja:bw9“ ≠ „en:bw9“."""
+    return f"{language}:{code_key(code)}"
+
+
+def build_aliases(
+    groups: Iterable[Mapping[str, Any]], language: str = "ja"
+) -> dict[str, frozenset[str]]:
+    """Gruppen von tcgcsv → {Namensschlüssel: Kürzel mit Sprache}. ``language`` gilt für
+    Gruppen ohne eigenes Feld ``language``."""
     found: dict[str, set[str]] = defaultdict(set)
     for group in groups:
         name, code = group.get("name"), group.get("abbreviation")
         key = name_key(name) if isinstance(name, str) else ""
         if key and isinstance(code, str) and code.strip():
-            found[key].add(code_key(code))
+            found[key].add(set_key(str(group.get("language") or language), code))
     return {key: frozenset(codes) for key, codes in found.items()}
 
 
@@ -82,12 +92,14 @@ async def set_aliases(
                 follow_redirects=True,
                 transport=transport,
             ) as client:
-                for category in CATEGORIES:
+                for category, language in CATEGORIES.items():
                     response = await client.get(f"{base}/{category}/groups")
                     response.raise_for_status()
                     data = response.json()
                     items = data.get("results", []) if isinstance(data, dict) else data
-                    groups += [item for item in items if isinstance(item, dict)]
+                    groups += [
+                        {**item, "language": language} for item in items if isinstance(item, dict)
+                    ]
         except (httpx.HTTPError, ValueError):
             log.warning("tcgplayer_sets.unavailable", exc_info=True)
             _cache = (now + RETRY_SECONDS, {})

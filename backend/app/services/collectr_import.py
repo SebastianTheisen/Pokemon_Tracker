@@ -52,7 +52,7 @@ from app.services.catalog_numbers import normalize_number
 from app.services.collection import CollectionService, ItemInput
 from app.services.display_names import translated_set_title
 from app.services.errors import InvalidInputError
-from app.services.tcgplayer_sets import SetAliases, code_key
+from app.services.tcgplayer_sets import SetAliases, code_key, set_key
 from app.services.tcgplayer_sets import name_key as tcg_name_key
 
 LANGUAGES = ("ja", "en")
@@ -283,7 +283,10 @@ def set_names_of(row: CollectrRow) -> list[str]:
 def set_alias_match(row: CollectrRow, card_set: CardSet, aliases: SetAliases) -> bool | None:
     """Kennt TCGplayer den Setnamen aus Collectr? ``True``: Kürzel passt zum Set der Karte,
     ``False``: gehört zu einem anderen Set, ``None``: Name unbekannt."""
-    own = {code_key(card_set.external_id), code_key(card_set.code or "")} - {""}
+    set_codes = [code for code in (card_set.external_id, card_set.code) if code]
+    # Katalog „XY10-B“/„BW9-B“ = TCGplayer „XY10“/„BW9“ (Doppelpacks „XY11-Bb“ bleiben)
+    set_codes += [code[:-2] for code in set_codes if code.upper().endswith("-B")]
+    own = {set_key(card_set.language, code) for code in set_codes}
     known = [codes for name in set_names_of(row) if (codes := aliases.get(tcg_name_key(name)))]
     if not known:
         return None
