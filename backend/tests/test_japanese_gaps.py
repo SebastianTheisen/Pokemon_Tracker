@@ -114,6 +114,7 @@ async def test_dry_run_then_apply(
 
     applied = await gaps.run(apply=True)
     assert applied.added == 1
+    assert applied.names == 10  # „カード1“ … bekommen „Card 1“ … (für Cardmarket)
     async with session_factory() as session:
         card = (await session.scalars(select(Card).where(Card.number == "086"))).one()
         assert (card.name, card.name_en, card.source) == (
@@ -125,7 +126,8 @@ async def test_dry_run_then_apply(
         assert card.image_url.endswith("_in_1000x1000.jpg")
         assert card.card_set.external_id == "BW9-B"
         first = (await session.scalars(select(Card).where(Card.number == "001"))).all()
-        assert [c.name for c in first if c.card_set.external_id == "BW9-B"] == ["カード1"]
+        bw9 = [c for c in first if c.card_set.external_id == "BW9-B"]
+        assert [(c.name, c.name_en) for c in bw9] == [("カード1", "Card 1")]
 
     again = await gaps.run(apply=True)  # wiederholbar, nichts doppelt
     assert again.added == 0 and again.missing == 0

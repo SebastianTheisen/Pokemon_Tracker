@@ -17,7 +17,8 @@ keine. Der Cardmarket-Katalog enthält aber je Ausgabe alle Einzelkarten mit eng
 
 Japanische, koreanische und chinesische Namen werden über die Pokédex-Daten ins Englische
 übersetzt; deutsche Karten nehmen den Namen ihrer englischen Fassung. Trainerkarten ohne
-englischen Namen bleiben offen.
+englischen Namen bleiben offen – außer sie haben einen aus TCGplayer (``name_en``,
+:func:`app.services.japanese_gaps.JapaneseGaps`).
 """
 
 from __future__ import annotations
@@ -88,8 +89,11 @@ def _number_order(number: str) -> tuple[int, int, str]:
     return (0, int(digits.group(1)), number) if digits else (1, 0, number)
 
 
-def english_name(name: str, language: str, english_sibling: str | None) -> str | None:
-    """Englischer Name einer Karte für den Vergleich mit Cardmarket."""
+def english_name(
+    name: str, language: str, english_sibling: str | None, name_en: str | None = None
+) -> str | None:
+    """Englischer Name einer Karte für den Vergleich mit Cardmarket. ``name_en``: englischer
+    Name aus TCGplayer (japanische Trainer, die die Pokédex-Übersetzung nicht kennt)."""
     if language == "en":
         return name
     if english_sibling:
@@ -99,6 +103,8 @@ def english_name(name: str, language: str, english_sibling: str | None) -> str |
     translated = translate_card_name(name, language, target="en")
     if translated:
         return translated
+    if name_en:
+        return name_en
     return name if _ASCII.match(name) else None  # z. B. PriceCharting-Karten (englisch)
 
 
@@ -205,6 +211,7 @@ async def match_cardmarket(  # noqa: PLR0912, PLR0915 – ein Durchgang über al
             Card.external_id,
             Card.language,
             Card.name,
+            Card.name_en,
             Card.number_norm,
             Card.cardmarket_product_id,
             Card.cardmarket_product_override,
@@ -214,7 +221,7 @@ async def match_cardmarket(  # noqa: PLR0912, PLR0915 – ein Durchgang über al
     )
     cards: defaultdict[uuid.UUID, list[_Card]] = defaultdict(list)
     for row in rows:
-        name = english_name(row.name, row.language, english.get(row.external_id))
+        name = english_name(row.name, row.language, english.get(row.external_id), row.name_en)
         cards[row.set_id].append(
             _Card(
                 id=row.id,

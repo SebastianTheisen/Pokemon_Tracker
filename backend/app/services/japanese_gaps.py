@@ -25,7 +25,7 @@ from typing import Any
 
 import httpx
 import structlog
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -79,12 +79,14 @@ class SetGap:
     tcg_numbers: int = 0
     missing: list[ClassicCard] = field(default_factory=list)
     skipped: str | None = None  # Grund, wenn nicht ergänzt wird
+    english: dict[str, str] = field(default_factory=dict)  # Nummer → englischer Name
 
 
 @dataclass
 class GapReport:
     sets: list[SetGap] = field(default_factory=list)
     added: int = 0
+    names: int = 0  # vorhandene Karten, die einen englischen Namen bekamen
     dry_run: bool = True
     images: dict[str, str] = field(default_factory=dict)  # TCGplayer-Adresse → beste Fassung
 
@@ -127,6 +129,7 @@ def assess(
         return gap
     totals = Counter(card.total for card in by_number.values() if card.total)
     usual = totals.most_common(1)[0][0] if totals else None
+    gap.english = {number: clean_english(card.english) for number, card in by_number.items()}
     gap.missing = [
         card
         for number, card in by_number.items()
@@ -230,6 +233,7 @@ class JapaneseGaps:
             ]
             resolve_conflicts(assessed)
             report.sets = [gap for gap in assessed if gap.missing or gap.skipped]
+            matched = [g for g in assessed if g.skipped is None and g.catalog_set is not None]
             report.images = await _best_images(
                 client, [card for gap in report.sets for card in gap.missing]
             )
@@ -241,6 +245,8 @@ class JapaneseGaps:
                         report.added += await self._store(
                             session, ids[gap.catalog_set], gap, report.images
                         )
+                for gap in matched:
+                    report.names += await self._name(session, ids[gap.catalog_set or ""], gap)
                 await session.commit()
         log.info(
             "japanese_gaps.done",
@@ -258,8 +264,7 @@ class JapaneseGaps:
         added = 0
         for card in gap.missing:
             image = images.get(card.image_url or "", card.image_url)
-            english = _BRACKET.sub("", _NUMBER_SUFFIX.sub("", card.english)).strip()
-            english = english or card.english
+            english = clean_english(card.english)
             result = await session.execute(
                 insert(Card)
                 .values(
@@ -280,6 +285,31 @@ class JapaneseGaps:
             )
             added += int(getattr(result, "rowcount", 0) or 0)
         return added
+
+    @staticmethod
+    async def _name(session: AsyncSession, set_id: uuid.UUID, gap: SetGap) -> int:
+        """Vorhandenen Karten ohne englischen Namen den von TCGplayer geben (japanische
+        Trainer kennt die Pokédex-Übersetzung nicht – ohne Namen keine Cardmarket-Zuordnung
+        und damit kein Preis)."""
+        named = 0
+        for number, english in gap.english.items():
+            result = await session.execute(
+                update(Card)
+                .where(
+                    Card.set_id == set_id,
+                    Card.number_norm == number,
+                    Card.language == LANGUAGE,
+                    Card.name_en.is_(None),
+                )
+                .values(name_en=english[:200])
+            )
+            named += int(getattr(result, "rowcount", 0) or 0)
+        return named
+
+
+def clean_english(name: str) -> str:
+    """„Emolga - 025/BW-P“ → „Emolga“, „Rare Candy (Secret)“ → „Rare Candy“."""
+    return _BRACKET.sub("", _NUMBER_SUFFIX.sub("", name)).strip() or name
 
 
 async def _best_images(client: httpx.AsyncClient, cards: Sequence[ClassicCard]) -> dict[str, str]:
@@ -303,7 +333,11 @@ async def _best_images(client: httpx.AsyncClient, cards: Sequence[ClassicCard]) 
 
 
 def render_report(report: GapReport, *, details: int = 40) -> str:
-    mode = "Probelauf, nichts gespeichert" if report.dry_run else f"{report.added} ergänzt"
+    mode = (
+        "Probelauf, nichts gespeichert"
+        if report.dry_run
+        else f"{report.added} ergänzt, {report.names} englische Namen gesetzt"
+    )
     lines = [
         f"# Japanischer Katalog: Lücken aus TCGplayer ({mode})",
         "",

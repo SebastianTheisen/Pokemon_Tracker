@@ -44,3 +44,12 @@ async def test_trainer_names_from_cardmarket(
         # Pokémon: weiter der deutsche Name aus der eigenen Übersetzung
         assert CardOut.model_validate(espeon).translated_name == "Psiana V"
         assert await fill_english_names(session) == 0  # nur leere Namen
+
+
+def test_matching_uses_tcgplayer_english_name() -> None:
+    """Japanische Trainer ohne Pokédex-Übersetzung: Cardmarket-Zuordnung über ``name_en``."""
+    from app.services.cardmarket_matching import english_name  # noqa: PLC0415
+
+    assert english_name("ナンジャモ", "ja", None) is None
+    assert english_name("ナンジャモ", "ja", None, "Iono") == "Iono"
+    assert english_name("エーフィV", "ja", None, "Espeon V") == "Espeon V"

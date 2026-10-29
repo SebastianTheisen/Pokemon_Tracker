@@ -889,6 +889,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Japanische Trainer/Items/Stadien zeigten japanische Namen („ナンジャモ“): Pokémon-Namen übersetzt die App, Trainer nicht. `services/japanese_names.py` füllt leere `name_en` asiatischer Karten aus dem verknüpften Cardmarket-Produkt („Iono (V.2)“ → „Iono“); Anzeige und Sortierung nehmen ihn, wenn es keine Pokémon-Übersetzung gibt. Läuft nach jedem Cardmarket-Import; CLI `japanese-names`
 
+- [x] Viele japanische Trainer ohne Wert: Cardmarket-Zuordnung braucht einen englischen Namen, die Pokédex-Übersetzung kennt Trainer nicht → nie verknüpft, kein Preis. `catalog-gaps-ja --apply` setzt jetzt auch für vorhandene Karten den englischen Namen aus TCGplayer (gleiches Set, gleiche Nummer); `cardmarket-match` nutzt `name_en`. Ablauf auf dem VPS: `deploy/phase8_japanese_prices.sh` (Namen → Zuordnung → Namen aus Cardmarket → Preise)
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).
