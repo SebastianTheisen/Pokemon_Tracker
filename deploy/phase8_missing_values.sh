@@ -36,6 +36,9 @@ docker compose up -d --build api worker
 wait_for_api
 {
   echo "## Cardmarket-Produkte anderer Karten"; run cardmarket-sanity "$@"; echo
+  if [[ "${1:-}" == "--apply" ]]; then  # gelöste Karten über den Namen neu zuordnen
+    echo "## Namenszuordnung"; run cardmarket-match | sed -n "1,4p"; echo
+  fi
   echo "## Ersatzbilder"; run fill-images; echo
   echo "## PriceCharting neu suchen"; run pricecharting-recheck --apply; echo
   echo "## Preise"; run refresh-prices; echo

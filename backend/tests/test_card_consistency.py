@@ -159,3 +159,23 @@ def test_names_containing_a_pokemon_are_not_checked(name: str, english: str) -> 
     assert pokemon_words(name, "ja") is None
     assert not contradicts_english(name, "ja", english)
     assert not asian_names_conflict(name, "ja", CHARIZARD_TW, "zh-tw")
+
+
+@pytest.mark.parametrize(
+    ("name", "language", "english"),
+    [
+        ("バドレックス", "ja", "Calyrex [King's Instructions | Bloomshine]"),
+        ("蕾冠王", "zh-tw", "Calyrex [King's Instructions | Bloomshine]"),
+        ("ドヒドイデ", "ja", "Toxapex [Venoshock | Spike Shot]"),
+        ("サーナイトEX", "ja", "MGardevoir EX [Brilliant Arrow]"),
+    ],
+)
+def test_names_ending_in_ex_and_mega_prefix_fit(name: str, language: str, english: str) -> None:
+    """Probelauf 29.10.: „Calyrex“ wurde zu „Calyr ex“ getrennt, „MGardevoir“ nicht erkannt."""
+    assert not contradicts_english(name, language, english)
+
+
+def test_swapped_products_are_found() -> None:
+    """Echte Fehler aus dem Probelauf: Produkte zweier Karten vertauscht (S11 047/048)."""
+    assert contradicts_english("ペロッパフ", "ja", "Slurpuff [Draining Kiss | Magical Shot]")
+    assert contradicts_english("コクーン", "ja", "Beedrill [Sudden Sting | Sharp Sting]")

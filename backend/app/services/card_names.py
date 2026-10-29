@@ -123,14 +123,14 @@ def translate_card_name(name: str, language: str, target: str = TARGET_LANGUAGE)
         return None
     family = _family(language)
     text = unicodedata.normalize("NFKC", name).strip()
-    found = False
+    inserted: list[str] = []
     for local, species_id in _names_by_language(family):
         if local in text:
             translated = species_name(species_id, target)
             if translated:
                 text = text.replace(local, f" {translated} ")
-                found = True
-    if not found:
+                inserted.append(translated)
+    if not inserted:
         return None
     for local, german in _AFFIXES.get(family, ()):
         text = text.replace(local, german)
@@ -140,6 +140,8 @@ def translate_card_name(name: str, language: str, target: str = TARGET_LANGUAGE)
     text = re.sub(r"\s*&\s*", " & ", text)
     text = re.sub(r"-\s+", "-", text)
     text = re.sub(r"\s+", " ", text).strip()
+    if any(text.endswith(species) for species in inserted):
+        return text  # „Calyrex“, „Toxapex“: das „ex“ gehört zum Namen
     return _SUFFIX.sub(r" \1", text)
 
 
@@ -266,7 +268,11 @@ def contradicts_english(name: str, language: str, english: str) -> bool:
     """Gehört ein englischer Name (z. B. Cardmarket-Produkt) sicher zu einer anderen Karte?
     Nur bei ganz übersetzbaren Pokémon-Namen prüfbar: Kein Kennwort kommt darin vor."""
     words = pokemon_words(name, language)
-    return bool(words) and not (words or frozenset()) & _plain_words(english)
+    if not words:
+        return False
+    # Teilwort genügt: Cardmarket schreibt „MGardevoir EX“ für Mega-Gardevoir-EX.
+    plain = " ".join(sorted(_plain_words(english)))
+    return not any(word in plain for word in words)
 
 
 def asian_names_conflict(
