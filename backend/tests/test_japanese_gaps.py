@@ -5,11 +5,13 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
 from app.models import Card, CardSet, CardSource
+from app.services import japanese_gaps
 from app.services.japanese_gaps import JapaneseGaps, catalog_codes, render_report
 
 
@@ -131,3 +133,17 @@ async def test_dry_run_then_apply(
 
     again = await gaps.run(apply=True)  # wiederholbar, nichts doppelt
     assert again.added == 0 and again.missing == 0
+
+
+async def test_reports_unreachable_tcgcsv(
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Lauf 29.10.: tcgcsv lieferte nichts – der Bericht zeigte still „0 fehlen“."""
+    await _catalog(session_factory)
+    monkeypatch.setattr(japanese_gaps, "RETRY_SECONDS", 0.0)
+    broken = httpx.MockTransport(lambda _request: httpx.Response(429, json={}))
+    report = await JapaneseGaps(session_factory, settings, transport=broken).run(apply=True)
+    assert report.error is not None and "429" in report.error
+    assert "Fehler" in render_report(report)

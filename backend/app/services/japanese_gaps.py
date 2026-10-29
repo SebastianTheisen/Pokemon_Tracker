@@ -51,6 +51,7 @@ DOMINANT = 2  # bei mehreren TCGplayer-Sets für ein Katalog-Set: so viel mehr T
 _DIGIT = re.compile(r"\d")
 _NUMBER_SUFFIX = re.compile(r"\s+-\s+[\w-]+/[\w-]+$")  # „Emolga - 025/BW-P“
 CONCURRENCY = 6
+RETRY_SECONDS = 2.0
 _BRACKET = re.compile(r"\s*[\[(][^\])]*[\])]\s*$")  # „Rare Candy (Secret)“, „… [1st Edition]“
 
 
@@ -87,6 +88,10 @@ class GapReport:
     sets: list[SetGap] = field(default_factory=list)
     added: int = 0
     names: int = 0  # vorhandene Karten, die einen englischen Namen bekamen
+    groups: int = 0  # TCGplayer-Gruppen insgesamt
+    compared: int = 0  # davon mit passendem Katalog-Set verglichen
+    failed: int = 0  # Gruppen, deren Kartenliste nicht geladen werden konnte
+    error: str | None = None
     dry_run: bool = True
     images: dict[str, str] = field(default_factory=dict)  # TCGplayer-Adresse → beste Fassung
 
@@ -210,7 +215,14 @@ class JapaneseGaps:
             follow_redirects=True,
             transport=self._transport,
         ) as client:
-            groups = (await client.get(f"{base}/{CATEGORY}/groups")).json().get("results", [])
+            response = await _get(client, f"{base}/{CATEGORY}/groups")
+            groups = response.json().get("results", []) if response.is_success else []
+            report.groups = len(groups)
+            if not groups:
+                # Nicht still „0 fehlen“ melden: tcgcsv nicht erreichbar oder gedrosselt
+                report.error = f"tcgcsv lieferte keine Gruppen (HTTP {response.status_code})"
+                log.warning("japanese_gaps.no_groups", status=response.status_code)
+                return report
             wanted = [
                 group
                 for group in groups
@@ -221,15 +233,18 @@ class JapaneseGaps:
             ]
             semaphore = asyncio.Semaphore(CONCURRENCY)
 
-            async def products(group: Mapping[str, Any]) -> list[ClassicCard]:
+            async def products(group: Mapping[str, Any]) -> list[ClassicCard] | None:
                 async with semaphore:
-                    response = await client.get(f"{base}/{CATEGORY}/{group['groupId']}/products")
-                return parse_products(response.json()) if response.is_success else []
+                    response = await _get(client, f"{base}/{CATEGORY}/{group['groupId']}/products")
+                return parse_products(response.json()) if response.is_success else None
 
             fetched = await asyncio.gather(*(products(group) for group in wanted))
+            report.compared = len(wanted)
+            report.failed = sum(cards is None for cards in fetched)
             assessed = [
                 assess(group, cards, catalog[code_key(group["abbreviation"])])
                 for group, cards in zip(wanted, fetched, strict=True)
+                if cards is not None  # nicht geladen: nichts entscheiden
             ]
             resolve_conflicts(assessed)
             report.sets = [gap for gap in assessed if gap.missing or gap.skipped]
@@ -307,6 +322,17 @@ class JapaneseGaps:
         return named
 
 
+async def _get(client: httpx.AsyncClient, url: str, attempts: int = 3) -> httpx.Response:
+    """GET mit kurzem Warten bei Drosselung (429) oder Serverfehlern."""
+    response = await client.get(url)
+    for attempt in range(1, attempts):
+        if response.status_code != httpx.codes.TOO_MANY_REQUESTS and response.status_code < 500:  # noqa: PLR2004
+            break
+        await asyncio.sleep(RETRY_SECONDS * attempt)
+        response = await client.get(url)
+    return response
+
+
 def clean_english(name: str) -> str:
     """„Emolga - 025/BW-P“ → „Emolga“, „Rare Candy (Secret)“ → „Rare Candy“."""
     return _BRACKET.sub("", _NUMBER_SUFFIX.sub("", name)).strip() or name
@@ -341,10 +367,15 @@ def render_report(report: GapReport, *, details: int = 40) -> str:
     lines = [
         f"# Japanischer Katalog: Lücken aus TCGplayer ({mode})",
         "",
+        f"TCGplayer-Gruppen: {report.groups} · mit Katalog-Set verglichen: {report.compared}"
+        + (f" · nicht geladen: {report.failed}" if report.failed else ""),
+        "",
         f"Fehlende Karten in passenden Sets: **{report.missing}**; große Bilder für "
         f"{report.large_images} von {len(report.images)}",
         "",
     ]
+    if report.error:
+        lines += [f"**Fehler:** {report.error} – bitte später erneut starten.", ""]
     ready = [gap for gap in report.sets if gap.skipped is None]
     for gap in sorted(ready, key=lambda g: -len(g.missing))[:details]:
         numbers = ", ".join(f"{c.number} {c.english}" for c in gap.missing[:6])
