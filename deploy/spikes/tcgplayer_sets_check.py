@@ -6,6 +6,7 @@ docker compose exec -T api python - < deploy/spikes/tcgplayer_sets_check.py
 from __future__ import annotations
 
 import asyncio
+import os
 
 from sqlalchemy import text
 
@@ -18,6 +19,10 @@ EXAMPLES = (
     "Scarlet & Violet Promo JP", "Sun & Moon Promos (JP)", "XY Promos", "Inferno X",
     "Ultra Shiny GX", "Miracle Twins", "Clay Burst", "Paldean Fates", "Glory of Team Rocket",
 )  # fmt: skip
+
+
+if extra := os.environ.get("NAMES", "").strip():  # z. B. NAMES="Megalo Cannon;Hot Air Arena"
+    EXAMPLES = tuple(name.strip() for name in extra.split(";") if name.strip())
 
 
 async def main() -> None:
