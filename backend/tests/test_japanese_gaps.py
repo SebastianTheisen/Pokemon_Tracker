@@ -54,8 +54,8 @@ PRODUCTS = {
 
 def handler(request: httpx.Request) -> httpx.Response:
     path = request.url.path
-    if request.method == "HEAD":
-        return httpx.Response(200)
+    if request.method == "HEAD":  # große Fassung nur für Rare Candy
+        return httpx.Response(200 if "186_" in path else 404)
     if path.endswith("/85/groups"):
         return httpx.Response(200, json={"results": GROUPS})
     group = int(path.split("/")[-2])
@@ -108,6 +108,7 @@ async def test_dry_run_then_apply(
     assert "nur" in reasons["BW8-Brn"]  # zu wenig gemeinsame Nummern
     assert reasons["Bk"].startswith("mehrere TCGplayer-Sets")  # Decks gleichauf
     assert "Rare Candy" in render_report(dry)
+    assert dry.large_images == 1
     async with session_factory() as session:
         assert await session.scalar(select(Card).where(Card.number == "086")) is None
 

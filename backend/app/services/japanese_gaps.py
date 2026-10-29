@@ -86,7 +86,11 @@ class GapReport:
     sets: list[SetGap] = field(default_factory=list)
     added: int = 0
     dry_run: bool = True
-    large_images: bool = False
+    images: dict[str, str] = field(default_factory=dict)  # TCGplayer-Adresse → beste Fassung
+
+    @property
+    def large_images(self) -> int:
+        return sum(LARGE_IMAGE in url for url in self.images.values())
 
     @property
     def missing(self) -> int:
@@ -226,7 +230,7 @@ class JapaneseGaps:
             ]
             resolve_conflicts(assessed)
             report.sets = [gap for gap in assessed if gap.missing or gap.skipped]
-            report.large_images = await _large_images_work(
+            report.images = await _best_images(
                 client, [card for gap in report.sets for card in gap.missing]
             )
         if apply:
@@ -235,7 +239,7 @@ class JapaneseGaps:
                 for gap in report.sets:
                     if gap.skipped is None and gap.catalog_set is not None:
                         report.added += await self._store(
-                            session, ids[gap.catalog_set], gap, large=report.large_images
+                            session, ids[gap.catalog_set], gap, report.images
                         )
                 await session.commit()
         log.info(
@@ -248,12 +252,12 @@ class JapaneseGaps:
         return report
 
     @staticmethod
-    async def _store(session: AsyncSession, set_id: uuid.UUID, gap: SetGap, *, large: bool) -> int:
+    async def _store(
+        session: AsyncSession, set_id: uuid.UUID, gap: SetGap, images: Mapping[str, str]
+    ) -> int:
         added = 0
         for card in gap.missing:
-            image = card.image_url
-            if large and image:
-                image = image.replace(SMALL_IMAGE, LARGE_IMAGE)
+            image = images.get(card.image_url or "", card.image_url)
             english = _BRACKET.sub("", _NUMBER_SUFFIX.sub("", card.english)).strip()
             english = english or card.english
             result = await session.execute(
@@ -278,16 +282,24 @@ class JapaneseGaps:
         return added
 
 
-async def _large_images_work(client: httpx.AsyncClient, cards: Sequence[ClassicCard]) -> bool:
-    """Große Fassung des TCGplayer-Bildes vorhanden? (Stichprobe an der ersten Karte.)"""
-    sample = next((card.image_url for card in cards if card.image_url), None)
-    if sample is None or SMALL_IMAGE not in sample:
-        return False
-    try:
-        response = await client.head(sample.replace(SMALL_IMAGE, LARGE_IMAGE))
-    except httpx.HTTPError:
-        return False
-    return response.is_success
+async def _best_images(client: httpx.AsyncClient, cards: Sequence[ClassicCard]) -> dict[str, str]:
+    """Je Karte die große Bildfassung, wenn TCGplayer sie hat (sonst die kleine, 200 px).
+    Einzeln geprüft – eine Stichprobe genügte nicht (Promo-Energien haben keine große)."""
+    semaphore = asyncio.Semaphore(CONCURRENCY)
+
+    async def best(url: str) -> tuple[str, str]:
+        if SMALL_IMAGE not in url:
+            return url, url
+        large = url.replace(SMALL_IMAGE, LARGE_IMAGE)
+        try:
+            async with semaphore:
+                response = await client.head(large)
+        except httpx.HTTPError:
+            return url, url
+        return url, large if response.is_success else url
+
+    urls = {card.image_url for card in cards if card.image_url}
+    return dict(await asyncio.gather(*(best(url) for url in urls)))
 
 
 def render_report(report: GapReport, *, details: int = 40) -> str:
@@ -295,8 +307,8 @@ def render_report(report: GapReport, *, details: int = 40) -> str:
     lines = [
         f"# Japanischer Katalog: Lücken aus TCGplayer ({mode})",
         "",
-        f"Fehlende Karten in passenden Sets: **{report.missing}**"
-        + ("; große Bilder" if report.large_images else "; kleine Bilder (200 px)"),
+        f"Fehlende Karten in passenden Sets: **{report.missing}**; große Bilder für "
+        f"{report.large_images} von {len(report.images)}",
         "",
     ]
     ready = [gap for gap in report.sets if gap.skipped is None]
