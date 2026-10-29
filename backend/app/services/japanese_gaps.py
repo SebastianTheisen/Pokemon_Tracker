@@ -91,6 +91,8 @@ class GapReport:
     groups: int = 0  # TCGplayer-Gruppen insgesamt
     compared: int = 0  # davon mit passendem Katalog-Set verglichen
     failed: int = 0  # Gruppen, deren Kartenliste nicht geladen werden konnte
+    tcg_cards: int = 0  # geladene TCGplayer-Karten insgesamt
+    matched_sets: int = 0  # sicher zugeordnete Sets (Lücken und Namen)
     error: str | None = None
     dry_run: bool = True
     images: dict[str, str] = field(default_factory=dict)  # TCGplayer-Adresse → beste Fassung
@@ -249,6 +251,8 @@ class JapaneseGaps:
             resolve_conflicts(assessed)
             report.sets = [gap for gap in assessed if gap.missing or gap.skipped]
             matched = [g for g in assessed if g.skipped is None and g.catalog_set is not None]
+            report.tcg_cards = sum(len(cards) for cards in fetched if cards)
+            report.matched_sets = len(matched)
             report.images = await _best_images(
                 client, [card for gap in report.sets for card in gap.missing]
             )
@@ -368,6 +372,7 @@ def render_report(report: GapReport, *, details: int = 40) -> str:
         f"# Japanischer Katalog: Lücken aus TCGplayer ({mode})",
         "",
         f"TCGplayer-Gruppen: {report.groups} · mit Katalog-Set verglichen: {report.compared}"
+        f" · Karten geladen: {report.tcg_cards} · sicher zugeordnet: {report.matched_sets}"
         + (f" · nicht geladen: {report.failed}" if report.failed else ""),
         "",
         f"Fehlende Karten in passenden Sets: **{report.missing}**; große Bilder für "
