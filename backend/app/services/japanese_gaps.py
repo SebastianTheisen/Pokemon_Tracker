@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import re
 import uuid
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -46,6 +47,9 @@ LANGUAGE = "ja"
 CATEGORY = 85  # TCGplayer: Pokémon Japan
 MIN_OVERLAP = 0.6  # Anteil der TCGplayer-Nummern, die im Set schon vorkommen müssen
 MIN_KNOWN = 5  # so viele gemeinsame Nummern mindestens (kleine Sets/Decks)
+DOMINANT = 2  # bei mehreren TCGplayer-Sets für ein Katalog-Set: so viel mehr Treffer nötig
+_DIGIT = re.compile(r"\d")
+_NUMBER_SUFFIX = re.compile(r"\s+-\s+[\w-]+/[\w-]+$")  # „Emolga - 025/BW-P“
 CONCURRENCY = 6
 _BRACKET = re.compile(r"\s*[\[(][^\])]*[\])]\s*$")  # „Rare Candy (Secret)“, „… [1st Edition]“
 
@@ -117,8 +121,36 @@ def assess(
     if gap.overlap < MIN_KNOWN or gap.overlap < MIN_OVERLAP * len(by_number):
         gap.skipped = f"nur {gap.overlap}/{len(by_number)} Nummern gemeinsam"
         return gap
-    gap.missing = [card for number, card in by_number.items() if number not in target.numbers]
+    totals = Counter(card.total for card in by_number.values() if card.total)
+    usual = totals.most_common(1)[0][0] if totals else None
+    gap.missing = [
+        card
+        for number, card in by_number.items()
+        if number not in target.numbers
+        and _DIGIT.search(number)  # Basis-Energien „DAR“, „FIG“ … haben keine Nummer
+        and card.total == usual  # „086/076“ in einem 076er-Set; Promos ohne Zahl
+    ]
     return gap
+
+
+def resolve_conflicts(gaps: Sequence[SetGap]) -> None:
+    """Mehrere TCGplayer-Sets auf dasselbe Katalog-Set (Decks mit eigener Nummerierung wie die
+    drei „Battle Strength Decks“ → Bk): nur ein klar bestes zählt, sonst keines."""
+    by_set: dict[str, list[SetGap]] = {}
+    for gap in gaps:
+        if gap.skipped is None and gap.catalog_set is not None:
+            by_set.setdefault(gap.catalog_set, []).append(gap)
+    for rivals in by_set.values():
+        if len(rivals) < 2:  # noqa: PLR2004
+            continue
+        rivals.sort(key=lambda gap: -gap.overlap)
+        best, second = rivals[0], rivals[1]
+        dominant = best.overlap >= DOMINANT * second.overlap
+        for gap in rivals[0 if not dominant else 1 :]:
+            gap.skipped = f"mehrere TCGplayer-Sets für {gap.catalog_set}" + (
+                f" – „{best.group}“ passt besser" if dominant else ""
+            )
+            gap.missing = []
 
 
 class JapaneseGaps:
@@ -188,10 +220,12 @@ class JapaneseGaps:
                 return parse_products(response.json()) if response.is_success else []
 
             fetched = await asyncio.gather(*(products(group) for group in wanted))
-            for group, cards in zip(wanted, fetched, strict=True):
-                gap = assess(group, cards, catalog[code_key(group["abbreviation"])])
-                if gap.missing or gap.skipped:
-                    report.sets.append(gap)
+            assessed = [
+                assess(group, cards, catalog[code_key(group["abbreviation"])])
+                for group, cards in zip(wanted, fetched, strict=True)
+            ]
+            resolve_conflicts(assessed)
+            report.sets = [gap for gap in assessed if gap.missing or gap.skipped]
             report.large_images = await _large_images_work(
                 client, [card for gap in report.sets for card in gap.missing]
             )
@@ -220,7 +254,8 @@ class JapaneseGaps:
             image = card.image_url
             if large and image:
                 image = image.replace(SMALL_IMAGE, LARGE_IMAGE)
-            english = _BRACKET.sub("", card.english).strip() or card.english
+            english = _BRACKET.sub("", _NUMBER_SUFFIX.sub("", card.english)).strip()
+            english = english or card.english
             result = await session.execute(
                 insert(Card)
                 .values(

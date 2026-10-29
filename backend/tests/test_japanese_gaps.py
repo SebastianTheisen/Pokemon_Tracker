@@ -29,17 +29,26 @@ GROUPS = [
     {"groupId": 1, "name": "BW9: Megalo Cannon", "abbreviation": "BW9"},
     {"groupId": 2, "name": "BW8: Spiral Force", "abbreviation": "BW8-Brn"},
     {"groupId": 3, "name": "Unbekannt", "abbreviation": "ZZ1"},
+    # drei Decks auf dasselbe Katalog-Set, gleich gut → keines ergänzt
+    {"groupId": 4, "name": "BK: Cobalion Deck", "abbreviation": "Bk"},
+    {"groupId": 5, "name": "BK: Terrakion Deck", "abbreviation": "Bk"},
 ]
 PRODUCTS = {
     1: [product(100 + n, f"Card {n}", f"{n:03d}/076") for n in range(1, 11)]
     + [
-        product(186, "Rare Candy", "086/076"),
+        product(186, "Rare Candy - 086/076", "086/076"),
         product(187, "Rare Candy", "086/076"),  # zweite Fassung, gleiche Nummer
         product(190, "Charizard", "001/076"),  # vorhanden – bleibt unverändert
+        product(191, "Mew ex - 151", "151"),  # Ausreißer ohne Setgröße
+        product(192, "DAR Basic Darkness Energy", "DAR"),  # Energie ohne Nummer
         {"productId": 199, "name": "Megalo Cannon Booster Box", "extendedData": []},
     ],
     # Kürzel passt, aber kaum gemeinsame Nummern → nicht ergänzen
     2: [product(200 + n, f"Other {n}", f"{n:03d}/051") for n in range(40, 52)],
+    4: [product(400 + n, f"Deck {n}", f"{n:03d}/014") for n in range(1, 11)]
+    + [product(413, "Cobalion", "013/014")],
+    5: [product(500 + n, f"Deck {n}", f"{n:03d}/014") for n in range(1, 11)]
+    + [product(513, "Terrakion", "013/014")],
 }
 
 
@@ -55,7 +64,11 @@ def handler(request: httpx.Request) -> httpx.Response:
 
 async def _catalog(factory: async_sessionmaker[AsyncSession]) -> None:
     async with factory() as session:
-        for code, numbers in (("BW9-B", range(1, 11)), ("BW8-Brn", range(1, 6))):
+        for code, numbers in (
+            ("BW9-B", range(1, 11)),
+            ("BW8-Brn", range(1, 6)),
+            ("Bk", range(1, 11)),
+        ):
             card_set = CardSet(external_id=code, language="ja", name=code)
             session.add(card_set)
             await session.flush()
@@ -91,7 +104,9 @@ async def test_dry_run_then_apply(
     ready = [gap for gap in dry.sets if gap.skipped is None]
     assert [(g.catalog_set, [c.number for c in g.missing]) for g in ready] == [("BW9-B", ["086"])]
     skipped = [gap for gap in dry.sets if gap.skipped]
-    assert [g.catalog_set for g in skipped] == ["BW8-Brn"]  # zu wenig gemeinsame Nummern
+    reasons = {g.abbreviation: g.skipped or "" for g in skipped}
+    assert "nur" in reasons["BW8-Brn"]  # zu wenig gemeinsame Nummern
+    assert reasons["Bk"].startswith("mehrere TCGplayer-Sets")  # Decks gleichauf
     assert "Rare Candy" in render_report(dry)
     async with session_factory() as session:
         assert await session.scalar(select(Card).where(Card.number == "086")) is None
