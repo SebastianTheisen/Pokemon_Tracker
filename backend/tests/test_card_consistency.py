@@ -141,3 +141,21 @@ async def test_existing_wrong_products_are_dropped(
 
     assert (charizard_now.cardmarket_product_id, charizard_now.name_en) == (None, None)
     assert (energy_now.cardmarket_product_id, energy_now.name_en) == (695779, "Basic Fire Energy")
+
+
+@pytest.mark.parametrize(
+    ("name", "english"),
+    [
+        ("ラッキーエネルギー", "Lucky Energy"),  # „ラッキー“ ist auch Chaneira
+        ("ブルーの探索", "Green's Exploration"),
+        ("ウッウロボ", "Cram-o-matic"),
+        ("ポケモンだいすきクラブ", "Pokémon Fan Club"),
+        ("シャーロット・プリン", "Charlotte Pudding"),  # One Piece
+    ],
+)
+def test_names_containing_a_pokemon_are_not_checked(name: str, english: str) -> None:
+    """Probelauf 29.10.: 179 Fehlalarme, weil ein Pokémon-Name in Trainer-, Item- und
+    One-Piece-Namen steckt. Geprüft wird nur, was ganz ein Pokémon-Name ist."""
+    assert pokemon_words(name, "ja") is None
+    assert not contradicts_english(name, "ja", english)
+    assert not asian_names_conflict(name, "ja", CHARIZARD_TW, "zh-tw")

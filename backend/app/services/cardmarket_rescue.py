@@ -309,6 +309,7 @@ async def drop_contradicting_products(session: AsyncSession, *, dry_run: bool = 
             .join(CardSet, CardSet.id == Card.set_id)
             .where(
                 Card.language.in_(TRANSLATED_LANGUAGES),
+                CardSet.game == Game.POKEMON.value,
                 Card.cardmarket_product_override.is_(None),
             )
         )

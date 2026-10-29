@@ -242,18 +242,29 @@ def _plain_words(text: str) -> set[str]:
 
 
 @cache
-def pokemon_words(name: str, language: str) -> frozenset[str] | None:
-    """Kennwörter des Pokémon einer asiatischen Karte auf Englisch („噴火龍VMAX“ →
-    {"charizard"}); ``None`` ohne Pokémon-Namen (Trainer, Items, Energie)."""
+def _pokemon_reading(name: str, language: str) -> tuple[str, frozenset[str]]:
+    """(Art, Kennwörter): ``none`` – kein Pokémon-Name (Energie, die meisten Trainer);
+    ``partial`` – ein Pokémon-Name steckt nur in einem längeren Namen („ラッキーエネルギー“
+    Lucky Energy, „シャーロット・プリン“ aus One Piece) – nicht prüfbar; ``full`` – ganz
+    übersetzt („噴火龍VMAX“ → Charizard VMAX, Kennwörter {"charizard"})."""
     translated = translate_card_name(name, language, target="en")
     if translated is None:
-        return None
-    return frozenset(_plain_words(translated) - _GENERIC_WORDS)
+        return "none", frozenset()
+    if not translated.isascii():
+        return "partial", frozenset()
+    return "full", frozenset(_plain_words(translated) - _GENERIC_WORDS)
+
+
+def pokemon_words(name: str, language: str) -> frozenset[str] | None:
+    """Kennwörter des Pokémon einer asiatischen Pokémon-Karte auf Englisch („噴火龍VMAX“ →
+    {"charizard"}); ``None``, wenn der Name nicht ganz ein Pokémon-Name ist."""
+    kind, words = _pokemon_reading(name, language)
+    return words if kind == "full" else None
 
 
 def contradicts_english(name: str, language: str, english: str) -> bool:
     """Gehört ein englischer Name (z. B. Cardmarket-Produkt) sicher zu einer anderen Karte?
-    Nur bei Pokémon-Karten prüfbar: Kein Kennwort des Pokémon kommt darin vor."""
+    Nur bei ganz übersetzbaren Pokémon-Namen prüfbar: Kein Kennwort kommt darin vor."""
     words = pokemon_words(name, language)
     return bool(words) and not (words or frozenset()) & _plain_words(english)
 
@@ -263,12 +274,14 @@ def asian_names_conflict(
 ) -> bool:
     """Zeigen zwei asiatische Karten mit derselben ID sicher verschiedene Karten? Promo-Sets
     sind je Land anders nummeriert: Japan SV-P 038 ist Basic Fire Energy, Taiwan SV-P 038
-    Charizard VMAX. Konflikt, wenn nur eine ein Pokémon ist oder die Pokémon verschieden sind."""
+    Charizard VMAX. Konflikt, wenn eine sicher kein Pokémon ist und die andere ganz ein
+    Pokémon-Name, oder wenn beide verschiedene Pokémon sind. Unklare Namen: kein Konflikt."""
     if first_language not in TRANSLATED_LANGUAGES or second_language not in TRANSLATED_LANGUAGES:
         return False
-    one, two = pokemon_words(first, first_language), pokemon_words(second, second_language)
-    if one is None and two is None:
+    one_kind, one = _pokemon_reading(first, first_language)
+    two_kind, two = _pokemon_reading(second, second_language)
+    if "partial" in (one_kind, two_kind) or one_kind == two_kind == "none":
         return False
-    if one is None or two is None:
+    if "none" in (one_kind, two_kind):
         return True
     return bool(one) and bool(two) and not (one & two)

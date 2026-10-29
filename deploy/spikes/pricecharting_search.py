@@ -51,19 +51,23 @@ async def main() -> None:
     async with ApifyClient(token.get_secret_value(), user_agent=settings.http_user_agent) as client:
         for ref in refs:
             query = search_query(ref)
-            run = await client.run_actor(
-                settings.pricecharting_actor,
-                {"searchQueries": [query], "maxItems": MAX_ITEMS},
-                max_charge_usd=0.1,
-                timeout_seconds=settings.apify_run_timeout_seconds,
-                max_items=MAX_ITEMS,
-            )
+            try:
+                run = await client.run_actor(
+                    settings.pricecharting_actor,
+                    {"searchQueries": [query], "maxItems": MAX_ITEMS},
+                    max_charge_usd=0.1,
+                    timeout_seconds=settings.apify_run_timeout_seconds,
+                    max_items=MAX_ITEMS,
+                )
+            except Exception as exc:  # eine Karte darf den Rest nicht aufhalten
+                print(f"## {ref.external_id} „{query}“: Fehler {type(exc).__name__}: {exc}\n")
+                continue
             scores = {id(m.item): m.score for m in _candidates(ref, run.items)}
             chosen = choose(ref, run.items)
             print(
                 f"## {ref.external_id} „{query}“ · Set „{ref.english_set_name or ref.set_name}“ "
                 f"{ref.release_date} · {len(run.items)} Ergebnisse · "
-                f"gewählt: {chosen.get('name') if chosen else '–'} · {run.cost_usd:.3f} $"
+                f"gewählt: {chosen.get('name') if chosen else '–'} · {run.cost_usd or 0:.3f} $"
             )
             for item in run.items:
                 score = scores.get(id(item))

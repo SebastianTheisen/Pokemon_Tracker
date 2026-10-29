@@ -560,8 +560,8 @@ async def product_contradicts(session: AsyncSession, card: Card, product_id: int
     """Gehört das Produkt sicher zu einer anderen Karte? TCGdex meldet für asiatische Promos
     manchmal das Produkt der japanischen Karte mit gleicher ID (Taiwan SV-P 038 „噴火龍VMAX“ →
     „Basic Fire Energy“). Prüfbar nur bei Pokémon-Karten (Name übersetzbar)."""
-    if card.language not in TRANSLATED_LANGUAGES:
-        return False
+    if card.language not in TRANSLATED_LANGUAGES or card.card_set.game != Game.POKEMON.value:
+        return False  # One Piece: „プリンプリン“ wäre sonst zweimal Jigglypuff
     product = await session.get(CmProduct, product_id)
     return product is not None and contradicts_english(card.name, card.language, product.name)
 
