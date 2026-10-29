@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import date
 
 from sqlalchemy import select
@@ -10,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.models import Card, CardSet, CmExpansion, CmProduct
 from app.services.cardmarket_catalog import SINGLE_CATEGORY
 from app.services.cardmarket_rescue import (
+    _Open,
+    pick_group,
     pick_product,
     render_rescue_report,
     rescue_cardmarket,
@@ -95,3 +98,19 @@ async def test_rescue_secret_rare_and_small_set(
         assert links["089"] == 150
         assert {links["016"], links["014"], links["012"]} == {200, 201, 202}
         assert (await session.get(CardSet, cp5.id)).cardmarket_expansion_id == 2  # type: ignore[union-attr]
+
+
+def test_pick_group_secret_rares() -> None:
+    """SV9a: Ho-Oh ex 86 (SR) und 90 (SAR) offen, drei Produkte (normal, SR, SAR)."""
+
+    def card(number: str) -> _Open:
+        return _Open(id=uuid.uuid4(), set_id=uuid.uuid4(), number=number, name="x", key="x")
+
+    sr, sar = card("86"), card("90")
+    assert [(c.number, p) for c, p in pick_group([sar, sr], 63, [10, 20, 30])] == [
+        ("86", 20),
+        ("90", 30),
+    ]
+    assert [p for _, p in pick_group([card("12"), card("13")], 63, [5, 6, 7])] == [5, 6]
+    assert pick_group([card("12"), card("90")], 63, [5, 6, 7]) == []  # gemischt → offen
+    assert pick_group([sr, sar], None, [10, 20, 30]) == []  # ohne Setgröße offen

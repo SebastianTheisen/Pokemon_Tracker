@@ -81,6 +81,7 @@ class SetGap:
     missing: list[ClassicCard] = field(default_factory=list)
     skipped: str | None = None  # Grund, wenn nicht ergänzt wird
     english: dict[str, str] = field(default_factory=dict)  # Nummer → englischer Name
+    size: int | None = None  # gedruckte Setgröße („058/054“ → 54)
 
 
 @dataclass
@@ -136,6 +137,7 @@ def assess(
         return gap
     totals = Counter(card.total for card in by_number.values() if card.total)
     usual = totals.most_common(1)[0][0] if totals else None
+    gap.size = usual
     gap.english = {number: clean_english(card.english) for number, card in by_number.items()}
     gap.missing = [
         card
@@ -266,6 +268,7 @@ class JapaneseGaps:
                         )
                 for gap in matched:
                     report.names += await self._name(session, ids[gap.catalog_set or ""], gap)
+                    await self._size(session, ids[gap.catalog_set or ""], gap)
                 await session.commit()
         log.info(
             "japanese_gaps.done",
@@ -304,6 +307,17 @@ class JapaneseGaps:
             )
             added += int(getattr(result, "rowcount", 0) or 0)
         return added
+
+    @staticmethod
+    async def _size(session: AsyncSession, set_id: uuid.UUID, gap: SetGap) -> None:
+        """Fehlende Setgröße übernehmen – Cardmarket-Zuordnung und Collectr-Import erkennen
+        damit Secret Rares („058/054“)."""
+        if gap.size:
+            await session.execute(
+                update(CardSet)
+                .where(CardSet.id == set_id, CardSet.card_count_official.is_(None))
+                .values(card_count_official=gap.size)
+            )
 
     @staticmethod
     async def _name(session: AsyncSession, set_id: uuid.UUID, gap: SetGap) -> int:

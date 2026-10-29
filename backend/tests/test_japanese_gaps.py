@@ -127,6 +127,7 @@ async def test_dry_run_then_apply(
         assert card.number_norm == "86" and card.image_url is not None
         assert card.image_url.endswith("_in_1000x1000.jpg")
         assert card.card_set.external_id == "BW9-B"
+        assert card.card_set.card_count_official == 76  # Setgröße aus TCGplayer übernommen
         first = (await session.scalars(select(Card).where(Card.number == "001"))).all()
         bw9 = [c for c in first if c.card_set.external_id == "BW9-B"]
         assert [(c.name, c.name_en) for c in bw9] == [("カード1", "Card 1")]

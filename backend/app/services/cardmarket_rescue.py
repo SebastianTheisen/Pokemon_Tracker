@@ -79,6 +79,26 @@ def pick_product(
     return None  # ohne Setgröße nicht sicher
 
 
+def pick_group(
+    group: list[_Open], set_size: int | None, free: list[int]
+) -> list[tuple[_Open, int]]:
+    """Mehrere offene Karten gleichen Namens, mehr freie Produkte (SV9a: Ho-Oh ex als SR und
+    SAR, dazu die normale ex): Liegen alle über der Setgröße, sind es die letzten Produkte in
+    Nummernreihenfolge; liegen alle darunter, die ersten. Gemischt bleibt es offen."""
+    if set_size is None or len(free) < len(group):
+        return []
+    numbers = [_number_order(card.number) for card in group]
+    if any(number[0] != 0 for number in numbers):
+        return []
+    ordered = sorted(group, key=lambda card: _number_order(card.number))
+    products = sorted(free)
+    if all(number[1] > set_size for number in numbers):
+        return list(zip(ordered, products[-len(group) :], strict=True))
+    if all(number[1] <= set_size for number in numbers):
+        return list(zip(ordered, products[: len(group)], strict=True))
+    return []
+
+
 def choose_expansion(
     card_set: CardSet, keys: set[str], expansions: dict[int, _Expansion], taken: set[int]
 ) -> tuple[int, int] | None:
@@ -214,7 +234,7 @@ async def rescue_cardmarket(  # noqa: PLR0912, PLR0915 – ein Durchgang, Regeln
             pick = pick_product(group[0].number, size, products, free)
             chosen_pairs = [(group[0], pick)] if pick is not None else []
         else:
-            chosen_pairs = []
+            chosen_pairs = pick_group(group, size, free)
         if not chosen_pairs:
             for card in group:
                 report.still_open.append(

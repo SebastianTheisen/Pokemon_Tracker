@@ -12,6 +12,7 @@ mkdir -p docs/phase8
 run() { docker compose exec -T api python -m app.cli "$@" 2>&1 | grep -v -E '^\{|\[(info|debug) '; }
 {
   if [[ "${1:-}" == "--apply" ]]; then
+    echo "## TCGplayer: Namen + Setgrößen"; run catalog-gaps-ja --apply | sed -n "1,5p"; echo
     echo "## Namenszuordnung (alle Karten)"; run cardmarket-match | sed -n "1,4p"; echo
   fi
   run cardmarket-rescue --owned "$@"
