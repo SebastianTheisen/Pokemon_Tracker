@@ -883,6 +883,8 @@ Entscheidungen (26.10.): Sprachen **Englisch + Japanisch**; **ein Umschalter obe
 
 - [x] Lücken im japanischen Katalog aus TCGplayer (tcgcsv Kategorie 85) ergänzen: Anlass Rare Candy · Megalo Cannon 086/076 – BW9-B hat im Katalog nur 001–076, Secret Rares fehlen. `services/japanese_gaps.py`, CLI `catalog-gaps-ja [--apply] [--set]`, `deploy/phase8_japanese_gaps.sh` (Standard Probelauf). Nur bestehende Sets, nur fehlende Nummern, nichts überschreiben; Zuordnung TCGplayer-Set ↔ Katalog-Set über Kürzel (ja, „BW9“ = „BW9-B“) **und** ≥ 60 % gemeinsame Nummern (mind. 5), leere Hüllen nie; Namen wie Classic (Pokémon japanisch, sonst englisch), Bild als Adresse. Nach dem ersten Probelauf (u. a. BW9-B 077–086, S5a 085–096, S2 107–115) verschärft: nur Karten, deren Setgröße zur üblichen des Sets passt (Basis-Energien „DAR“, Ausreißer wie „151 Mew ex“ fallen weg); mehrere TCGplayer-Sets auf ein Katalog-Set (drei Battle-Strength-Decks → Bk) nur, wenn eines mindestens doppelt so viele Treffer hat; Nummer im Namen („Emolga - 025/BW-P“) abgeschnitten
 
+- [x] Katalog-Lücken JP am VPS ergänzt (29.10.): 147 Karten in bestehenden Sets (u. a. BW9-B 077–086 mit Rare Candy, S5a 085–096, S2 107–115), 142 mit großem Bild; 28 Sets mit unsicherer Zuordnung (Starter-Decks) unangetastet. Neue Karten noch ohne Cardmarket-Verknüpfung
+
 ## 10. Qualitätssicherung
 
 - **Backend:** `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov` (Ziel ≥ 85 % für Services und Repositories).
